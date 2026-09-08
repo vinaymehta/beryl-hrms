@@ -1,0 +1,7 @@
+cleanup_expired_sessions:
+  cron: "0 * * * *" # hourly
+  class: "CleanupExpiredSessionsJob"
+
+zoho_token_refresh:
+  cron: "*/5 * * * *" # every 5 minutes
+  class: "ZohoTokenRefreshJob"
