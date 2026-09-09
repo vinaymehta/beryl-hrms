@@ -16,7 +16,14 @@ module Api
               processedResumes: resumes.where(processing_status: :completed).count,
               processingFailures: resumes.where(processing_status: :failed).count,
               shortlistedCandidates: candidates.where(status: :shortlisted).count,
-              needsReviewCandidates: candidates.where(status: :needs_review).count
+              needsReviewCandidates: candidates.where(status: :needs_review).count,
+              # "Hired" — candidates offered a position, whose status changed
+              # to offered within the current calendar month. There's no
+              # dedicated offered_at timestamp, so updated_at is the closest
+              # real proxy available.
+              hiredThisMonth: candidates.where(status: :offered)
+                                        .where("candidates.updated_at >= ?", Time.current.beginning_of_month)
+                                        .count
             }
           }
         end

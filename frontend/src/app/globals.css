@@ -63,6 +63,8 @@
   --color-role-employee-foreground: var(--role-employee-foreground);
   --color-role-recruitment: var(--role-recruitment);
   --color-role-recruitment-foreground: var(--role-recruitment-foreground);
+  --color-accent-mail: var(--accent-mail);
+  --color-accent-mail-foreground: var(--accent-mail-foreground);
   --color-status-success: var(--status-success);
   --color-status-success-foreground: var(--status-success-foreground);
   --color-status-warning: var(--status-warning);
@@ -90,43 +92,48 @@
 }
 
 :root {
-  /* Brand: Electric Indigo (hue ~279). Page background carries a faint tint
-     of it rather than sitting at true neutral gray — see docs/DESIGN_SYSTEM.md
+  /* Brand: Royal Purple (violet-700). Page background carries a soft slate
+     tint rather than sitting at true neutral gray — see docs/DESIGN_SYSTEM.md
      for the full rationale ("layered, tinted surfaces, not white+gray"). */
-  --background: oklch(0.982 0.007 279);
-  --foreground: oklch(0.24 0.025 279);
-  --surface: oklch(1 0 0);
-  --surface-muted: oklch(0.958 0.011 279);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.24 0.025 279);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.24 0.025 279);
-  --primary: oklch(0.478 0.223 279);
-  --primary-foreground: oklch(0.99 0.005 279);
-  --secondary: oklch(0.938 0.028 279);
-  --secondary-foreground: oklch(0.34 0.09 279);
-  --muted: oklch(0.953 0.009 279);
-  --muted-foreground: oklch(0.5 0.02 279);
-  --accent: oklch(0.925 0.045 245);
-  --accent-foreground: oklch(0.32 0.1 245);
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --surface: #ffffff;
+  --surface-muted: #f1f5f9;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #6d28d9;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #334155;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #ede9fe;
+  --accent-foreground: #5b21b6;
   --destructive: oklch(0.577 0.23 18);
-  --border: oklch(0.9 0.014 279);
-  --input: oklch(0.9 0.014 279);
-  --ring: oklch(0.478 0.223 279);
-  --chart-1: oklch(0.55 0.22 279);
-  --chart-2: oklch(0.68 0.15 220);
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #6d28d9;
+  --chart-1: #6d28d9;
+  --chart-2: #0369a1;
   --chart-3: oklch(0.6 0.15 163);
   --chart-4: oklch(0.72 0.17 70);
   --chart-5: oklch(0.62 0.22 20);
   --radius: 0.625rem;
-  --sidebar: oklch(0.968 0.012 279);
-  --sidebar-foreground: oklch(0.32 0.02 279);
-  --sidebar-primary: oklch(0.478 0.223 279);
-  --sidebar-primary-foreground: oklch(0.99 0.005 279);
-  --sidebar-accent: oklch(0.915 0.026 279);
-  --sidebar-accent-foreground: oklch(0.36 0.05 279);
-  --sidebar-border: oklch(0.9 0.014 279);
-  --sidebar-ring: oklch(0.478 0.223 279);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #6d28d9;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ede9fe;
+  --sidebar-accent-foreground: #6d28d9;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #6d28d9;
+
+  /* Zoho Mail / Actions accent — distinct from --primary (the AI/Recruitment
+     accent) so Mail's own interactive elements read as their own brand. */
+  --accent-mail: #0369a1;
+  --accent-mail-foreground: #ffffff;
 
   /* Role identity (nav accents, avatars, role badges) */
   --role-admin: oklch(0.541 0.281 293.009); /* violet */
@@ -137,8 +144,8 @@
   --role-accounts-foreground: oklch(0.985 0 0);
   --role-employee: oklch(0.609 0.126 221.723); /* cyan */
   --role-employee-foreground: oklch(0.985 0 0);
-  --role-recruitment: oklch(0.594 0.222 350); /* pink/rose — distinct from, but compatible with, the 4 workspace colors above */
-  --role-recruitment-foreground: oklch(0.985 0 0);
+  --role-recruitment: #6d28d9; /* AI Recruitment accent — Rich Royal Purple, matches --primary */
+  --role-recruitment-foreground: #ffffff;
 
   /* Status meaning (badges, alerts, form validation) */
   --status-success: oklch(0.627 0.194 149.214); /* green */
@@ -152,43 +159,47 @@
 }
 
 .dark {
-  /* Deep indigo-tinted surfaces, not neutral black/gray — see
+  /* Deep Obsidian surfaces, not neutral black/gray — see
      docs/DESIGN_SYSTEM.md: "dark mode should not simply invert the light
      theme." Primary/accents are brightened (not just the light values
      reused) so they stay vivid against a dark ground. */
-  --background: oklch(0.19 0.015 279);
-  --foreground: oklch(0.94 0.012 279);
-  --surface: oklch(0.245 0.019 279);
-  --surface-muted: oklch(0.215 0.017 279);
-  --card: oklch(0.245 0.019 279);
-  --card-foreground: oklch(0.94 0.012 279);
-  --popover: oklch(0.245 0.019 279);
-  --popover-foreground: oklch(0.94 0.012 279);
-  --primary: oklch(0.72 0.185 279);
-  --primary-foreground: oklch(0.16 0.02 279);
-  --secondary: oklch(0.3 0.032 279);
-  --secondary-foreground: oklch(0.92 0.018 279);
-  --muted: oklch(0.265 0.017 279);
-  --muted-foreground: oklch(0.685 0.02 279);
-  --accent: oklch(0.32 0.06 245);
-  --accent-foreground: oklch(0.86 0.07 245);
+  --background: #0b0f19;
+  --foreground: #ffffff;
+  --surface: #1e293b;
+  --surface-muted: #16203a;
+  --card: #1e293b;
+  --card-foreground: #ffffff;
+  --popover: #1e293b;
+  --popover-foreground: #ffffff;
+  --primary: #a78bfa;
+  --primary-foreground: #1e1b4b;
+  --secondary: #253347;
+  --secondary-foreground: #e2e8f0;
+  --muted: #16203a;
+  --muted-foreground: #94a3b8;
+  --accent: #2e1f4d;
+  --accent-foreground: #c4b5fd;
   --destructive: oklch(0.7 0.19 18);
-  --border: oklch(0.75 0.07 279 / 16%);
-  --input: oklch(0.75 0.07 279 / 20%);
-  --ring: oklch(0.72 0.185 279);
-  --chart-1: oklch(0.72 0.19 279);
-  --chart-2: oklch(0.76 0.13 220);
+  --border: #334155;
+  --input: #334155;
+  --ring: #a78bfa;
+  --chart-1: #a78bfa;
+  --chart-2: #06b6d4;
   --chart-3: oklch(0.72 0.15 163);
   --chart-4: oklch(0.78 0.16 70);
   --chart-5: oklch(0.72 0.19 20);
-  --sidebar: oklch(0.165 0.018 279);
-  --sidebar-foreground: oklch(0.9 0.012 279);
-  --sidebar-primary: oklch(0.72 0.185 279);
-  --sidebar-primary-foreground: oklch(0.16 0.02 279);
-  --sidebar-accent: oklch(0.27 0.03 279);
-  --sidebar-accent-foreground: oklch(0.88 0.02 279);
-  --sidebar-border: oklch(0.75 0.07 279 / 14%);
-  --sidebar-ring: oklch(0.72 0.185 279);
+  --sidebar: #0b0f19;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #a78bfa;
+  --sidebar-primary-foreground: #1e1b4b;
+  --sidebar-accent: #2e1f4d;
+  --sidebar-accent-foreground: #c4b5fd;
+  --sidebar-border: #334155;
+  --sidebar-ring: #a78bfa;
+
+  /* Zoho Mail / Actions accent — Electric Cyan, distinct from --primary */
+  --accent-mail: #06b6d4;
+  --accent-mail-foreground: #0b0f19;
 
   /* Role identity — lighter/less saturated for contrast on a dark ground */
   --role-admin: oklch(0.702 0.183 293.009);
@@ -199,8 +210,8 @@
   --role-accounts-foreground: oklch(0.145 0 0);
   --role-employee: oklch(0.715 0.143 215.221);
   --role-employee-foreground: oklch(0.145 0 0);
-  --role-recruitment: oklch(0.72 0.19 350);
-  --role-recruitment-foreground: oklch(0.145 0 0);
+  --role-recruitment: #a78bfa; /* AI Recruitment accent — Amethyst Violet, matches --primary */
+  --role-recruitment-foreground: #1e1b4b;
 
   /* Status meaning */
   --status-success: oklch(0.723 0.219 149.579);

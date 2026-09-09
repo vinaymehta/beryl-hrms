@@ -19,7 +19,6 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { useMailMessage, useMarkMailRead, useDeleteMailMessage } from "@/features/mail/hooks/use-mail-messages"
 import { mailApi } from "@/features/mail/api"
 import { recruitmentApi } from "@/features/recruitment/api"
@@ -255,11 +254,11 @@ export function MessageReadingPane({
           </div>
         </div>
 
-        <DialogHeader className="gap-1.5 text-left">
-          <DialogTitle className="text-lg font-semibold leading-snug break-words">
+        <div className="flex flex-col gap-1.5 text-left">
+          <h3 className="text-lg font-semibold leading-snug break-words">
             {message.subject || "(no subject)"}
-          </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+          </h3>
+          <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
             <span className="font-semibold text-foreground">{message.from}</span>
             <span className="text-muted-foreground/60">•</span>
             <span>to {message.to}</span>
@@ -274,15 +273,15 @@ export function MessageReadingPane({
                 </span>
               </>
             )}
-          </DialogDescription>
-        </DialogHeader>
+          </div>
+        </div>
       </div>
 
       {/* Body */}
       <div className="flex-1 min-w-0 overflow-y-auto overflow-x-auto p-5 sm:p-6 min-h-0 bg-background">
         {/<[a-z][\s\S]*>/i.test(message.body) ? (
           <div
-            className="text-sm leading-relaxed break-words font-sans max-w-none [&_a]:text-primary [&_a]:underline [&_table]:max-w-full [&_img]:max-w-full [&_img]:h-auto"
+            className="text-sm leading-relaxed break-words font-sans max-w-none [&_a]:text-accent-mail [&_a]:underline [&_table]:max-w-full [&_img]:max-w-full [&_img]:h-auto"
             dangerouslySetInnerHTML={{ __html: message.body }}
           />
         ) : (
@@ -330,7 +329,7 @@ export function MessageReadingPane({
                 <div
                   key={att.id}
                   onClick={() => handleDownload(att)}
-                  className={`group flex items-center gap-3 rounded-lg border bg-card px-3 py-2 text-xs shadow-2xs hover:border-primary/40 hover:bg-muted/40 transition-colors max-w-xs sm:max-w-sm cursor-pointer ${
+                  className={`group flex items-center gap-3 rounded-lg border bg-card px-3 py-2 text-xs shadow-2xs hover:border-accent-mail/40 hover:bg-muted/40 transition-colors max-w-xs sm:max-w-sm cursor-pointer ${
                     isResume ? "border-pink-500/30" : ""
                   }`}
                 >
@@ -338,7 +337,7 @@ export function MessageReadingPane({
                     className={`flex size-8 shrink-0 items-center justify-center rounded-md ${
                       isResume
                         ? "bg-pink-500/10 text-pink-600 dark:text-pink-400"
-                        : "bg-primary/10 text-primary"
+                        : "bg-accent-mail/10 text-accent-mail"
                     }`}
                   >
                     <FileTextIcon className="size-4" />
@@ -380,7 +379,7 @@ export function MessageReadingPane({
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      className="shrink-0 group-hover:text-primary"
+                      className="shrink-0 group-hover:text-accent-mail"
                       title={`Download ${att.name}`}
                       onClick={(e) => {
                         e.stopPropagation()
@@ -389,7 +388,7 @@ export function MessageReadingPane({
                       disabled={downloadingId === att.id}
                     >
                       {downloadingId === att.id ? (
-                        <span className="size-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                        <span className="size-3 animate-spin rounded-full border-2 border-accent-mail border-t-transparent" />
                       ) : (
                         <DownloadIcon className="size-3.5" />
                       )}

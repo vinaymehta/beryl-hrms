@@ -5,8 +5,8 @@ import { useResumes, useResumeMutations } from "../hooks"
 import { ResumeDetailModal } from "./resume-detail-modal"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Dialog,
   DialogContent,
@@ -40,16 +40,20 @@ import { PERMISSIONS } from "@/constants/permissions"
 
 interface ResumesViewProps {
   onOpenCandidate?: (candidateId: string) => void
+  initialStatus?: string
 }
 
-export function ResumesView({ onOpenCandidate }: ResumesViewProps) {
+export function ResumesView({ onOpenCandidate, initialStatus = "" }: ResumesViewProps) {
   const [search, setSearch] = useState("")
-  const [status, setStatus] = useState<string>("")
+  const [status, setStatus] = useState<string>(initialStatus)
   const [page, setPage] = useState(1)
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [pendingDelete, setPendingDelete] = useState<CandidateResumeSummary | null>(null)
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
+  const [bulkPending, setBulkPending] = useState(false)
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const canProcess = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.resumesProcess])
@@ -116,6 +120,49 @@ export function ResumesView({ onOpenCandidate }: ResumesViewProps) {
       toast.error(err?.message || "Failed to delete resume")
     } finally {
       setPendingDelete(null)
+    }
+  }
+
+  function toggleChecked(id: string) {
+    setCheckedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleCheckAll() {
+    const ids = resumes.map((r) => r.id)
+    const allChecked = ids.length > 0 && ids.every((id) => checkedIds.has(id))
+    setCheckedIds(allChecked ? new Set() : new Set(ids))
+  }
+
+  async function bulkReprocess() {
+    if (checkedIds.size === 0) return
+    setBulkPending(true)
+    try {
+      await Promise.all(Array.from(checkedIds).map((id) => reprocess.mutateAsync(id)))
+      toast.success(`${checkedIds.size} resume(s) re-queued for parsing`)
+      setCheckedIds(new Set())
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to reprocess selected resumes")
+    } finally {
+      setBulkPending(false)
+    }
+  }
+
+  async function confirmBulkDelete() {
+    setBulkPending(true)
+    try {
+      await Promise.all(Array.from(checkedIds).map((id) => deleteResume.mutateAsync(id)))
+      toast.info(`${checkedIds.size} resume(s) deleted`)
+      setCheckedIds(new Set())
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete selected resumes")
+    } finally {
+      setBulkPending(false)
+      setBulkDeleteConfirmOpen(false)
     }
   }
 
@@ -225,24 +272,29 @@ export function ResumesView({ onOpenCandidate }: ResumesViewProps) {
           />
         </div>
 
-        {/* Status Tabs */}
+        {/* Status Tabs — active pill uses the same semantic color as its
+            status badge on each resume row, instead of a uniform violet. */}
         <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b text-xs">
-          {statusPills.map((p) => (
+          {statusPills.map((p) => {
+            const isActive = status === p.value
+            const activeColor = p.value ? statusColors[p.value] : "bg-primary/10 text-primary border-primary/30"
+            return (
             <button
               key={p.value}
               onClick={() => {
                 setStatus(p.value)
                 setPage(1)
               }}
-              className={`rounded-md px-3 py-1.5 font-medium whitespace-nowrap transition-colors ${
-                status === p.value
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              className={`rounded-md border px-3 py-1.5 font-medium whitespace-nowrap transition-colors ${
+                isActive
+                  ? activeColor
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
               }`}
             >
               {p.label}
             </button>
-          ))}
+            )
+          })}
         </div>
       </div>
 
@@ -250,7 +302,7 @@ export function ResumesView({ onOpenCandidate }: ResumesViewProps) {
       {isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-16 w-full rounded-lg" />
+            <Skeleton key={i} className="h-12 w-full rounded-lg" />
           ))}
         </div>
       ) : resumes.length === 0 ? (
@@ -260,110 +312,143 @@ export function ResumesView({ onOpenCandidate }: ResumesViewProps) {
           <p>Upload resumes directly above, or scan authorized Zoho Mailboxes.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {resumes.map((resume) => (
-            <Card
-              key={resume.id}
-              onClick={() => setSelectedResumeId(resume.id)}
-              className="cursor-pointer hover:border-role-recruitment/40 transition-colors shadow-2xs group"
-            >
-              <CardContent className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground mt-0.5">
-                    <FileTextIcon className="size-4" />
-                  </div>
-
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-xs text-foreground truncate max-w-xs sm:max-w-md">
-                        {resume.fileName}
-                      </p>
-
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                          statusColors[resume.processingStatus] || "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {resume.processingStatus === "processing" && (
-                          <Loader2Icon className="size-2.5 animate-spin" />
-                        )}
-                        {resume.processingStatus === "completed" && (
-                          <CheckCircle2Icon className="size-2.5 text-emerald-500" />
-                        )}
-                        {resume.processingStatus === "failed" && (
-                          <AlertCircleIcon className="size-2.5 text-red-500" />
-                        )}
-                        {resume.processingStatus.replace("_", " ")}
+        <div className="rounded-xl border shadow-2xs overflow-hidden">
+          {canManage && checkedIds.size > 0 && (
+            <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-4 py-2">
+              <span className="text-xs font-medium text-foreground">{checkedIds.size} selected</span>
+              <div className="flex items-center gap-1">
+                {canProcess && (
+                  <Button size="sm" variant="ghost" disabled={bulkPending} onClick={bulkReprocess} className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground">
+                    <RefreshCwIcon className="size-3.5" /> Reprocess
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" disabled={bulkPending} onClick={() => setBulkDeleteConfirmOpen(true)} className="h-7 text-xs gap-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10">
+                  <Trash2Icon className="size-3.5" /> Delete
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setCheckedIds(new Set())} className="h-7 text-xs text-muted-foreground">
+                  Clear
+                </Button>
+              </div>
+            </div>
+          )}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {canManage && (
+                  <TableHead className="w-8">
+                    <input
+                      type="checkbox"
+                      checked={resumes.length > 0 && resumes.every((r) => checkedIds.has(r.id))}
+                      onChange={toggleCheckAll}
+                      className="size-4 cursor-pointer accent-primary"
+                      aria-label="Select all"
+                    />
+                  </TableHead>
+                )}
+                <TableHead>File</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Candidate</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Size</TableHead>
+                <TableHead>Added</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {resumes.map((resume) => (
+                <TableRow
+                  key={resume.id}
+                  onClick={() => setSelectedResumeId(resume.id)}
+                  className="cursor-pointer"
+                >
+                  {canManage && (
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={checkedIds.has(resume.id)}
+                        onChange={() => toggleChecked(resume.id)}
+                        className="size-4 cursor-pointer accent-primary"
+                        aria-label={`Select ${resume.fileName}`}
+                      />
+                    </TableCell>
+                  )}
+                  <TableCell>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                        <FileTextIcon className="size-4" />
                       </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-foreground text-xs max-w-xs">{resume.fileName}</p>
+                        {resume.errorMessage && (
+                          <p className="truncate text-[11px] text-destructive max-w-xs">Error: {resume.errorMessage}</p>
+                        )}
+                      </div>
                     </div>
-
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-                      <span>Source: {resume.source.replace("_", " ")}</span>
-                      <span>•</span>
-                      <span>{(resume.fileSize / 1024).toFixed(1)} KB</span>
-                      <span>•</span>
-                      <span>{new Date(resume.createdAt).toLocaleDateString()}</span>
-                      {resume.candidateName && (
-                        <>
-                          <span>•</span>
-                          <span className="font-medium text-foreground">
-                            Candidate: {resume.candidateName}
-                          </span>
-                        </>
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${
+                        statusColors[resume.processingStatus] || "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {resume.processingStatus === "processing" && (
+                        <Loader2Icon className="size-2.5 animate-spin" />
+                      )}
+                      {resume.processingStatus === "completed" && (
+                        <CheckCircle2Icon className="size-2.5 text-emerald-500" />
+                      )}
+                      {resume.processingStatus === "failed" && (
+                        <AlertCircleIcon className="size-2.5 text-red-500" />
+                      )}
+                      {resume.processingStatus.replace("_", " ")}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{resume.candidateName || "—"}</TableCell>
+                  <TableCell className="text-muted-foreground capitalize">{resume.source.replace("_", " ")}</TableCell>
+                  <TableCell className="text-muted-foreground">{(resume.fileSize / 1024).toFixed(1)} KB</TableCell>
+                  <TableCell className="text-muted-foreground">{new Date(resume.createdAt).toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-1">
+                      {canProcess && (
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          onClick={(e) => handleReprocess(resume, e)}
+                          className="text-muted-foreground hover:text-foreground"
+                          title="Reprocess resume"
+                        >
+                          <RefreshCwIcon className="size-3.5" />
+                        </Button>
+                      )}
+                      {resume.hasFile && (
+                        <a
+                          href={recruitmentApi.resumes.downloadUrl(resume.id)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:text-role-recruitment hover:bg-muted transition-colors"
+                          title="Download original resume"
+                        >
+                          <DownloadIcon className="size-3.5" />
+                        </a>
+                      )}
+                      {canManage && (
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          onClick={(e) => handleDeleteClick(resume, e)}
+                          className="text-muted-foreground hover:text-destructive"
+                          title="Delete resume"
+                        >
+                          <Trash2Icon className="size-3.5" />
+                        </Button>
                       )}
                     </div>
-
-                    {resume.errorMessage && (
-                      <p className="text-[11px] text-destructive truncate max-w-md">
-                        Error: {resume.errorMessage}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                  {canProcess && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={(e) => handleReprocess(resume, e)}
-                      className="h-8 text-xs text-muted-foreground hover:text-foreground gap-1"
-                      title="Reprocess resume"
-                    >
-                      <RefreshCwIcon className="size-3.5" />
-                      <span className="hidden sm:inline">Reprocess</span>
-                    </Button>
-                  )}
-
-                  {resume.hasFile && (
-                    <a
-                      href={recruitmentApi.resumes.downloadUrl(resume.id)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center justify-center size-8 rounded-md border bg-background text-muted-foreground hover:text-role-recruitment transition-colors shadow-2xs"
-                      title="Download original resume"
-                    >
-                      <DownloadIcon className="size-3.5" />
-                    </a>
-                  )}
-
-                  {canManage && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={(e) => handleDeleteClick(resume, e)}
-                      className="size-8 p-0 text-muted-foreground hover:text-destructive"
-                      title="Delete resume"
-                    >
-                      <Trash2Icon className="size-3.5" />
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
 
@@ -427,6 +512,33 @@ export function ResumesView({ onOpenCandidate }: ResumesViewProps) {
               variant="destructive"
               onClick={confirmDelete}
               disabled={deleteResume.isPending}
+              className="gap-1.5"
+            >
+              <Trash2Icon className="size-3.5" />
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkDeleteConfirmOpen} onOpenChange={(open) => !open && setBulkDeleteConfirmOpen(false)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete {checkedIds.size} resume{checkedIds.size === 1 ? "" : "s"}?</DialogTitle>
+            <DialogDescription>
+              This will permanently delete the selected resumes. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" size="sm" />}>
+              Cancel
+            </DialogClose>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              onClick={confirmBulkDelete}
+              disabled={bulkPending}
               className="gap-1.5"
             >
               <Trash2Icon className="size-3.5" />

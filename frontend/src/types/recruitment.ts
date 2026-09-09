@@ -188,6 +188,7 @@ export interface RecruitmentDashboardStats {
   processingFailures: number
   shortlistedCandidates: number
   needsReviewCandidates: number
+  hiredThisMonth: number
 }
 
 export interface RecruitmentAnalytics {

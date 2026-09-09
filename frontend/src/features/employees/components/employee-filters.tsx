@@ -31,7 +31,7 @@ export function EmployeeFilters({
         value={params.departmentId ?? "all"}
         onValueChange={(v) => onChange({ ...params, departmentId: !v || v === "all" ? undefined : v, page: 1 })}
       >
-        <SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger>
+        <SelectTrigger aria-label="Filter by department"><SelectValue placeholder="Department" /></SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All departments</SelectItem>
           {departments?.map((d) => (
@@ -45,7 +45,7 @@ export function EmployeeFilters({
           onChange({ ...params, status: !v || v === "all" ? undefined : (v as EmployeeStatus), page: 1 })
         }
       >
-        <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+        <SelectTrigger aria-label="Filter by status"><SelectValue placeholder="Status" /></SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All statuses</SelectItem>
           <SelectItem value="active">Active</SelectItem>

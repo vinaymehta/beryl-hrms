@@ -64,68 +64,68 @@ export function AiSearchView({ onOpenCandidate }: AiSearchViewProps) {
   return (
     <div className="space-y-6">
       {/* Search Header / Prompt */}
-      <div className="rounded-xl border bg-card p-5 space-y-4 shadow-2xs">
-        <div className="flex items-center gap-2">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-role-recruitment/12 text-role-recruitment">
-            <SparklesIcon className="size-5" />
+      <div className="rounded-2xl border bg-gradient-to-b from-role-recruitment/5 to-transparent p-8 sm:p-10 space-y-6">
+        <div className="flex flex-col items-center text-center gap-3">
+          <div className="flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-role-recruitment text-primary-foreground shadow-lg shadow-role-recruitment/20">
+            <SparklesIcon className="size-7" />
           </div>
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">AI Discovery</h3>
-            <p className="text-xs text-muted-foreground">
-              Describe the candidate you're looking for in plain English.
-            </p>
-          </div>
+          <h2 className="text-3xl font-bold tracking-tight text-foreground">
+            AI{" "}
+            <span className="bg-gradient-to-r from-primary to-role-recruitment bg-clip-text text-transparent">
+              Discovery
+            </span>
+          </h2>
+          <p className="max-w-md text-sm text-muted-foreground">
+            Describe the candidate you're looking for in plain English — AI Discovery searches your
+            entire talent pool instantly.
+          </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1">
-            <SearchIcon className="absolute left-3 top-3 size-4 text-muted-foreground" />
+        <div className="mx-auto w-full max-w-2xl space-y-3">
+          <div className="relative">
+            <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               placeholder="e.g. Find senior React engineers in Bangalore with 4+ years experience and AWS..."
-              className="pl-9 h-10 text-xs bg-background"
+              className="h-12 rounded-xl bg-card pl-10 pr-4 text-sm shadow-sm"
             />
           </div>
-          <Button
-            size="sm"
-            onClick={() => handleSearch()}
-            disabled={loading || !query.trim()}
-            className="h-10 text-xs gap-1.5 shrink-0 px-4 shadow-sm"
-          >
-            {loading ? (
-              <>
-                <Loader2Icon className="size-3.5 animate-spin" />
-                Parsing Query...
-              </>
-            ) : (
-              <>
-                <SparklesIcon className="size-3.5" />
-                Run AI Discovery
-              </>
-            )}
-          </Button>
-        </div>
 
-        {/* Sample query pills */}
-        <div className="space-y-1.5">
-          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-            Try Sample Prompts:
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {sampleQueries.map((sample, idx) => (
-              <button
-                key={idx}
-                onClick={() => {
-                  setQuery(sample)
-                  handleSearch(sample)
-                }}
-                className="rounded-md border bg-background/80 px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground hover:border-role-recruitment/40 hover:bg-role-recruitment/10 transition-colors text-left"
-              >
-                &ldquo;{sample}&rdquo;
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              {sampleQueries.map((sample, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    setQuery(sample)
+                    handleSearch(sample)
+                  }}
+                  className="rounded-md border bg-card px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground hover:border-role-recruitment/40 hover:bg-role-recruitment/10 transition-colors text-left"
+                >
+                  &ldquo;{sample}&rdquo;
+                </button>
+              ))}
+            </div>
+
+            <Button
+              onClick={() => handleSearch()}
+              disabled={loading || !query.trim()}
+              className="gap-1.5 shrink-0 bg-gradient-to-r from-primary to-role-recruitment text-primary-foreground shadow-md shadow-role-recruitment/25 hover:opacity-90"
+            >
+              {loading ? (
+                <>
+                  <Loader2Icon className="size-4 animate-spin" />
+                  Parsing Query...
+                </>
+              ) : (
+                <>
+                  <SparklesIcon className="size-4" />
+                  Run AI Discovery
+                </>
+              )}
+            </Button>
           </div>
         </div>
       </div>

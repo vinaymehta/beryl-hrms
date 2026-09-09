@@ -1,32 +1,35 @@
 "use client"
 
-import { useState } from "react"
 import { useRouter } from "next/navigation"
 import {
-  useRecruitmentStats,
   useRecruitmentAnalytics,
   useRecruitmentInsights,
   useCandidates,
+  useResumes,
 } from "../hooks"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { cn } from "cn"
 import {
   UsersIcon,
   FileTextIcon,
-  AlertCircleIcon,
-  StarIcon,
-  Loader2Icon,
   SparklesIcon,
-  RefreshCwIcon,
-  MailSearchIcon,
   ArrowUpRightIcon,
+  ArrowRightIcon,
   BriefcaseIcon,
   GraduationCapIcon,
   MapPinIcon,
   AwardIcon,
+  XIcon,
+  CheckCircle2Icon,
+  ClockIcon,
+  XCircleIcon,
+  CopyIcon,
+  Loader2Icon,
+  AlertCircleIcon,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -37,13 +40,19 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  LabelList,
 } from "recharts"
-import { ScanZohoModal } from "./scan-zoho-modal"
-import { usePermission } from "@/features/auth/hooks/use-permission"
-import { PERMISSIONS } from "@/constants/permissions"
+import type { CandidateStatus } from "@/types/recruitment"
+
+export type DashboardDetail =
+  | { type: "candidates"; status: CandidateStatus | ""; label: string }
+  | { type: "resumes"; status: string; label: string }
 
 interface DashboardViewProps {
-  onNavigateTab: (tab: string) => void
+  onNavigateTab: (tab: string, filter?: string) => void
+  detail: DashboardDetail | null
+  onOpenDetail: (detail: DashboardDetail) => void
+  onCloseDetail: () => void
 }
 
 // One semantic color per candidate status, reused consistently everywhere
@@ -68,7 +77,11 @@ const STATUS_BAR: Record<string, string> = {
   rejected: "bg-muted-foreground/40",
 }
 
-// Matches the same resume processing-status colors used in resumes-view.tsx.
+// Funnel order for the pipeline view — unrecognized statuses (shouldn't occur,
+// but real data always wins over a hardcoded list) sort after known ones.
+const PIPELINE_ORDER = ["needs_review", "applied", "screening", "interviewing", "shortlisted", "offered", "rejected"]
+
+// Matches the same resume processing-status colors/labels used in resumes-view.tsx.
 const RESUME_STATUS_BADGE: Record<string, string> = {
   pending: "bg-blue-500/10 text-blue-600",
   processing: "bg-cyan-500/10 text-cyan-600",
@@ -78,6 +91,37 @@ const RESUME_STATUS_BADGE: Record<string, string> = {
   duplicate: "bg-violet-500/10 text-violet-600",
 }
 
+const RESUME_STATUS_ICON_TINT: Record<string, string> = {
+  pending: "bg-blue-500 text-white",
+  processing: "bg-cyan-500 text-white",
+  completed: "bg-emerald-500 text-white",
+  failed: "bg-red-500 text-white",
+  not_a_resume: "bg-muted-foreground text-white",
+  duplicate: "bg-violet-500 text-white",
+}
+
+const RESUME_STATUS_ICON: Record<string, LucideIcon> = {
+  pending: ClockIcon,
+  processing: Loader2Icon,
+  completed: CheckCircle2Icon,
+  failed: AlertCircleIcon,
+  not_a_resume: XCircleIcon,
+  duplicate: CopyIcon,
+}
+
+const RESUME_STATUS_LABEL: Record<string, string> = {
+  pending: "Pending",
+  processing: "Processing",
+  completed: "Completed",
+  failed: "Needs Retry / Failed",
+  not_a_resume: "Not a Resume",
+  duplicate: "Duplicate",
+}
+
+const RESUME_STATUS_ORDER = ["completed", "processing", "pending", "failed", "not_a_resume", "duplicate"]
+
+const CHART_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"]
+
 function initials(name: string) {
   const parts = name.trim().split(/\s+/)
   return (`${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase()) || "?"
@@ -85,6 +129,20 @@ function initials(name: string) {
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+}
+
+function formatBytes(bytes: number) {
+  if (!bytes || bytes <= 0) return ""
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function sortByOrder<T extends { status: string }>(items: T[], order: string[]): T[] {
+  return [...items].sort((a, b) => {
+    const ai = order.indexOf(a.status)
+    const bi = order.indexOf(b.status)
+    return (ai === -1 ? order.length : ai) - (bi === -1 ? order.length : bi)
+  })
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -110,142 +168,157 @@ function ChartTooltip({ active, payload, nameKey, unit }: { active?: boolean; pa
   )
 }
 
-interface Kpi {
-  key: string
-  label: string
-  value: number | undefined
-  caption?: string
-  icon: LucideIcon
-  tint: string
-  hero?: boolean
-  onClick: () => void
+function HorizontalBarList({ items }: { items: { name: string; count: number }[] }) {
+  const max = Math.max(...items.map((i) => i.count), 1)
+  return (
+    <div className="space-y-2.5">
+      {items.map((item, idx) => (
+        <div key={item.name} className="space-y-1">
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <span className="truncate font-medium text-foreground" title={item.name}>
+              {item.name}
+            </span>
+            <span className="shrink-0 font-semibold text-muted-foreground">{item.count}</span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${(item.count / max) * 100}%`, backgroundColor: CHART_COLORS[idx % CHART_COLORS.length] }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
-export function DashboardView({ onNavigateTab }: DashboardViewProps) {
+// Detail panel shown at the top of the dashboard when a KPI card or a
+// pipeline/processing stage is clicked — real, filtered data, inline,
+// without navigating away from the Dashboard tab.
+function DetailPanel({ detail, onNavigateTab, onClose }: {
+  detail: DashboardDetail
+  onNavigateTab: (tab: string, filter?: string) => void
+  onClose: () => void
+}) {
+  const candidatesQuery = useCandidates({
+    status: detail.type === "candidates" ? detail.status : "",
+    page: 1,
+    enabled: detail.type === "candidates",
+  })
+  const resumesQuery = useResumes({
+    status: detail.type === "resumes" ? detail.status || undefined : undefined,
+    page: 1,
+    enabled: detail.type === "resumes",
+  })
+
+  const isLoading = detail.type === "candidates" ? candidatesQuery.isLoading : resumesQuery.isLoading
+  const candidateRows = detail.type === "candidates" ? (candidatesQuery.data?.data ?? []).slice(0, 6) : []
+  const resumeRows = detail.type === "resumes" ? (resumesQuery.data?.data ?? []).slice(0, 6) : []
+
+  return (
+    <Card className="border-l-4 border-l-role-recruitment shadow-sm">
+      <CardHeader className="flex-row items-center justify-between space-y-0 p-4 pb-2">
+        <CardTitle className="text-sm font-semibold text-foreground">{detail.label}</CardTitle>
+        <Button size="icon-sm" variant="ghost" onClick={onClose} className="text-muted-foreground">
+          <XIcon className="size-4" />
+          <span className="sr-only">Close</span>
+        </Button>
+      </CardHeader>
+      <CardContent className="p-4 pt-1">
+        {isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        ) : detail.type === "candidates" ? (
+          candidateRows.length === 0 ? (
+            <p className="py-4 text-center text-xs text-muted-foreground">No candidates yet.</p>
+          ) : (
+            <div className="divide-y">
+              {candidateRows.map((c) => (
+                <div key={c.id} className="flex items-center gap-2.5 py-2">
+                  <Avatar size="sm">
+                    <AvatarFallback className="bg-role-recruitment/12 text-[11px] text-role-recruitment">
+                      {initials(c.fullName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium text-foreground">{c.fullName}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {c.city || "—"} · {c.experienceYears ? `${c.experienceYears} yrs` : "—"}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[c.status] || "bg-muted text-muted-foreground"}`}
+                  >
+                    {c.status.replace(/_/g, " ")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )
+        ) : resumeRows.length === 0 ? (
+          <p className="py-4 text-center text-xs text-muted-foreground">No resumes to process.</p>
+        ) : (
+          <div className="divide-y">
+            {resumeRows.map((r) => (
+              <div key={r.id} className="flex items-center gap-2.5 py-2">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                  <FileTextIcon className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-medium text-foreground">{r.fileName}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {r.candidateName || "Unlinked"} · {formatDate(r.createdAt)}
+                    {r.fileSize ? ` · ${formatBytes(r.fileSize)}` : ""}
+                  </p>
+                </div>
+                <span
+                  className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${RESUME_STATUS_BADGE[r.processingStatus] || "bg-muted text-muted-foreground"}`}
+                >
+                  {RESUME_STATUS_LABEL[r.processingStatus] || r.processingStatus.replace(/_/g, " ")}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-2 flex justify-end border-t pt-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() =>
+              onNavigateTab(detail.type === "candidates" ? "candidates" : "resumes", detail.status)
+            }
+            className="text-xs gap-1 text-muted-foreground hover:text-foreground"
+          >
+            View all in {detail.type === "candidates" ? "Candidates" : "Resumes & Ingestion"}{" "}
+            <ArrowUpRightIcon className="size-3.5" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+export function DashboardView({ onNavigateTab, detail, onOpenDetail, onCloseDetail }: DashboardViewProps) {
   const router = useRouter()
-  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useRecruitmentStats()
   const { data: analytics, isLoading: analyticsLoading } = useRecruitmentAnalytics()
-  const { data: insights, isLoading: insightsLoading, refetch: refetchInsights } = useRecruitmentInsights()
+  const { data: insights, isLoading: insightsLoading } = useRecruitmentInsights()
   const { data: recentResponse, isLoading: recentLoading } = useCandidates({ page: 1 })
-  const canProcess = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.resumesProcess])
 
-  const [scanModalOpen, setScanModalOpen] = useState(false)
-
-  const processingResumes = analytics?.resumeProcessingStatus?.find((s) => s.status === "processing")?.count ?? 0
   const recentCandidates = (recentResponse?.data ?? []).slice(0, 5)
   const hasInsights = Boolean(insights?.summary || (insights?.insights && insights.insights.length > 0))
 
-  const kpis: Kpi[] = [
-    {
-      key: "total",
-      label: "Total Candidates",
-      value: stats?.totalCandidates,
-      icon: UsersIcon,
-      tint: "bg-role-recruitment/12 text-role-recruitment",
-      hero: true,
-      onClick: () => onNavigateTab("candidates"),
-    },
-    {
-      key: "new",
-      label: "New Resumes",
-      value: stats?.newResumes,
-      caption: "Last 7 days",
-      icon: FileTextIcon,
-      tint: "bg-blue-500/12 text-blue-600",
-      onClick: () => onNavigateTab("resumes"),
-    },
-    {
-      key: "review",
-      label: "Needs Review",
-      value: stats?.needsReviewCandidates,
-      icon: AlertCircleIcon,
-      tint: "bg-amber-500/12 text-amber-600",
-      onClick: () => onNavigateTab("candidates"),
-    },
-    {
-      key: "shortlisted",
-      label: "Shortlisted",
-      value: stats?.shortlistedCandidates,
-      icon: StarIcon,
-      tint: "bg-role-recruitment/12 text-role-recruitment",
-      onClick: () => onNavigateTab("candidates"),
-    },
-    {
-      key: "processing",
-      label: "Processing",
-      value: processingResumes,
-      icon: Loader2Icon,
-      tint: "bg-cyan-500/12 text-cyan-600",
-      onClick: () => onNavigateTab("resumes"),
-    },
-  ]
+  const pipeline = analytics?.candidatePipeline ? sortByOrder(analytics.candidatePipeline, PIPELINE_ORDER) : []
+  const processing = analytics?.resumeProcessingStatus ? sortByOrder(analytics.resumeProcessingStatus, RESUME_STATUS_ORDER) : []
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">Recruitment</h2>
-          <p className="text-sm text-muted-foreground">Candidate intelligence and hiring overview</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              refetchStats()
-              refetchInsights()
-            }}
-            className="text-xs gap-1.5"
-          >
-            <RefreshCwIcon className="size-3.5" />
-            Refresh
-          </Button>
-
-          {canProcess && (
-            <Button
-              size="sm"
-              onClick={() => setScanModalOpen(true)}
-              className="text-xs gap-1.5 shadow-sm"
-            >
-              <MailSearchIcon className="size-3.5" />
-              Scan Zoho Mail
-            </Button>
-          )}
-
-          {canProcess && (
-            <Button size="sm" variant="outline" onClick={() => onNavigateTab("resumes")} className="text-xs gap-1.5">
-              <FileTextIcon className="size-3.5" />
-              Upload Resume
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {kpis.map((kpi) => (
-          <Card
-            key={kpi.key}
-            onClick={kpi.onClick}
-            className="cursor-pointer shadow-2xs transition-all hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <CardContent className="flex items-center justify-between gap-2 p-4">
-              <div className="min-w-0">
-                <p className="truncate text-xs text-muted-foreground">{kpi.label}</p>
-                <div className={kpi.hero ? "text-3xl font-semibold text-foreground" : "text-2xl font-semibold text-foreground"}>
-                  {statsLoading ? <Skeleton className="h-7 w-10" /> : (kpi.value ?? 0)}
-                </div>
-                {kpi.caption && <p className="mt-0.5 text-[11px] text-muted-foreground">{kpi.caption}</p>}
-              </div>
-              <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${kpi.tint}`}>
-                <kpi.icon className="size-4.5" />
-              </span>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {detail && (
+        <DetailPanel detail={detail} onNavigateTab={onNavigateTab} onClose={onCloseDetail} />
+      )}
 
       {/* AI Insights */}
       <Card className="shadow-2xs">
@@ -302,13 +375,15 @@ export function DashboardView({ onNavigateTab }: DashboardViewProps) {
               {analyticsLoading ? (
                 <Skeleton className="h-40 w-full" />
               ) : analytics?.candidatesByCity && analytics.candidatesByCity.length > 0 ? (
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={analytics.candidatesByCity} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} className="stroke-border" />
-                    <XAxis type="number" tickLine={false} axisLine={false} allowDecimals={false} className="text-[10px] fill-muted-foreground" />
-                    <YAxis dataKey="name" type="category" tickLine={false} axisLine={false} className="text-[10px] fill-foreground font-medium" width={70} />
+                <ResponsiveContainer width="100%" height={190}>
+                  <BarChart data={analytics.candidatesByCity} margin={{ top: 20, left: 0, right: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
+                    <XAxis dataKey="name" tickLine={false} axisLine={false} className="text-[10px] fill-muted-foreground" />
+                    <YAxis hide allowDecimals={false} />
                     <Tooltip content={<ChartTooltip nameKey="name" unit="Candidates" />} cursor={{ fill: "var(--muted)", opacity: 0.4 }} />
-                    <Bar dataKey="count" radius={[0, 4, 4, 0]} fill="var(--chart-1)" maxBarSize={18} />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]} fill="var(--chart-1)" maxBarSize={36}>
+                      <LabelList dataKey="count" position="top" className="fill-foreground text-xs font-semibold" />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -327,8 +402,8 @@ export function DashboardView({ onNavigateTab }: DashboardViewProps) {
             <CardContent className="p-4 pt-1">
               {analyticsLoading ? (
                 <Skeleton className="h-40 w-full" />
-              ) : analytics?.experienceDistribution && analytics.experienceDistribution.length > 0 ? (
-                <ResponsiveContainer width="100%" height={180}>
+              ) : analytics?.experienceDistribution && analytics.experienceDistribution.some((e) => e.count > 0) ? (
+                <ResponsiveContainer width="100%" height={190}>
                   <BarChart data={analytics.experienceDistribution}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
                     <XAxis dataKey="bracket" tickLine={false} axisLine={false} className="text-[10px] fill-muted-foreground" />
@@ -350,27 +425,22 @@ export function DashboardView({ onNavigateTab }: DashboardViewProps) {
         <SectionLabel>Talent Insights</SectionLabel>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card className="shadow-2xs">
-            <CardHeader className="p-4 pb-2">
+            <CardHeader className="flex-row items-center justify-between space-y-0 p-4 pb-2">
               <div className="flex items-center gap-2">
                 <AwardIcon className="size-4 text-muted-foreground" />
                 <CardTitle className="text-sm font-semibold">Top Skills</CardTitle>
               </div>
+              {analytics?.topSkills && analytics.topSkills.length > 0 && (
+                <Button size="sm" variant="ghost" onClick={() => onNavigateTab("search")} className="text-xs text-muted-foreground hover:text-foreground">
+                  View All
+                </Button>
+              )}
             </CardHeader>
             <CardContent className="p-4 pt-1">
               {analyticsLoading ? (
                 <Skeleton className="h-24 w-full" />
               ) : analytics?.topSkills && analytics.topSkills.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {analytics.topSkills.slice(0, 12).map((sk, idx) => (
-                    <div
-                      key={idx}
-                      className="inline-flex items-center gap-1.5 rounded-md border bg-muted/30 px-2.5 py-1 text-xs font-medium text-foreground"
-                    >
-                      <span>{sk.name}</span>
-                      <span className="text-[10px] font-semibold text-muted-foreground">{sk.count}</span>
-                    </div>
-                  ))}
-                </div>
+                <HorizontalBarList items={analytics.topSkills.slice(0, 6)} />
               ) : (
                 <EmptyChart label="No skills data available" compact />
               )}
@@ -378,26 +448,22 @@ export function DashboardView({ onNavigateTab }: DashboardViewProps) {
           </Card>
 
           <Card className="shadow-2xs">
-            <CardHeader className="p-4 pb-2">
+            <CardHeader className="flex-row items-center justify-between space-y-0 p-4 pb-2">
               <div className="flex items-center gap-2">
                 <GraduationCapIcon className="size-4 text-muted-foreground" />
                 <CardTitle className="text-sm font-semibold">Qualification Distribution</CardTitle>
               </div>
+              {analytics?.candidatesByQualification && analytics.candidatesByQualification.length > 0 && (
+                <Button size="sm" variant="ghost" onClick={() => onNavigateTab("search")} className="text-xs text-muted-foreground hover:text-foreground">
+                  View All
+                </Button>
+              )}
             </CardHeader>
             <CardContent className="p-4 pt-1">
               {analyticsLoading ? (
                 <Skeleton className="h-24 w-full" />
               ) : analytics?.candidatesByQualification && analytics.candidatesByQualification.length > 0 ? (
-                <div className="space-y-2">
-                  {analytics.candidatesByQualification.slice(0, 6).map((q, idx) => (
-                    <div key={idx} className="flex items-center justify-between gap-3 text-xs">
-                      <span className="truncate font-medium text-foreground" title={q.name}>
-                        {q.name}
-                      </span>
-                      <span className="shrink-0 font-semibold text-muted-foreground">{q.count}</span>
-                    </div>
-                  ))}
-                </div>
+                <HorizontalBarList items={analytics.candidatesByQualification.slice(0, 6)} />
               ) : (
                 <EmptyChart label="No qualification data available" compact />
               )}
@@ -406,71 +472,87 @@ export function DashboardView({ onNavigateTab }: DashboardViewProps) {
         </div>
       </div>
 
-      {/* Candidate Pipeline + Resume Processing */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card className="shadow-2xs">
-          <CardHeader className="p-4 pb-2">
-            <div className="flex items-center gap-2">
-              <UsersIcon className="size-4 text-muted-foreground" />
-              <CardTitle className="text-sm font-semibold">Candidate Pipeline</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="p-4 pt-1">
-            {analyticsLoading ? (
-              <Skeleton className="h-32 w-full" />
-            ) : analytics?.candidatePipeline && analytics.candidatePipeline.some((p) => p.count > 0) ? (
-              <div className="space-y-2.5">
-                {analytics.candidatePipeline.map((p, idx) => {
-                  const max = Math.max(...analytics.candidatePipeline.map((x) => x.count), 1)
-                  return (
-                    <div key={idx} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-medium capitalize text-foreground">{p.status.replace(/_/g, " ")}</span>
-                        <span className="font-semibold text-muted-foreground">{p.count}</span>
+      {/* Candidate Pipeline / Resume Processing */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="space-y-3 lg:col-span-2 flex flex-col">
+          <SectionLabel>Candidate Pipeline</SectionLabel>
+          <Card className="shadow-2xs flex-1">
+            <CardContent className="p-4">
+              {analyticsLoading ? (
+                <Skeleton className="h-20 w-full" />
+              ) : pipeline.some((p) => p.count > 0) ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {pipeline.map((p, idx) => {
+                    const label = p.status.replace(/\b\w/g, (c) => c.toUpperCase()).replace(/_/g, " ")
+                    return (
+                      <div key={p.status} className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onOpenDetail({ type: "candidates", status: p.status as CandidateStatus, label: `${label} Candidates` })
+                          }
+                          className={cn(
+                            "flex min-w-28 flex-col gap-0.5 rounded-lg px-3.5 py-2.5 text-left transition-transform cursor-pointer hover:-translate-y-0.5",
+                            STATUS_BADGE[p.status] || "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          <span className="text-lg font-bold">{p.count}</span>
+                          <span className="text-[11px] font-medium whitespace-nowrap">{label}</span>
+                        </button>
+                        {idx < pipeline.length - 1 && (
+                          <ArrowRightIcon className="size-3.5 shrink-0 text-muted-foreground/50" />
+                        )}
                       </div>
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                        <div
-                          className={`h-full rounded-full ${STATUS_BAR[p.status] || "bg-muted-foreground/40"}`}
-                          style={{ width: `${(p.count / max) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <EmptyChart label="No pipeline data available" compact />
-            )}
-          </CardContent>
-        </Card>
+                    )
+                  })}
+                </div>
+              ) : (
+                <EmptyChart label="No pipeline data available" compact />
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
-        <Card className="shadow-2xs">
-          <CardHeader className="p-4 pb-2">
-            <div className="flex items-center gap-2">
-              <FileTextIcon className="size-4 text-muted-foreground" />
-              <CardTitle className="text-sm font-semibold">Resume Processing</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="p-4 pt-1">
-            {analyticsLoading ? (
-              <Skeleton className="h-32 w-full" />
-            ) : analytics?.resumeProcessingStatus && analytics.resumeProcessingStatus.some((s) => s.count > 0) ? (
-              <div className="flex flex-wrap gap-2">
-                {analytics.resumeProcessingStatus.map((s, idx) => (
-                  <div
-                    key={idx}
-                    className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium capitalize ${RESUME_STATUS_BADGE[s.status] || "bg-muted text-muted-foreground"}`}
-                  >
-                    <span>{s.status.replace(/_/g, " ")}</span>
-                    <span className="rounded-full bg-background/60 px-1.5 text-[10px] font-bold">{s.count}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyChart label="No processing data available" compact />
-            )}
-          </CardContent>
-        </Card>
+        <div className="space-y-3 flex flex-col">
+          <SectionLabel>Resume Processing</SectionLabel>
+          <Card className="shadow-2xs flex-1">
+            <CardContent className="p-4">
+              {analyticsLoading ? (
+                <Skeleton className="h-32 w-full" />
+              ) : processing.some((s) => s.count > 0) ? (
+                <div className="space-y-1.5">
+                  {processing.map((s) => {
+                    const Icon = RESUME_STATUS_ICON[s.status] || FileTextIcon
+                    return (
+                      <button
+                        key={s.status}
+                        type="button"
+                        onClick={() =>
+                          onOpenDetail({
+                            type: "resumes",
+                            status: s.status,
+                            label: `${RESUME_STATUS_LABEL[s.status] || s.status} Resumes`,
+                          })
+                        }
+                        className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-muted/50 cursor-pointer"
+                      >
+                        <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", RESUME_STATUS_ICON_TINT[s.status] || "bg-muted-foreground text-white")}>
+                          <Icon className="size-4" />
+                        </span>
+                        <span className="flex-1 truncate text-sm font-medium text-foreground">
+                          {RESUME_STATUS_LABEL[s.status] || s.status.replace(/_/g, " ")}
+                        </span>
+                        <span className="text-lg font-bold text-foreground">{s.count}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <EmptyChart label="No processing data available" compact />
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Recent Candidates */}
@@ -545,8 +627,6 @@ export function DashboardView({ onNavigateTab }: DashboardViewProps) {
           )}
         </Card>
       </div>
-
-      <ScanZohoModal open={scanModalOpen} onOpenChange={setScanModalOpen} />
     </div>
   )
 }

@@ -11,10 +11,16 @@ import { AttendanceOverviewChart } from "@/features/dashboard/components/attenda
 import { useCurrentUser } from "@/features/auth/hooks/use-current-user"
 import { useDashboardSummary } from "@/features/dashboard/hooks/use-dashboard-summary"
 
-const TINT_CLASSES: Record<string, string> = {
-  "role-hr": "bg-role-hr/12 text-role-hr",
-  warning: "bg-warning/15 text-warning",
-  info: "bg-info/12 text-info",
+const ICON_TINT_CLASSES: Record<string, string> = {
+  "role-hr": "bg-role-hr text-role-hr-foreground",
+  warning: "bg-warning text-warning-foreground",
+  info: "bg-info text-info-foreground",
+}
+
+const WASH_CLASSES: Record<string, string> = {
+  "role-hr": "bg-role-hr/10 border-role-hr/15",
+  warning: "bg-warning/10 border-warning/15",
+  info: "bg-info/10 border-info/15",
 }
 
 export default function DashboardPage() {
@@ -76,53 +82,50 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Hero card — the flagship metric gets a solid brand fill to anchor
-            the row visually, per the brief's "highlighted summary card". */}
-        <Link href={HERO_STAT.href} className="group block">
-          <Card className="h-full border-none bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/25 cursor-pointer transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5">
-            <CardContent className="flex items-center justify-between p-4">
-              <div>
-                <p className="text-sm text-primary-foreground/80 flex items-center gap-1.5">
-                  <span>{HERO_STAT.label}</span>
-                  <ArrowUpRightIcon className="size-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </p>
-                <div className="text-3xl font-semibold">
-                  {HERO_STAT.value === null ? (
-                    <Skeleton className="h-8 w-10 bg-primary-foreground/20" />
-                  ) : (
-                    HERO_STAT.value
-                  )}
+        {/* One consistent counting-card layout across the app: a tinted icon
+            chip on the left, the number on the right, then the label below
+            — see the KPI cards in Mail and Recruitment for the same pattern. */}
+        <Link href={HERO_STAT.href} className="group block h-full">
+          <Card className="h-full border bg-primary/10 border-primary/15 cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground transition-colors">
+                  <HERO_STAT.icon className="size-4.5" />
+                </span>
+                <div className="text-3xl font-bold text-foreground">
+                  {HERO_STAT.value === null ? <Skeleton className="h-8 w-10" /> : HERO_STAT.value}
                 </div>
-                <p className="mt-1 flex items-center gap-1 text-xs text-primary-foreground/70 group-hover:text-primary-foreground transition-colors">
-                  <TrendingUpIcon className="size-3.5" /> Company headcount →
-                </p>
               </div>
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary-foreground/15 group-hover:bg-primary-foreground/25 transition-colors">
-                <HERO_STAT.icon className="size-5.5" />
-              </span>
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-foreground/70">
+                <span>{HERO_STAT.label}</span>
+                <ArrowUpRightIcon className="size-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </p>
+              <p className="mt-2 flex items-center gap-1 text-[11px] text-foreground/70 group-hover:text-primary transition-colors">
+                <TrendingUpIcon className="size-3.5" /> Company headcount →
+              </p>
             </CardContent>
           </Card>
         </Link>
 
         {PANEL_STATS.map((stat) => (
-          <Link key={stat.label} href={stat.href} className="group block">
-            <Card className="h-full cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary/40 hover:-translate-y-0.5">
-              <CardContent className="flex items-center justify-between p-4">
-                <div>
-                  <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors flex items-center gap-1.5">
-                    <span>{stat.label}</span>
-                    <ArrowUpRightIcon className="size-3 opacity-0 group-hover:opacity-100 text-primary transition-opacity" />
-                  </p>
-                  <div className="text-3xl font-semibold">
+          <Link key={stat.label} href={stat.href} className="group block h-full">
+            <Card className={cn("h-full border cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5", WASH_CLASSES[stat.tint])}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={cn("flex size-9 items-center justify-center rounded-xl transition-colors", ICON_TINT_CLASSES[stat.tint])}>
+                    <stat.icon className="size-4.5" />
+                  </span>
+                  <div className="text-3xl font-bold text-foreground">
                     {stat.value === null ? <Skeleton className="h-8 w-10" /> : stat.value}
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground group-hover:text-primary transition-colors">
-                    View details →
-                  </p>
                 </div>
-                <span className={cn("flex size-11 items-center justify-center rounded-xl transition-colors", TINT_CLASSES[stat.tint])}>
-                  <stat.icon className="size-5.5" />
-                </span>
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-foreground/70">
+                  <span>{stat.label}</span>
+                  <ArrowUpRightIcon className="size-3 opacity-0 group-hover:opacity-100 text-primary transition-opacity" />
+                </p>
+                <p className="mt-2 text-[11px] text-foreground/70 group-hover:text-primary transition-colors">
+                  View details →
+                </p>
               </CardContent>
             </Card>
           </Link>

@@ -44,12 +44,15 @@ export function useCandidates(params?: {
   status?: CandidateStatus | ""
   search?: string
   page?: number
+  enabled?: boolean
 }) {
+  const { enabled, ...queryParams } = params ?? {}
   return useQuery({
-    queryKey: ["recruitment", "candidates", params],
-    queryFn: () => recruitmentApi.candidates.list(params),
+    queryKey: ["recruitment", "candidates", queryParams],
+    queryFn: () => recruitmentApi.candidates.list(queryParams),
     placeholderData: (previousData) => previousData,
     refetchInterval: 10000, // auto poll — candidates are created/updated by async resume-processing jobs
+    enabled: enabled ?? true,
   })
 }
 
@@ -121,11 +124,13 @@ export function useCandidateMutations() {
   }
 }
 
-export function useResumes(params?: { status?: string; search?: string; page?: number }) {
+export function useResumes(params?: { status?: string; search?: string; page?: number; enabled?: boolean }) {
+  const { enabled, ...queryParams } = params ?? {}
   return useQuery({
-    queryKey: ["recruitment", "resumes", params],
-    queryFn: () => recruitmentApi.resumes.list(params),
+    queryKey: ["recruitment", "resumes", queryParams],
+    queryFn: () => recruitmentApi.resumes.list(queryParams),
     refetchInterval: 10000, // auto poll while processing
+    enabled: enabled ?? true,
   })
 }
 

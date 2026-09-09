@@ -27,7 +27,7 @@ function ConnectionRow({ connection }: { connection: MailConnection }) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
       <div className="flex items-center gap-3">
-        <span className="flex size-9 items-center justify-center rounded-xl bg-primary/12 text-primary">
+        <span className="flex size-9 items-center justify-center rounded-xl bg-accent-mail/12 text-accent-mail">
           {connection.connectionType === "company_managed" ? (
             <BuildingIcon className="size-4.5" />
           ) : (

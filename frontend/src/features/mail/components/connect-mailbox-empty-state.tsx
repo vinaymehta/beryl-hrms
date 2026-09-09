@@ -12,9 +12,9 @@ export function ConnectMailboxEmptyState() {
     <div className="relative flex min-h-[50vh] flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border bg-gradient-to-b from-surface-muted to-surface p-8 text-center">
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-16 size-48 rounded-full bg-gradient-to-b from-primary/40 to-primary/0 blur-2xl"
+        className="pointer-events-none absolute -top-16 size-48 rounded-full bg-gradient-to-b from-accent-mail/40 to-accent-mail/0 blur-2xl"
       />
-      <span className="relative flex size-14 items-center justify-center rounded-2xl bg-primary/12 text-primary">
+      <span className="relative flex size-14 items-center justify-center rounded-2xl bg-accent-mail/12 text-accent-mail">
         <MailIcon className="size-7" />
       </span>
       <h2 className="relative text-lg font-semibold">Connect your mailbox</h2>
