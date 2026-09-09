@@ -53,16 +53,16 @@ module Api
           connection = resolve_connection!
           return unless connection
 
-          from_address = params[:fromAddress].presence || connection.email_address
+          from_address = params[:from_address].presence || connection.email_address
           result = zoho_client.send_message(
             access_token: connection.access_token,
             account_id: account_id_for(connection),
             from_address: from_address,
-            to_address: params[:toAddress],
+            to_address: params[:to_address],
             subject: params[:subject],
             content: params[:content] || params[:body],
-            cc_address: params[:ccAddress],
-            bcc_address: params[:bccAddress]
+            cc_address: params[:cc_address],
+            bcc_address: params[:bcc_address]
           )
 
           Rails.cache.delete("zoho_mail_stats_#{account_id_for(connection)}")

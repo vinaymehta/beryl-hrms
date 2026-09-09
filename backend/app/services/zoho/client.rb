@@ -137,24 +137,22 @@ module Zoho
           Rails.logger.warn("Could not fetch message content: #{e.message}")
         end
 
-        if meta["hasAttachment"].to_s == "1" || meta["hasAttachment"] == true
-          begin
-            att_res = parse_response(
-              authenticated_api_connection(access_token).get(
-                "accounts/#{account_id}/folders/#{folder_id}/messages/#{message_id}/attachmentinfo"
-              )
+        begin
+          att_res = parse_response(
+            authenticated_api_connection(access_token).get(
+              "accounts/#{account_id}/folders/#{folder_id}/messages/#{message_id}/attachmentinfo"
             )
-            raw_atts = Array(att_res.dig("data", "attachments"))
-            attachments = raw_atts.map do |a|
-              {
-                id: a["attachmentId"].to_s,
-                name: a["attachmentName"] || "attachment",
-                size: a["attachmentSize"].to_i
-              }
-            end
-          rescue => e
-            Rails.logger.warn("Could not fetch attachment info: #{e.message}")
+          )
+          raw_atts = Array(att_res.dig("data", "attachments"))
+          attachments = raw_atts.map do |a|
+            {
+              id: a["attachmentId"].to_s,
+              name: a["attachmentName"] || "attachment",
+              size: a["attachmentSize"].to_i
+            }
           end
+        rescue => e
+          Rails.logger.warn("Could not fetch attachment info: #{e.message}")
         end
       end
 
@@ -284,18 +282,11 @@ module Zoho
         trash_folder = folders.find { |f| f[:name].to_s.casecmp?("trash") } || {}
         spam_folder = folders.find { |f| f[:name].to_s.casecmp?("spam") } || {}
 
-        # Zoho storage fields are returned in KB; convert to bytes for consistent UI handling
-        used_storage_bytes = first_acc["usedStorage"].to_i * 1024
-        allowed_storage_kb = (first_acc["allowedStorage"] || first_acc["storageQuota"] || 5242880).to_i
-        total_storage_bytes = allowed_storage_kb * 1024
-
         {
           accountId: account_id,
           emailAddress: first_acc["primaryEmailAddress"] || first_acc["mailboxAddress"] || "",
           displayName: first_acc["displayName"] || first_acc["accountName"] || "",
           status: first_acc["accountStatus"] || (first_acc["status"] ? "active" : "inactive"),
-          usedStorage: used_storage_bytes,
-          totalStorage: total_storage_bytes,
           totalMessages: folders.sum { |f| f[:totalCount] },
           totalUnread: total_unread,
           inboxCount: inbox_folder[:totalCount].to_i,
@@ -389,7 +380,9 @@ module Zoho
         when 200..299 then body
         when 401 then raise TokenExpiredError.new("Zoho access token expired or revoked", status: 401)
         when 429 then raise RateLimitedError.new("Zoho API rate limit exceeded", status: 429)
-        else raise ApiError.new("Zoho API error: #{body['message'] || body['error'] || response.status}", status: response.status)
+        else
+          Rails.logger.error("Zoho API error (HTTP #{response.status}): #{response.body.to_s.truncate(1000)}")
+          raise ApiError.new("Zoho API error: #{body['message'] || body['error'] || response.status}", status: response.status)
         end
       end
   end

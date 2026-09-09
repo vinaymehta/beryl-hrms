@@ -12,6 +12,16 @@ class Company < ApplicationRecord
   has_many :attendance_records, dependent: :destroy
   has_many :documents, dependent: :destroy
 
+  has_many :candidates, dependent: :destroy
+  has_many :candidate_resumes, dependent: :destroy
+  has_many :candidate_skills, dependent: :destroy
+  has_many :candidate_qualifications, dependent: :destroy
+  has_many :candidate_experiences, dependent: :destroy
+  has_many :candidate_certifications, dependent: :destroy
+  has_many :candidate_job_matches, dependent: :destroy
+  has_many :jobs, dependent: :destroy
+  has_many :ai_processing_logs, dependent: :destroy
+
   before_validation :generate_slug, on: :create
 
   validates :name, presence: true

@@ -1,8 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { InboxIcon, LayoutDashboardIcon, PenSquareIcon } from "lucide-react"
-import { cn } from "cn"
+import { XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -11,7 +10,6 @@ import { useMailConnections, useConnectMailbox } from "@/features/mail/hooks/use
 import { useMailMessages, useMailSearch, useMailStats, useMarkMailRead } from "@/features/mail/hooks/use-mail-messages"
 import { isMailReauthError, isMailRateLimitError } from "@/features/mail/api"
 import { ConnectMailboxEmptyState } from "@/features/mail/components/connect-mailbox-empty-state"
-import { FolderNav } from "@/features/mail/components/folder-nav"
 import { MailSearchInput } from "@/features/mail/components/mail-search-input"
 import { MessageList, MessageListSkeleton } from "@/features/mail/components/message-list"
 import { MessageReadingPane } from "@/features/mail/components/message-reading-pane"
@@ -22,13 +20,13 @@ import type { MailFolder, MailMessageDetail } from "@/types/mail"
 
 function WorkspaceSkeleton() {
   return (
-    <div className="grid h-[75vh] min-h-135 grid-cols-[200px_1fr] gap-0 overflow-hidden rounded-2xl border">
-      <div className="grid gap-1 border-r p-2">
+    <div className="space-y-4">
+      <Skeleton className="h-24 w-full rounded-2xl" />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-8 w-full" />
+          <Skeleton key={i} className="h-24 w-full rounded-xl" />
         ))}
       </div>
-      <MessageListSkeleton />
     </div>
   )
 }
@@ -37,7 +35,7 @@ export function MailWorkspace() {
   const { data: connections, isLoading: connectionsLoading } = useMailConnections()
   const connectMailbox = useConnectMailbox()
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "mailbox">("dashboard")
+  const [panelOpen, setPanelOpen] = useState(false)
   const [folder, setFolder] = useState<MailFolder>("inbox")
   const [folderId, setFolderId] = useState<string | undefined>(undefined)
   const [page, setPage] = useState(1)
@@ -76,7 +74,7 @@ export function MailWorkspace() {
     setSearchQuery(search)
     setPage(1)
     setSelectedId(undefined)
-    setActiveTab("mailbox")
+    setPanelOpen(true)
   }
 
   function handleSelectMessage(id: string) {
@@ -97,99 +95,25 @@ export function MailWorkspace() {
     setComposeOpen(true)
   }
 
-  const unreadFolderCounts: Record<string, number> = {
-    inbox: stats?.inboxUnread ?? 0,
-    sent: 0,
-    drafts: stats?.draftsCount ?? 0,
-    spam: stats?.spamCount ?? 0,
-    trash: stats?.trashCount ?? 0,
-  }
-
-  if (stats?.folders) {
-    for (const f of stats.folders) {
-      unreadFolderCounts[f.name.toLowerCase()] = f.unreadCount
-    }
-  }
-
   return (
-    <div className="space-y-4">
-      {/* Top Header Navigation Tabs & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-1 rounded-xl bg-muted/60 p-1 w-fit border">
-          <button
-            type="button"
-            onClick={() => setActiveTab("dashboard")}
-            className={cn(
-              "flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
-              activeTab === "dashboard"
-                ? "bg-background text-foreground shadow-xs font-semibold"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <LayoutDashboardIcon className="size-3.5" />
-            <span>Dashboard & Stats</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("mailbox")}
-            className={cn(
-              "flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
-              activeTab === "mailbox"
-                ? "bg-background text-foreground shadow-xs font-semibold"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <InboxIcon className="size-3.5" />
-            <span>Mailbox</span>
-            {stats?.inboxUnread !== undefined && stats.inboxUnread > 0 && (
-              <span className="rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-[10px] font-bold leading-none">
-                {stats.inboxUnread}
-              </span>
-            )}
-          </button>
-        </div>
+    <div className="min-w-0 space-y-4">
+      <MailStatsOverview
+        connectionId={connection.id}
+        emailAddress={connection.emailAddress}
+        onCompose={() => {
+          setReplyData(null)
+          setComposeOpen(true)
+        }}
+        onSelectFolder={selectFolder}
+      />
 
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            onClick={() => {
-              setReplyData(null)
-              setComposeOpen(true)
-            }}
-            className="gap-1.5 text-xs shadow-xs"
-          >
-            <PenSquareIcon className="size-3.5" />
-            Compose
-          </Button>
-        </div>
-      </div>
-
-      {activeTab === "dashboard" ? (
-        <MailStatsOverview
-          connectionId={connection.id}
-          emailAddress={connection.emailAddress}
-          onCompose={() => {
-            setReplyData(null)
-            setComposeOpen(true)
-          }}
-          onSelectFolder={selectFolder}
-        />
-      ) : (
-        /* Mailbox workspace */
-        <div className="flex h-[75vh] min-h-135 flex-col overflow-hidden rounded-2xl border bg-card md:flex-row">
-          {/* Sidebar folder navigation */}
-          <div className="flex shrink-0 flex-col border-b md:w-52 lg:w-56 md:border-b-0 md:border-r">
-            <FolderNav
-              active={folder}
-              onSelect={selectFolder}
-              unreadCounts={unreadFolderCounts}
-              allFolders={stats?.folders}
-            />
-          </div>
-
-          {/* Full-width messages view */}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="border-b p-3">
+      {/* Inline message panel — expands below the dashboard instead of
+          replacing it or navigating to a separate screen. Selecting a
+          different card/folder above just swaps which folder this shows. */}
+      {panelOpen && (
+        <div className="flex h-[70vh] min-h-115 flex-col overflow-hidden rounded-2xl border bg-card">
+          <div className="flex items-center gap-2 border-b p-3">
+            <div className="flex-1 min-w-0">
               <MailSearchInput
                 onSearch={(q) => {
                   setSearchQuery(q)
@@ -202,7 +126,18 @@ export function MailWorkspace() {
                 }}
               />
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setPanelOpen(false)}
+              aria-label="Close"
+              className="shrink-0"
+            >
+              <XIcon className="size-4" />
+            </Button>
+          </div>
 
+          <div className="min-h-0 flex-1">
             {active.isLoading ? (
               <MessageListSkeleton />
             ) : active.isError && isMailReauthError(active.error) ? (

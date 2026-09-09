@@ -211,7 +211,7 @@ export function ComposeMailDialog({
             </div>
           </div>
 
-          <DialogFooter className="p-3 border-t bg-muted/20 flex flex-row items-center justify-between sm:justify-between">
+          <DialogFooter className="m-0 p-3 border-t bg-muted/20 flex flex-row items-center justify-between sm:justify-between rounded-b-xl">
             <DialogClose render={<Button type="button" variant="outline" size="sm" />}>
               Cancel
             </DialogClose>

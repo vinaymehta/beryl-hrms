@@ -14,6 +14,10 @@ module Roles
         attendance.view attendance.manage
         leave.view leave.create leave.approve
         documents.view documents.create documents.delete
+        recruitment.view recruitment.manage
+        candidates.view candidates.manage
+        resumes.view resumes.process
+        jobs.view jobs.manage
         audit_logs.view
       ],
       "account" => %w[

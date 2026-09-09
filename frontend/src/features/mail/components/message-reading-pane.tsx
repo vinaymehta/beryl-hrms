@@ -12,6 +12,8 @@ import {
   ReplyIcon,
   AlertCircleIcon,
   RefreshCwIcon,
+  SparklesIcon,
+  Loader2Icon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -20,6 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { useMailMessage, useMarkMailRead, useDeleteMailMessage } from "@/features/mail/hooks/use-mail-messages"
 import { mailApi } from "@/features/mail/api"
+import { recruitmentApi } from "@/features/recruitment/api"
 import type { MailAttachment, MailMessageDetail } from "@/types/mail"
 
 function formatBytes(bytes: number) {
@@ -46,6 +49,8 @@ export function MessageReadingPane({
   const markReadMutation = useMarkMailRead()
   const deleteMutation = useDeleteMailMessage()
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [downloadingAll, setDownloadingAll] = useState(false)
+  const [importingId, setImportingId] = useState<string | null>(null)
 
   // Auto mark message as read when opened
   useEffect(() => {
@@ -53,6 +58,52 @@ export function MessageReadingPane({
       markReadMutation.mutate({ connectionId, messageId: message.id, read: true })
     }
   }, [connectionId, message?.id, message?.isRead])
+
+  function isResumeAttachment(fileName: string) {
+    const lower = fileName.toLowerCase()
+    return (
+      lower.endsWith(".pdf") ||
+      lower.endsWith(".docx") ||
+      lower.endsWith(".doc") ||
+      lower.includes("resume") ||
+      lower.includes("cv")
+    )
+  }
+
+  async function handleImportResume(att: MailAttachment, e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!connectionId || !message) return
+
+    setImportingId(att.id)
+    try {
+      await recruitmentApi.resumes.importFromZoho({
+        connectionId,
+        messageId: message.id,
+        attachmentId: att.id,
+        fileName: att.name,
+      })
+      toast.success(`"${att.name}" sent to Recruitment AI processing pipeline!`)
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to import resume")
+    } finally {
+      setImportingId(null)
+    }
+  }
+
+  async function handleDownloadAll() {
+    if (!connectionId || !message || !message.attachments) return
+    setDownloadingAll(true)
+    try {
+      for (const att of message.attachments) {
+        await handleDownload(att)
+      }
+      toast.success("Downloaded all attachments")
+    } catch (err) {
+      toast.error("Failed downloading all attachments")
+    } finally {
+      setDownloadingAll(false)
+    }
+  }
 
   async function handleDownload(att: MailAttachment) {
     if (!connectionId || !message) return
@@ -228,7 +279,7 @@ export function MessageReadingPane({
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto p-5 sm:p-6 min-h-0 bg-background">
+      <div className="flex-1 min-w-0 overflow-y-auto overflow-x-auto p-5 sm:p-6 min-h-0 bg-background">
         {/<[a-z][\s\S]*>/i.test(message.body) ? (
           <div
             className="text-sm leading-relaxed break-words font-sans max-w-none [&_a]:text-primary [&_a]:underline [&_table]:max-w-full [&_img]:max-w-full [&_img]:h-auto"
@@ -244,48 +295,110 @@ export function MessageReadingPane({
       {/* Attachments Section - Down at bottom of modal */}
       {message.attachments && message.attachments.length > 0 && (
         <div className="border-t bg-muted/20 px-5 py-3 shrink-0">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            <PaperclipIcon className="size-3.5" />
-            <span>
-              {message.attachments.length} {message.attachments.length === 1 ? "Attachment" : "Attachments"}
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-2.5 max-h-36 overflow-y-auto">
-            {message.attachments.map((att) => (
-              <div
-                key={att.id}
-                onClick={() => handleDownload(att)}
-                className="group flex items-center gap-3 rounded-lg border bg-card px-3 py-2 text-xs shadow-2xs hover:border-primary/40 hover:bg-muted/40 transition-colors max-w-xs sm:max-w-sm cursor-pointer"
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <PaperclipIcon className="size-3.5" />
+              <span>
+                {message.attachments.length} {message.attachments.length === 1 ? "Attachment" : "Attachments"}
+              </span>
+            </div>
+
+            {message.attachments.length > 1 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDownloadAll}
+                disabled={downloadingAll}
+                className="h-6 text-[11px] text-muted-foreground hover:text-foreground gap-1 px-2"
               >
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                  <FileTextIcon className="size-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-foreground text-xs" title={att.name}>
-                    {att.name}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">{formatBytes(att.size)}</p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  className="shrink-0 group-hover:text-primary"
-                  title={`Download ${att.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleDownload(att)
-                  }}
-                  disabled={downloadingId === att.id}
+                {downloadingAll ? (
+                  <Loader2Icon className="size-3 animate-spin" />
+                ) : (
+                  <DownloadIcon className="size-3" />
+                )}
+                Download all
+              </Button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2.5 max-h-40 overflow-y-auto">
+            {message.attachments.map((att) => {
+              const isResume = isResumeAttachment(att.name)
+              const isImporting = importingId === att.id
+
+              return (
+                <div
+                  key={att.id}
+                  onClick={() => handleDownload(att)}
+                  className={`group flex items-center gap-3 rounded-lg border bg-card px-3 py-2 text-xs shadow-2xs hover:border-primary/40 hover:bg-muted/40 transition-colors max-w-xs sm:max-w-sm cursor-pointer ${
+                    isResume ? "border-pink-500/30" : ""
+                  }`}
                 >
-                  {downloadingId === att.id ? (
-                    <span className="size-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                  ) : (
-                    <DownloadIcon className="size-3.5" />
-                  )}
-                  <span className="sr-only">Download</span>
-                </Button>
-              </div>
-            ))}
+                  <div
+                    className={`flex size-8 shrink-0 items-center justify-center rounded-md ${
+                      isResume
+                        ? "bg-pink-500/10 text-pink-600 dark:text-pink-400"
+                        : "bg-primary/10 text-primary"
+                    }`}
+                  >
+                    <FileTextIcon className="size-4" />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-foreground text-xs" title={att.name}>
+                      {att.name}
+                    </p>
+                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span>{formatBytes(att.size)}</span>
+                      {isResume && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-pink-600 dark:text-pink-400">
+                          • Resume/CV
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {isResume && (
+                      <Button
+                        variant="outline"
+                        size="icon-xs"
+                        className="shrink-0 border-pink-500/30 text-pink-600 hover:bg-pink-50 dark:hover:bg-pink-950/20"
+                        title="Send to Recruitment AI pipeline"
+                        onClick={(e) => handleImportResume(att, e)}
+                        disabled={isImporting}
+                      >
+                        {isImporting ? (
+                          <Loader2Icon className="size-3 animate-spin text-pink-600" />
+                        ) : (
+                          <SparklesIcon className="size-3 text-pink-600" />
+                        )}
+                        <span className="sr-only">Send to Recruitment</span>
+                      </Button>
+                    )}
+
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      className="shrink-0 group-hover:text-primary"
+                      title={`Download ${att.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDownload(att)
+                      }}
+                      disabled={downloadingId === att.id}
+                    >
+                      {downloadingId === att.id ? (
+                        <span className="size-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      ) : (
+                        <DownloadIcon className="size-3.5" />
+                      )}
+                      <span className="sr-only">Download</span>
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

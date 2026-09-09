@@ -4,7 +4,6 @@ import {
   MailIcon,
   InboxIcon,
   SendIcon,
-  HardDriveIcon,
   RefreshCwIcon,
   PenSquareIcon,
   CheckCircle2Icon,
@@ -25,15 +24,6 @@ import { useMailStats } from "@/features/mail/hooks/use-mail-messages"
 import { mailApi } from "@/features/mail/api"
 import type { MailFolder, MailFolderDetail } from "@/types/mail"
 
-function formatStorage(bytes: number) {
-  if (!bytes || bytes <= 0) return "0 MB"
-  const mb = bytes / (1024 * 1024)
-  if (mb < 1) return `${(bytes / 1024).toFixed(0)} KB`
-  if (mb < 1024) return `${mb.toFixed(1)} MB`
-  const gb = mb / 1024
-  return `${gb.toFixed(2)} GB`
-}
-
 export function MailStatsOverview({
   connectionId,
   emailAddress,
@@ -47,10 +37,6 @@ export function MailStatsOverview({
 }) {
   const queryClient = useQueryClient()
   const { data: stats, isLoading, isFetching, refetch } = useMailStats(connectionId)
-
-  const usedBytes = stats?.usedStorage || 0
-  const totalBytes = stats?.totalStorage || 5 * 1024 * 1024 * 1024
-  const storagePercent = totalBytes > 0 ? Math.min(100, Math.max(0.5, (usedBytes / totalBytes) * 100)) : 0
 
   return (
     <div className="space-y-6">
@@ -96,81 +82,6 @@ export function MailStatsOverview({
             Compose Email
           </Button>
         </div>
-      </div>
-
-      {/* Quick Navigation Tabs / Chips */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/20 p-2.5">
-        <span className="text-xs font-semibold text-muted-foreground ml-1 mr-1">Quick Folder Tabs:</span>
-        <Button
-          variant="outline"
-          size="xs"
-          onClick={() => onSelectFolder?.("inbox")}
-          className="gap-1.5 text-xs hover:border-primary/50 hover:bg-background cursor-pointer"
-        >
-          <InboxIcon className="size-3.5 text-blue-600" />
-          <span>Inbox</span>
-          {stats?.inboxCount !== undefined && (
-            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 font-normal">
-              {stats.inboxCount}
-            </Badge>
-          )}
-        </Button>
-        <Button
-          variant="outline"
-          size="xs"
-          onClick={() => onSelectFolder?.("sent")}
-          className="gap-1.5 text-xs hover:border-primary/50 hover:bg-background cursor-pointer"
-        >
-          <SendIcon className="size-3.5 text-emerald-600" />
-          <span>Sent</span>
-          {stats?.sentCount !== undefined && (
-            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 font-normal">
-              {stats.sentCount}
-            </Badge>
-          )}
-        </Button>
-        <Button
-          variant="outline"
-          size="xs"
-          onClick={() => onSelectFolder?.("drafts")}
-          className="gap-1.5 text-xs hover:border-primary/50 hover:bg-background cursor-pointer"
-        >
-          <LayersIcon className="size-3.5 text-purple-600" />
-          <span>Drafts</span>
-          {stats?.draftsCount !== undefined && (
-            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 font-normal">
-              {stats.draftsCount}
-            </Badge>
-          )}
-        </Button>
-        <Button
-          variant="outline"
-          size="xs"
-          onClick={() => onSelectFolder?.("spam")}
-          className="gap-1.5 text-xs hover:border-primary/50 hover:bg-background cursor-pointer"
-        >
-          <AlertCircleIcon className="size-3.5 text-amber-600" />
-          <span>Spam</span>
-          {stats?.spamCount !== undefined && (
-            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 font-normal">
-              {stats.spamCount}
-            </Badge>
-          )}
-        </Button>
-        <Button
-          variant="outline"
-          size="xs"
-          onClick={() => onSelectFolder?.("trash")}
-          className="gap-1.5 text-xs hover:border-primary/50 hover:bg-background cursor-pointer"
-        >
-          <Trash2Icon className="size-3.5 text-destructive" />
-          <span>Trash</span>
-          {stats?.trashCount !== undefined && (
-            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 font-normal">
-              {stats.trashCount}
-            </Badge>
-          )}
-        </Button>
       </div>
 
       {/* Clickable Metric Cards Grid */}
@@ -308,70 +219,83 @@ export function MailStatsOverview({
         </Card>
       </div>
 
-      {/* Storage Quota Card - Wide across window */}
-      <Card className="w-full shadow-xs">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <HardDriveIcon className="size-4 text-primary" />
-            Mailbox Storage Quota
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Storage allocation on Zoho Mail servers
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-end justify-between text-xs">
-            <div>
-              <span className="text-2xl font-bold text-foreground">
-                {formatStorage(usedBytes)}
-              </span>
-              <span className="text-muted-foreground ml-1">
-                used of {formatStorage(totalBytes)}
-              </span>
-            </div>
-            <span className="font-semibold text-primary">
-              {storagePercent.toFixed(1)}%
-            </span>
-          </div>
+      {/* Quick Navigation Tabs / Chips */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/20 p-2.5">
+        <span className="text-xs font-semibold text-muted-foreground ml-1 mr-1">Quick Folder Tabs:</span>
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={() => onSelectFolder?.("inbox")}
+          className="gap-1.5 text-xs hover:border-primary/50 hover:bg-background cursor-pointer"
+        >
+          <InboxIcon className="size-3.5 text-blue-600" />
+          <span>Inbox</span>
+          {stats?.inboxCount !== undefined && (
+            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 font-normal">
+              {stats.inboxCount}
+            </Badge>
+          )}
+        </Button>
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={() => onSelectFolder?.("sent")}
+          className="gap-1.5 text-xs hover:border-primary/50 hover:bg-background cursor-pointer"
+        >
+          <SendIcon className="size-3.5 text-emerald-600" />
+          <span>Sent</span>
+          {stats?.sentCount !== undefined && (
+            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 font-normal">
+              {stats.sentCount}
+            </Badge>
+          )}
+        </Button>
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={() => onSelectFolder?.("drafts")}
+          className="gap-1.5 text-xs hover:border-primary/50 hover:bg-background cursor-pointer"
+        >
+          <LayersIcon className="size-3.5 text-purple-600" />
+          <span>Drafts</span>
+          {stats?.draftsCount !== undefined && (
+            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 font-normal">
+              {stats.draftsCount}
+            </Badge>
+          )}
+        </Button>
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={() => onSelectFolder?.("spam")}
+          className="gap-1.5 text-xs hover:border-primary/50 hover:bg-background cursor-pointer"
+        >
+          <AlertCircleIcon className="size-3.5 text-amber-600" />
+          <span>Spam</span>
+          {stats?.spamCount !== undefined && (
+            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 font-normal">
+              {stats.spamCount}
+            </Badge>
+          )}
+        </Button>
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={() => onSelectFolder?.("trash")}
+          className="gap-1.5 text-xs hover:border-primary/50 hover:bg-background cursor-pointer"
+        >
+          <Trash2Icon className="size-3.5 text-destructive" />
+          <span>Trash</span>
+          {stats?.trashCount !== undefined && (
+            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 font-normal">
+              {stats.trashCount}
+            </Badge>
+          )}
+        </Button>
+      </div>
 
-          {/* Storage Progress Bar */}
-          <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
-            <div
-              className="bg-primary h-2.5 rounded-full transition-all duration-500"
-              style={{ width: `${Math.max(2, storagePercent)}%` }}
-            />
-          </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-1 text-muted-foreground">
-            <div className="p-2.5 rounded-lg bg-muted/40 border">
-              <p className="text-[11px]">Used Space</p>
-              <p className="font-semibold text-foreground text-sm mt-0.5">
-                {formatStorage(usedBytes)}
-              </p>
-            </div>
-            <div className="p-2.5 rounded-lg bg-muted/40 border">
-              <p className="text-[11px]">Free Space</p>
-              <p className="font-semibold text-foreground text-sm mt-0.5">
-                {formatStorage(Math.max(0, totalBytes - usedBytes))}
-              </p>
-            </div>
-            <div className="p-2.5 rounded-lg bg-muted/40 border">
-              <p className="text-[11px]">Total Allocation</p>
-              <p className="font-semibold text-foreground text-sm mt-0.5">
-                {formatStorage(totalBytes)}
-              </p>
-            </div>
-            <div className="p-2.5 rounded-lg bg-muted/40 border">
-              <p className="text-[11px]">Total Messages</p>
-              <p className="font-semibold text-foreground text-sm mt-0.5">
-                {stats?.totalMessages ?? 0}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Folder Activity Breakdown - Full-width below Storage Quota */}
+      {/* Folder Activity Breakdown */}
       <Card className="w-full shadow-xs">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">

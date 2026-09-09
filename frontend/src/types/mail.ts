@@ -55,8 +55,6 @@ export interface MailStats {
   emailAddress: string
   displayName: string
   status: string
-  usedStorage: number
-  totalStorage: number
   totalMessages: number
   totalUnread: number
   inboxCount: number

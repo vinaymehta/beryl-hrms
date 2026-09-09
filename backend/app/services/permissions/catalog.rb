@@ -17,6 +17,10 @@ module Permissions
       payroll.view payroll.manage
       expenses.view expenses.create expenses.approve
       mail.view mail.search
+      recruitment.view recruitment.manage
+      candidates.view candidates.manage
+      resumes.view resumes.process
+      jobs.view jobs.manage
       roles.manage users.manage audit_logs.view zoho_connections.manage
     ].freeze
 

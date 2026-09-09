@@ -61,6 +61,8 @@
   --color-role-accounts-foreground: var(--role-accounts-foreground);
   --color-role-employee: var(--role-employee);
   --color-role-employee-foreground: var(--role-employee-foreground);
+  --color-role-recruitment: var(--role-recruitment);
+  --color-role-recruitment-foreground: var(--role-recruitment-foreground);
   --color-status-success: var(--status-success);
   --color-status-success-foreground: var(--status-success-foreground);
   --color-status-warning: var(--status-warning);
@@ -135,6 +137,8 @@
   --role-accounts-foreground: oklch(0.985 0 0);
   --role-employee: oklch(0.609 0.126 221.723); /* cyan */
   --role-employee-foreground: oklch(0.985 0 0);
+  --role-recruitment: oklch(0.594 0.222 350); /* pink/rose — distinct from, but compatible with, the 4 workspace colors above */
+  --role-recruitment-foreground: oklch(0.985 0 0);
 
   /* Status meaning (badges, alerts, form validation) */
   --status-success: oklch(0.627 0.194 149.214); /* green */
@@ -195,6 +199,8 @@
   --role-accounts-foreground: oklch(0.145 0 0);
   --role-employee: oklch(0.715 0.143 215.221);
   --role-employee-foreground: oklch(0.145 0 0);
+  --role-recruitment: oklch(0.72 0.19 350);
+  --role-recruitment-foreground: oklch(0.145 0 0);
 
   /* Status meaning */
   --status-success: oklch(0.723 0.219 149.579);

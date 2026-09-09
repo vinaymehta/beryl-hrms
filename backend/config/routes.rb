@@ -71,6 +71,42 @@ Rails.application.routes.draw do
         get "messages/:id/attachments/:attachment_id", to: "messages#attachment"
         get "search", to: "search#index"
       end
+
+      namespace :recruitment do
+        get "dashboard/stats", to: "dashboard#stats"
+        get "dashboard/analytics", to: "dashboard#analytics"
+        get "dashboard/insights", to: "dashboard#insights"
+
+        resources :candidates do
+          member do
+            patch :shortlist
+            patch :reject
+            patch :status
+            patch :confirm_duplicate
+            patch :dismiss_duplicate
+          end
+        end
+
+        resources :resumes, only: %i[ index show create destroy ] do
+          member do
+            post :reprocess
+            get :download
+          end
+          collection do
+            post :import_from_zoho
+            post :scan_zoho_mail
+          end
+        end
+
+        resources :jobs do
+          member do
+            post :match_candidates
+            patch "matches/:match_id", to: "jobs#update_match"
+          end
+        end
+
+        post "search/ai", to: "search#ai"
+      end
     end
   end
 end

@@ -58,10 +58,10 @@ export function MessageList({
                 selectedId === message.id ? "bg-primary/10" : "hover:bg-muted/60"
               )}
             >
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3 min-w-0">
                 <span
                   className={cn(
-                    "truncate text-sm",
+                    "min-w-0 flex-1 truncate text-sm",
                     !message.isRead ? "font-semibold text-foreground" : "font-normal text-foreground/90"
                   )}
                 >
@@ -81,7 +81,7 @@ export function MessageList({
                   </span>
                 </div>
               </div>
-              <div className="flex items-baseline gap-2 truncate">
+              <div className="flex items-baseline gap-2 min-w-0">
                 <span
                   className={cn(
                     "text-sm shrink-0 max-w-[50%] truncate",
@@ -91,7 +91,7 @@ export function MessageList({
                   {message.subject || "(no subject)"}
                 </span>
                 {message.snippet && (
-                  <span className="truncate text-xs text-muted-foreground">
+                  <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                     — {message.snippet}
                   </span>
                 )}

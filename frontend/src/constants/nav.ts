@@ -7,6 +7,7 @@ import {
   CalendarDaysIcon,
   FileTextIcon,
   MailIcon,
+  BriefcaseIcon,
   SettingsIcon,
 } from "lucide-react"
 
@@ -28,5 +29,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Leave", href: "/leave", icon: CalendarDaysIcon, permission: PERMISSIONS.leaveView },
   { label: "Documents", href: "/documents", icon: FileTextIcon, permission: PERMISSIONS.documentsView },
   { label: "Mail", href: "/mail", icon: MailIcon, permission: PERMISSIONS.mailView },
+  { label: "Recruitment", href: "/recruitment", icon: BriefcaseIcon, permission: PERMISSIONS.recruitmentView },
   { label: "Settings", href: "/settings", icon: SettingsIcon },
 ]
