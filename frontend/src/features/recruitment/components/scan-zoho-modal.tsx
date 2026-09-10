@@ -26,7 +26,9 @@ import {
   LockIcon,
   SettingsIcon,
   ArrowRightIcon,
+  FilterIcon,
 } from "lucide-react"
+import { cn } from "cn"
 
 interface ScanZohoModalProps {
   open: boolean
@@ -63,11 +65,17 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
   })
 
   const [selectedConnectionId, setSelectedConnectionId] = useState<string>("")
-  const [scanResult, setScanResult] = useState<{ scannedMessages: number; detectedResumes: number } | null>(null)
+  const [scanResult, setScanResult] = useState<{
+    scannedMessages: number
+    detectedResumes: number
+    skippedDuplicateAttachments: number
+    skippedNonResumeAttachments: number
+  } | null>(null)
   const [datePreset, setDatePreset] = useState<DateRangePreset | "">("")
   const [customFrom, setCustomFrom] = useState("")
   const [customTo, setCustomTo] = useState("")
   const [resolvedRange, setResolvedRange] = useState<{ from: string; to: string } | null>(null)
+  const [showDateFilter, setShowDateFilter] = useState(false)
   const { scanZohoMail } = useResumeMutations()
 
   const activeConnections = (connections ?? []).filter((c) => c.status === "active")
@@ -91,7 +99,17 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
     try {
       const res = await scanZohoMail.mutateAsync({ connectionId: selectedConnectionId, ...resolvedRange })
       setScanResult(res)
-      toast.success(`Mailbox scan complete! Found ${res.detectedResumes} new resume(s).`)
+
+      const skippedParts: string[] = []
+      if (res.skippedDuplicateAttachments > 0) {
+        skippedParts.push(`${res.skippedDuplicateAttachments} already-imported`)
+      }
+      if (res.skippedNonResumeAttachments > 0) {
+        skippedParts.push(`${res.skippedNonResumeAttachments} non-resume`)
+      }
+      const skippedSuffix = skippedParts.length > 0 ? ` Skipped ${skippedParts.join(" and ")} attachment(s).` : ""
+
+      toast.success(`Scan complete! Found ${res.detectedResumes} new resume(s).${skippedSuffix}`)
     } catch (err: any) {
       toast.error(err?.message || "Failed to scan mailbox")
     }
@@ -100,6 +118,13 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
   const handleClose = () => {
     setScanResult(null)
     onOpenChange(false)
+  }
+
+  const resetDateRange = () => {
+    setDatePreset("")
+    setCustomFrom("")
+    setCustomTo("")
+    setResolvedRange(null)
   }
 
   return (
@@ -200,30 +225,69 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
             )}
           </div>
 
-          {/* Section 2 — Date range */}
+          {/* Section 2 — Date range, tucked behind a Filters toggle (same
+              pattern as the Resumes list) instead of always taking up space. */}
           <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
-            <div className="flex items-center gap-2.5">
-              <SectionNumber n={2} />
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Date Range to Scan</h3>
-                <p className="text-xs text-muted-foreground">Select the time period to look for resumes.</p>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <SectionNumber n={2} />
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Date Range to Scan</h3>
+                  <p className="text-xs text-muted-foreground">Select the time period to look for resumes.</p>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowDateFilter(!showDateFilter)}
+                  className={cn(
+                    "relative h-8 gap-1.5 rounded-full text-xs",
+                    (showDateFilter || resolvedRange) && "border-role-recruitment text-role-recruitment bg-role-recruitment/5"
+                  )}
+                >
+                  <FilterIcon className="size-3.5" />
+                  Filters
+                  {resolvedRange && (
+                    <span className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-role-recruitment text-[10px] font-bold text-role-recruitment-foreground">
+                      1
+                    </span>
+                  )}
+                </Button>
+                {resolvedRange && (
+                  <Button type="button" variant="outline" size="sm" onClick={resetDateRange} className="h-8 rounded-full text-xs">
+                    Reset
+                  </Button>
+                )}
               </div>
             </div>
 
-            <DateRangePills
-              preset={datePreset}
-              customFrom={customFrom}
-              customTo={customTo}
-              onChange={({ preset, customFrom: f, customTo: t, resolved }) => {
-                setDatePreset(preset)
-                setCustomFrom(f)
-                setCustomTo(t)
-                setResolvedRange(resolved)
-              }}
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Only messages received in this window are scanned — the mailbox isn&apos;t scanned outside it.
-            </p>
+            <div hidden={!showDateFilter} className="space-y-3">
+              <DateRangePills
+                preset={datePreset}
+                customFrom={customFrom}
+                customTo={customTo}
+                onChange={({ preset, customFrom: f, customTo: t, resolved }) => {
+                  setDatePreset(preset)
+                  setCustomFrom(f)
+                  setCustomTo(t)
+                  setResolvedRange(resolved)
+                }}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Only messages received in this window are scanned — the mailbox isn&apos;t scanned outside it.
+              </p>
+            </div>
+
+            {!showDateFilter && resolvedRange && (
+              <p className="text-xs text-foreground">
+                {resolvedRange.from} → {resolvedRange.to}
+              </p>
+            )}
+            {!showDateFilter && !resolvedRange && (
+              <p className="text-xs text-muted-foreground">No date range selected yet — click Filters to choose one.</p>
+            )}
           </div>
 
           {scanResult && (
@@ -238,6 +302,16 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
                   {scanResult.detectedResumes}
                 </strong>{" "}
                 resumes for AI processing.
+              </p>
+              {(scanResult.skippedDuplicateAttachments > 0 || scanResult.skippedNonResumeAttachments > 0) && (
+                <p className="text-muted-foreground pl-5.5">
+                  Skipped {scanResult.skippedDuplicateAttachments} already-imported and{" "}
+                  {scanResult.skippedNonResumeAttachments} non-resume attachment(s).
+                </p>
+              )}
+              <p className="text-[11px] text-muted-foreground/80 pl-5.5">
+                Duplicate candidates and unreadable resumes are flagged after AI processing completes — check the
+                Duplicate / Not a Resume filters in the Resumes list shortly.
               </p>
             </div>
           )}

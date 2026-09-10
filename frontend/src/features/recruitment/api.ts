@@ -145,10 +145,12 @@ export const recruitmentApi = {
     }) => apiClient.post<CandidateResumeDetail>("/recruitment/resumes/import_from_zoho", params),
 
     scanZohoMail: (connectionId: string, range: { from: string; to: string }) =>
-      apiClient.post<{ scannedMessages: number; detectedResumes: number }>(
-        "/recruitment/resumes/scan_zoho_mail",
-        { connectionId, from: range.from, to: range.to }
-      ),
+      apiClient.post<{
+        scannedMessages: number
+        detectedResumes: number
+        skippedDuplicateAttachments: number
+        skippedNonResumeAttachments: number
+      }>("/recruitment/resumes/scan_zoho_mail", { connectionId, from: range.from, to: range.to }),
 
     delete: (id: string) => apiClient.delete<void>(`/recruitment/resumes/${id}`),
   },

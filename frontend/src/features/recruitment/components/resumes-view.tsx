@@ -35,9 +35,11 @@ import {
   StarIcon,
   XCircleIcon,
   FilterIcon,
+  EyeIcon,
   type LucideIcon,
 } from "lucide-react"
 import { recruitmentApi } from "../api"
+import { ResumePreviewModal } from "./resume-preview-modal"
 import type { CandidateResumeSummary } from "@/types/recruitment"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
@@ -63,8 +65,8 @@ const SORT_OPTIONS = [
   { value: "date", label: "Oldest first" },
   { value: "criteria_match_desc", label: "Highest Criteria Match %" },
   { value: "criteria_match_asc", label: "Lowest Criteria Match %" },
-  { value: "ats_score_desc", label: "Highest ATS Score" },
-  { value: "ats_score_asc", label: "Lowest ATS Score" },
+  { value: "ats_score_desc", label: "Highest Rank" },
+  { value: "ats_score_asc", label: "Lowest Rank" },
   { value: "status", label: "Status" },
 ]
 
@@ -83,6 +85,7 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
   const [showFilters, setShowFilters] = useState(false)
   const [page, setPage] = useState(1)
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null)
+  const [previewResume, setPreviewResume] = useState<CandidateResumeSummary | null>(null)
   const [pendingDelete, setPendingDelete] = useState<CandidateResumeSummary | null>(null)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [bulkPending, setBulkPending] = useState(false)
@@ -360,7 +363,7 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
                 <TableHead>Candidate / File</TableHead>
                 {!candidateStatus && <TableHead>Status</TableHead>}
                 <TableHead>Criteria Match</TableHead>
-                <TableHead>ATS Score</TableHead>
+                <TableHead>Rank</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>Qualification</TableHead>
                 <TableHead>Experience</TableHead>
@@ -450,7 +453,7 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
                     {resume.criteriaMatchPercentage != null ? `${resume.criteriaMatchPercentage}%` : "—"}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {resume.atsScore != null ? `ATS Score: ${resume.atsScore}` : "—"}
+                    {resume.atsScore ?? "—"}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{resume.candidateCity || "—"}</TableCell>
                   <TableCell className="text-muted-foreground truncate max-w-32">{resume.candidateQualification || "—"}</TableCell>
@@ -469,6 +472,20 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
                           title="Reprocess resume"
                         >
                           <RefreshCwIcon className="size-3.5" />
+                        </Button>
+                      )}
+                      {resume.hasFile && (
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setPreviewResume(resume)
+                          }}
+                          className="text-muted-foreground hover:text-role-recruitment"
+                          title="Preview original PDF"
+                        >
+                          <EyeIcon className="size-3.5" />
                         </Button>
                       )}
                       {resume.hasFile && (
@@ -538,6 +555,14 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
         open={!!selectedResumeId}
         onOpenChange={(open) => !open && setSelectedResumeId(null)}
         onOpenCandidate={onOpenCandidate}
+      />
+
+      <ResumePreviewModal
+        resumeId={previewResume?.id ?? null}
+        fileName={previewResume?.fileName}
+        contentType={previewResume?.contentType}
+        open={!!previewResume}
+        onOpenChange={(open) => !open && setPreviewResume(null)}
       />
 
       <Dialog open={!!pendingDelete} onOpenChange={(open) => !open && setPendingDelete(null)}>

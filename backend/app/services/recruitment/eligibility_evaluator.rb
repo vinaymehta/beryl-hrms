@@ -2,9 +2,11 @@ module Recruitment
   # Deterministic (no AI) evaluation of the four hiring-eligibility criteria.
   # Every criterion is tri-state: true (positively confirmed pass), false
   # (positively confirmed fail), or nil (missing/unreadable — never guessed
-  # into a pass or a fail). The automatic pipeline only ever routes a
-  # candidate to :shortlisted (all four true) or :needs_review (anything
-  # else, including a confirmed fail) — Rejected stays a manual HR action.
+  # into a pass or a fail). The automatic pipeline routes a candidate to
+  # :shortlisted only when all four are true — anything else (a confirmed
+  # fail OR missing/unreadable data) is :rejected. There is no automatic
+  # middle "needs review" state: a resume is either fully confirmed or it
+  # isn't, and an unreadable criterion never counts as a pass.
   class EligibilityEvaluator
     Result = Struct.new(:qualification, :marks, :graduation_year, :backlog, :match_percentage, :status, keyword_init: true)
 
@@ -32,7 +34,7 @@ module Recruitment
       }
       confirmed_count = criteria.values.count { |v| v == true }
       match_percentage = (confirmed_count / 4.0 * 100).round
-      status = criteria.values.all? { |v| v == true } ? :shortlisted : :needs_review
+      status = criteria.values.all? { |v| v == true } ? :shortlisted : :rejected
 
       Result.new(**criteria, match_percentage: match_percentage, status: status)
     end

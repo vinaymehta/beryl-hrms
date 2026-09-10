@@ -234,6 +234,16 @@
   html {
     @apply font-sans;
   }
+  /* Some Linux/Chromium theme combinations draw native up/down step-arrow
+     buttons on the scrollbar track (in addition to the thumb) — they read as
+     a stray floating icon over page content. Hide only the buttons; the
+     thumb/track/drag-to-scroll behavior are untouched. Firefox has no
+     equivalent buttons to hide. */
+  ::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
   /* Fast, restrained interaction polish (brief §14) — colors/transforms/
      shadows only, never layout-affecting properties (keeps this cheap and
      avoids janky reflow), and respects reduced-motion preferences. */

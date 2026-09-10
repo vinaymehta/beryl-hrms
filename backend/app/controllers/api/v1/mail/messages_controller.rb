@@ -37,15 +37,30 @@ module Api
           }
         end
 
-        # GET /api/v1/mail/messages/:id?connectionId=...
+        # GET /api/v1/mail/messages/:id?connectionId=...&folderId=...&from=...&to=...&subject=...
         def show
           connection = resolve_connection!
           return unless connection
 
           raw = zoho_client.get_message(
-            access_token: connection.access_token, account_id: account_id_for(connection), message_id: params[:id]
+            access_token: connection.access_token, account_id: account_id_for(connection),
+            message_id: params[:id], folder_id: params[:folderId].presence
           )
-          render_data(::Zoho::MessagePresenter.detail(raw))
+          detail = ::Zoho::MessagePresenter.detail(raw)
+
+          # get_message's own header lookup (see its comment) resorts to a
+          # cross-folder "mid:" search when it isn't given a folder_id, and
+          # that search has been observed returning a DIFFERENT message's
+          # headers entirely — silently mislabeling who a message is from
+          # and, worse, sending replies to the wrong address. The frontend
+          # already has verified-correct from/to/subject for this exact
+          # message from the folder list it was just clicked from, so prefer
+          # that over whatever get_message guessed.
+          detail[:from] = params[:from].presence || detail[:from]
+          detail[:to] = params[:to].presence || detail[:to]
+          detail[:subject] = params[:subject].presence || detail[:subject]
+
+          render_data(detail)
         end
 
         # POST /api/v1/mail/messages?connectionId=...

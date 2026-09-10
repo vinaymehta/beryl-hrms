@@ -440,7 +440,7 @@ export function CandidatesView({ initialStatus = "" }: CandidatesViewProps) {
                     <TableHead>Grad. Year</TableHead>
                     <TableHead>Backlogs</TableHead>
                     <TableHead>Criteria Match</TableHead>
-                    <TableHead>ATS Score</TableHead>
+                    <TableHead>Rank</TableHead>
                     <TableHead>Resume Date</TableHead>
                   </>
                 )}
@@ -517,7 +517,7 @@ export function CandidatesView({ initialStatus = "" }: CandidatesViewProps) {
                         {candidate.criteriaMatchPercentage != null ? `${candidate.criteriaMatchPercentage}%` : "—"}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {candidate.atsScore != null ? `ATS Score: ${candidate.atsScore}` : "—"}
+                        {candidate.atsScore ?? "—"}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {candidate.resumeDate ? new Date(candidate.resumeDate).toLocaleDateString() : "—"}

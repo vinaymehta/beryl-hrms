@@ -21,6 +21,7 @@ export interface MailAttachment {
 
 export interface MailMessageSummary {
   id: string
+  folderId?: string
   from: string
   to: string
   subject: string

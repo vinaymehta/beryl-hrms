@@ -32,7 +32,7 @@ import { MessageList, MessageListSkeleton } from "@/features/mail/components/mes
 import { MessageReadingPane } from "@/features/mail/components/message-reading-pane"
 import { ComposeMailDialog } from "@/features/mail/components/compose-mail-dialog"
 import { MailReauthAlert, MailRateLimitedAlert } from "@/features/mail/components/mail-status-alert"
-import type { MailFolder, MailMessageDetail } from "@/types/mail"
+import type { MailFolder, MailMessageDetail, MailMessageSummary } from "@/types/mail"
 
 const PANE_HEIGHT = "h-[75vh] min-h-135"
 
@@ -74,6 +74,7 @@ export function MailWorkspace() {
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState<string | undefined>(undefined)
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined)
+  const [selectedSummary, setSelectedSummary] = useState<MailMessageSummary | undefined>(undefined)
 
   const [composeOpen, setComposeOpen] = useState(false)
   const [replyData, setReplyData] = useState<{ to: string; subject: string; body: string } | null>(null)
@@ -161,6 +162,7 @@ export function MailWorkspace() {
   function handleSelectMessage(id: string) {
     setSelectedId(id)
     const clicked = active.data?.data?.find((m) => m.id === id)
+    setSelectedSummary(clicked)
     if (clicked && !clicked.isRead && connection?.id) {
       markReadMutation.mutate({ connectionId: connection.id, messageId: id, read: true })
     }
@@ -444,6 +446,7 @@ export function MailWorkspace() {
           <MessageReadingPane
             connectionId={connection.id}
             messageId={selectedId}
+            listSummary={selectedSummary}
             onBack={() => setSelectedId(undefined)}
             onReply={handleReply}
             onDeleted={() => setSelectedId(undefined)}

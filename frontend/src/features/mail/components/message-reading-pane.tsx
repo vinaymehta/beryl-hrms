@@ -14,15 +14,16 @@ import {
   RefreshCwIcon,
   SparklesIcon,
   Loader2Icon,
+  SendIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useMailMessage, useMarkMailRead, useDeleteMailMessage } from "@/features/mail/hooks/use-mail-messages"
+import { useMailMessage, useMarkMailRead, useDeleteMailMessage, useSendMailMessage } from "@/features/mail/hooks/use-mail-messages"
 import { mailApi } from "@/features/mail/api"
 import { recruitmentApi } from "@/features/recruitment/api"
-import type { MailAttachment, MailMessageDetail } from "@/types/mail"
+import type { MailAttachment, MailMessageDetail, MailMessageSummary } from "@/types/mail"
 
 function formatBytes(bytes: number) {
   if (!bytes || bytes <= 0) return "0 B"
@@ -34,22 +35,45 @@ function formatBytes(bytes: number) {
 export function MessageReadingPane({
   connectionId,
   messageId,
+  listSummary,
   onBack,
   onReply,
   onDeleted,
 }: {
   connectionId: string | undefined
   messageId: string | undefined
+  /** The exact row the user clicked from the message list — its from/to/
+   *  subject/folderId are known-correct and passed through to the detail
+   *  fetch, working around Zoho's unreliable message-by-id header lookup
+   *  (see messages_controller#show). */
+  listSummary?: MailMessageSummary
   onBack?: () => void
   onReply?: (message: MailMessageDetail) => void
   onDeleted?: () => void
 }) {
-  const { data: message, isLoading, isError, refetch } = useMailMessage({ connectionId, id: messageId })
+  const { data: message, isLoading, isError, refetch } = useMailMessage({
+    connectionId,
+    id: messageId,
+    folderId: listSummary?.folderId,
+    from: listSummary?.from,
+    to: listSummary?.to,
+    subject: listSummary?.subject,
+  })
   const markReadMutation = useMarkMailRead()
   const deleteMutation = useDeleteMailMessage()
+  const sendMutation = useSendMailMessage()
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [downloadingAll, setDownloadingAll] = useState(false)
   const [importingId, setImportingId] = useState<string | null>(null)
+  const [quickReply, setQuickReply] = useState("")
+  // Reset the quick-reply draft when a different message is opened — adjusted
+  // during render (not an effect) per React's "resetting state when a prop
+  // changes" pattern, avoiding an extra render pass.
+  const [quickReplyMessageId, setQuickReplyMessageId] = useState(messageId)
+  if (messageId !== quickReplyMessageId) {
+    setQuickReplyMessageId(messageId)
+    setQuickReply("")
+  }
 
   // Auto mark message as read when opened
   useEffect(() => {
@@ -125,6 +149,22 @@ export function MessageReadingPane({
       window.open(mailApi.messages.attachmentUrl(connectionId, message.id, att.id), "_blank")
     } finally {
       setDownloadingId(null)
+    }
+  }
+
+  async function handleQuickReply() {
+    if (!connectionId || !message || !quickReply.trim()) return
+    try {
+      await sendMutation.mutateAsync({
+        connectionId,
+        to: message.from,
+        subject: message.subject.startsWith("Re:") ? message.subject : `Re: ${message.subject}`,
+        body: quickReply.trim(),
+      })
+      toast.success("Reply sent")
+      setQuickReply("")
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to send reply")
     }
   }
 
@@ -376,7 +416,7 @@ export function MessageReadingPane({
         </div>
       )}
 
-      {/* Sticky primary actions */}
+      {/* Action buttons */}
       <div className="flex items-center justify-between gap-2 border-t bg-background px-5 py-3 shrink-0">
         <Button
           variant="outline"
@@ -388,11 +428,39 @@ export function MessageReadingPane({
           Delete
         </Button>
         {onReply && (
-          <Button onClick={() => onReply(message)} className="gap-1.5 shadow-2xs">
+          <Button variant="outline" onClick={() => onReply(message)} className="gap-1.5">
             <ReplyIcon className="size-4" />
-            Reply
+            Reply in Compose
           </Button>
         )}
+      </div>
+
+      {/* Quick reply — a lightweight inline composer for a fast one-off
+          reply. Compose in Full still opens the full Compose Mail panel
+          (attachments, Cc/Bcc, etc.) via the button above. */}
+      <div className="border-t bg-muted/10 px-5 py-3 shrink-0 space-y-2">
+        <textarea
+          value={quickReply}
+          onChange={(e) => setQuickReply(e.target.value)}
+          placeholder={`Quick reply to ${message.from}...`}
+          rows={3}
+          className="w-full resize-none rounded-lg border border-input bg-background p-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        />
+        <div className="flex items-center justify-end">
+          <Button
+            size="sm"
+            onClick={handleQuickReply}
+            disabled={!quickReply.trim() || sendMutation.isPending}
+            className="gap-1.5"
+          >
+            {sendMutation.isPending ? (
+              <Loader2Icon className="size-3.5 animate-spin" />
+            ) : (
+              <SendIcon className="size-3.5" />
+            )}
+            Reply
+          </Button>
+        </div>
       </div>
     </div>
   )

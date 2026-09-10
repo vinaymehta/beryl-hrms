@@ -19,7 +19,6 @@ import {
   FileTextIcon,
   SparklesIcon,
   StarIcon,
-  AlertCircleIcon,
   XCircleIcon,
   RefreshCwIcon,
   MailSearchIcon,
@@ -79,11 +78,12 @@ export function RecruitmentWorkspace() {
     setActiveTab("resumes")
   }
 
-  // Exactly the 4 required Quick Stats — all resume-oriented, matching the
-  // Resumes-first UI. Each routes to the Resumes tab filtered accordingly
-  // (Needs Review/Rejected by candidate eligibility status, Shortlisted to
-  // its own tab) so every number is actually reachable, now that the full
-  // Candidates/Dashboard workspace is hidden.
+  // Exactly 3 Quick Stats — all resume-oriented, matching the Resumes-first
+  // UI. There's no automatic "Needs Review" middle state: a resume either
+  // confirms all 4 criteria (Shortlisted) or it doesn't (Rejected) — see
+  // Recruitment::EligibilityEvaluator. Each card routes to the Resumes tab
+  // filtered accordingly so every number is actually reachable, now that the
+  // full Candidates/Dashboard workspace is hidden.
   const kpis: Kpi[] = [
     {
       key: "total",
@@ -94,16 +94,6 @@ export function RecruitmentWorkspace() {
       iconTint: "bg-role-recruitment text-role-recruitment-foreground",
       wash: "bg-role-recruitment/10 border-role-recruitment/15",
       onClick: () => navigateTab("resumes"),
-    },
-    {
-      key: "review",
-      label: "Needs Review",
-      value: stats?.needsReviewResumes,
-      caption: "Pending review",
-      icon: AlertCircleIcon,
-      iconTint: "bg-amber-500 text-white",
-      wash: "bg-amber-500/10 border-amber-500/15",
-      onClick: () => openResumesByCandidateStatus("needs_review"),
     },
     {
       key: "shortlisted",

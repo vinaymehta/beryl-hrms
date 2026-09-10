@@ -45,14 +45,15 @@ class ResumeExtractionJob < ApplicationJob
 
     sync_candidate_profile(candidate, parsed[:candidate], parsed[:ai_summary])
 
-    # Deterministic eligibility decides shortlist/needs-review — the AI ATS
-    # score is supplementary/display-only and never influences this. Only
-    # ever auto-transitions a candidate still sitting at the needs_review
-    # default; once HR (or a prior auto-shortlist) has moved them anywhere
-    # else, later resumes update the displayed numbers but never silently
-    # change status again.
+    # Deterministic eligibility decides shortlist/reject — the AI ATS score
+    # is supplementary/display-only and never influences this. The evaluator
+    # always has the final say: every time a resume finishes processing, the
+    # candidate's status is (re)set from that resume's own 4-criteria result,
+    # even if a previous resume already earned them a different status (e.g.
+    # a stronger follow-up resume can move a previously-rejected candidate to
+    # Shortlisted, and vice versa).
     eligibility = Recruitment::EligibilityEvaluator.call(candidate)
-    candidate.update!(status: eligibility.status) if candidate.needs_review?
+    candidate.update!(status: eligibility.status)
 
     ats_score = Ai::AtsScorer.score(raw_text: resume.raw_text, extracted_candidate: parsed[:candidate], resume: resume)
 

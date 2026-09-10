@@ -8,6 +8,7 @@ module Zoho
 
       {
         id: raw["messageId"].to_s,
+        folderId: raw["folderId"].to_s,
         from: CGI.unescapeHTML(raw["fromAddress"] || raw["sender"] || ""),
         to: CGI.unescapeHTML(raw["toAddress"] || ""),
         subject: CGI.unescapeHTML(raw["subject"].presence || "(no subject)"),

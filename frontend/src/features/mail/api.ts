@@ -46,9 +46,18 @@ export const mailApi = {
         })}`
       ),
 
-    get: (params: { connectionId: string; id: string }) =>
+    // folderId/from/to/subject are optional hints carried over from the
+    // message list this was opened from — see messages_controller#show for
+    // why they're needed (Zoho's own message-by-id lookup is unreliable).
+    get: (params: { connectionId: string; id: string; folderId?: string; from?: string; to?: string; subject?: string }) =>
       apiClient.get<MailMessageDetail>(
-        `/mail/messages/${params.id}?${new URLSearchParams({ connectionId: params.connectionId })}`
+        `/mail/messages/${params.id}?${new URLSearchParams({
+          connectionId: params.connectionId,
+          ...(params.folderId ? { folderId: params.folderId } : {}),
+          ...(params.from ? { from: params.from } : {}),
+          ...(params.to ? { to: params.to } : {}),
+          ...(params.subject ? { subject: params.subject } : {}),
+        })}`
       ),
 
     send: (params: import("@/types/mail").SendMessageParams) =>

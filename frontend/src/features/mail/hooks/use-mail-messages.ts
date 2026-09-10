@@ -25,10 +25,25 @@ export function useMailMessages(params: {
   })
 }
 
-export function useMailMessage(params: { connectionId: string | undefined; id: string | undefined }) {
+export function useMailMessage(params: {
+  connectionId: string | undefined
+  id: string | undefined
+  folderId?: string
+  from?: string
+  to?: string
+  subject?: string
+}) {
   return useQuery({
     queryKey: ["mail", "message", params.connectionId, params.id],
-    queryFn: () => mailApi.messages.get({ connectionId: params.connectionId as string, id: params.id as string }),
+    queryFn: () =>
+      mailApi.messages.get({
+        connectionId: params.connectionId as string,
+        id: params.id as string,
+        folderId: params.folderId,
+        from: params.from,
+        to: params.to,
+        subject: params.subject,
+      }),
     enabled: !!params.connectionId && !!params.id,
   })
 }

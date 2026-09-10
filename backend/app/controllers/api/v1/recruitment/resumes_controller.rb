@@ -34,12 +34,13 @@ module Api
             )
           end
 
-          # Candidate eligibility status (needs_review/shortlisted/rejected/...)
-          # — distinct from processing_status above. This is how the Quick
-          # Stats "Needs Review"/"Rejected Resumes" cards surface a filtered
-          # view now that the full Candidates workspace is hidden.
+          # Eligibility verdict — distinct from processing_status above. This is
+          # how the Quick Stats cards surface a filtered view now that the full
+          # Candidates workspace is hidden. Judged per resume (see the
+          # CandidateResume eligibility_* scopes), so a person shortlisted on
+          # one resume doesn't drag their other submissions in with them.
           if params[:candidateStatus].present?
-            scope = scope.joins(:candidate).where(candidates: { status: params[:candidateStatus] })
+            scope = scope.by_eligibility(params[:candidateStatus])
           end
 
           if params[:dateFrom].present?
@@ -212,6 +213,8 @@ module Api
 
           imported_count = 0
           scanned_count = 0
+          skipped_duplicate_count = 0
+          skipped_non_resume_count = 0
 
           MAX_SCAN_PAGES.times do |page_index|
             messages_resp = zoho_client.list_messages(
@@ -240,10 +243,16 @@ module Api
 
               attachments.each do |att|
                 name = att[:name].to_s.downcase
-                next unless name.end_with?(".pdf", ".docx", ".doc") || name.include?("resume") || name.include?("cv")
+                unless name.end_with?(".pdf", ".docx", ".doc") || name.include?("resume") || name.include?("cv")
+                  skipped_non_resume_count += 1
+                  next
+                end
 
                 att_id = att[:id]
-                next if current_company.candidate_resumes.exists?(source_attachment_id: att_id)
+                if current_company.candidate_resumes.exists?(source_attachment_id: att_id)
+                  skipped_duplicate_count += 1
+                  next
+                end
 
                 file_data = zoho_client.download_attachment(
                   access_token: connection.access_token,
@@ -281,7 +290,9 @@ module Api
           render json: {
             data: {
               scannedMessages: scanned_count,
-              detectedResumes: imported_count
+              detectedResumes: imported_count,
+              skippedDuplicateAttachments: skipped_duplicate_count,
+              skippedNonResumeAttachments: skipped_non_resume_count
             }
           }
         rescue ::Zoho::TokenExpiredError, ::Zoho::RateLimitedError, ::Zoho::ApiError,

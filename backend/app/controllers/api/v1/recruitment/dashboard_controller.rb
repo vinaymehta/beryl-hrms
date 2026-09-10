@@ -29,12 +29,14 @@ module Api
                                         .where("candidates.updated_at >= ?", Time.current.beginning_of_month)
                                         .count,
               # Recruitment Quick Stats (resume-oriented, per current UI) —
-              # each counts real resumes by their linked candidate's
-              # deterministic eligibility status.
+              # each counts real resumes by the resume's OWN deterministic
+              # eligibility verdict, sharing the exact scopes the Resumes list
+              # filters by so a card's number always matches what clicking it
+              # opens.
               totalResumes: real_resumes.count,
-              needsReviewResumes: real_resumes.joins(:candidate).where(candidates: { status: :needs_review }).count,
-              shortlistedResumes: real_resumes.joins(:candidate).where(candidates: { status: :shortlisted }).count,
-              rejectedResumes: real_resumes.joins(:candidate).where(candidates: { status: :rejected }).count
+              needsReviewResumes: real_resumes.eligibility_needs_review.count,
+              shortlistedResumes: real_resumes.eligibility_shortlisted.count,
+              rejectedResumes: real_resumes.eligibility_rejected.count
             }
           }
         end

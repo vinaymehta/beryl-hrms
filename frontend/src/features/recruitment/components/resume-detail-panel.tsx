@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 import { useResume, useResumeMutations, useCandidateMutations } from "../hooks"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ResumePreviewModal } from "./resume-preview-modal"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -12,12 +13,14 @@ import {
   RefreshCwIcon,
   DownloadIcon,
   AlertCircleIcon,
-  SparklesIcon,
   MailIcon,
   PhoneIcon,
   MapPinIcon,
   StarIcon,
   XCircleIcon,
+  CheckCircle2Icon,
+  MinusCircleIcon,
+  CopyIcon,
 } from "lucide-react"
 import { recruitmentApi } from "../api"
 import { usePermission } from "@/features/auth/hooks/use-permission"
@@ -57,19 +60,41 @@ function initials(name: string) {
   return (`${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase()) || "?"
 }
 
+// Tri-state (true = confirmed pass, false = confirmed fail, null/undefined =
+// unreadable/not confirmed) — never coerced, matching
+// Recruitment::EligibilityEvaluator on the backend.
+function CriterionBadge({ label, value }: { label: string; value: boolean | null | undefined }) {
+  const config =
+    value === true
+      ? { icon: CheckCircle2Icon, text: "Confirmed", className: "bg-emerald-500/10 text-emerald-600" }
+      : value === false
+        ? { icon: XCircleIcon, text: "Not met", className: "bg-red-500/10 text-red-600" }
+        : { icon: MinusCircleIcon, text: "Unreadable", className: "bg-muted text-muted-foreground" }
+  const Icon = config.icon
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg border p-2.5">
+      <span className="text-xs font-medium text-foreground">{label}</span>
+      <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium", config.className)}>
+        <Icon className="size-3" />
+        {config.text}
+      </span>
+    </div>
+  )
+}
+
 /**
- * Right-side panel for a resume — replaces the old centered-modal detail
- * view. Exactly two tabs (Original PDF, AI Summary); the deterministic
- * Criteria Match % and ATS score already live in the Resumes list row, so
- * they aren't repeated here, and there's no raw-JSON/raw-text tab.
+ * Modal with the candidate/eligibility view of a resume — AI Summary, the
+ * deterministic eligibility criteria, and the shortlist/reject decision.
+ * The original PDF is a separate, dedicated action (ResumePreviewModal) from
+ * the Resumes list, so it isn't duplicated here.
  */
 export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidate }: ResumeDetailPanelProps) {
   const { data: resume, isLoading } = useResume(resumeId || "")
   const { reprocess } = useResumeMutations()
   const { shortlist, reject } = useCandidateMutations()
-  const [activeTab, setActiveTab] = useState<"pdf" | "summary">("pdf")
   const canProcess = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.resumesProcess])
   const canManage = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.candidatesManage])
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   if (!resumeId) return null
 
@@ -108,14 +133,10 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
     resume?.extractedData?.qualifications ?? []
   const experiences: { job_title?: string; company_name?: string; duration_months?: number }[] =
     resume?.extractedData?.experiences ?? []
-  // Zoho attachment metadata frequently reports a generic
-  // application/octet-stream content type even for genuine PDFs, so the
-  // filename extension is the more reliable signal here.
-  const canPreviewInline = resume?.contentType === "application/pdf" || !!resume?.fileName?.toLowerCase().endsWith(".pdf")
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:w-[45vw] sm:min-w-180 sm:max-w-275 p-0 gap-0">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-full sm:w-[70vw] sm:max-w-[70vw] max-h-[92vh] p-0 gap-0 flex flex-col overflow-hidden">
         {isLoading || !resume ? (
           <div className="p-6 space-y-4">
             <Skeleton className="h-6 w-1/3" />
@@ -123,8 +144,8 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
             <Skeleton className="h-32 w-full" />
           </div>
         ) : (
-          <div className="flex h-full flex-col">
-            <SheetHeader className="border-b pr-12 bg-muted/20 space-y-3">
+          <div className="flex h-full min-h-0 flex-col">
+            <DialogHeader className="border-b p-5 pr-12 bg-muted/20 space-y-3 shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <Avatar className="size-12 shrink-0">
@@ -134,9 +155,9 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
                   </Avatar>
                   <div className="min-w-0 flex flex-col gap-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <SheetTitle className="text-base font-bold text-foreground truncate">
+                      <DialogTitle className="text-base font-bold text-foreground truncate">
                         {resume.candidate?.fullName || resume.fileName}
-                      </SheetTitle>
+                      </DialogTitle>
                       {resume.candidate && (
                         <span
                           className={cn(
@@ -199,107 +220,107 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
                   </div>
                 </div>
               )}
-            </SheetHeader>
 
-            {/* Exactly two tabs — Original PDF, AI Summary */}
-            <div className="border-b px-5 flex items-center gap-4 text-xs pt-2 shrink-0">
-              <button
-                onClick={() => setActiveTab("pdf")}
-                className={cn(
-                  "pb-2 font-medium border-b-2 transition-colors flex items-center gap-1.5",
-                  activeTab === "pdf" ? "border-role-recruitment text-role-recruitment" : "border-transparent text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <FileTextIcon className="size-3.5" /> Original PDF
-              </button>
-              <button
-                onClick={() => setActiveTab("summary")}
-                className={cn(
-                  "pb-2 font-medium border-b-2 transition-colors flex items-center gap-1.5",
-                  activeTab === "summary" ? "border-role-recruitment text-role-recruitment" : "border-transparent text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <SparklesIcon className="size-3.5" /> AI Summary
-              </button>
+              {resume.isDuplicate && (
+                <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-2.5 text-xs text-violet-700 dark:text-violet-400 flex items-start gap-2">
+                  <CopyIcon className="size-4 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold">Duplicate Resume Detected</p>
+                    <p className="text-[11px] leading-relaxed text-violet-700/80 dark:text-violet-400/80">
+                      This file matches a resume already on file — it was not re-imported as a new submission.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </DialogHeader>
+
+            {/* Deterministic eligibility criteria — always visible regardless
+                of which tab is active, so it's clear exactly why this
+                resume landed at its current Criteria Match %. */}
+            <div className="border-b bg-muted/10 p-4">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Eligibility Criteria {resume.criteriaMatchPercentage != null && `— ${resume.criteriaMatchPercentage}% Match`}
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <CriterionBadge label="Qualification" value={resume.eligibilityBreakdown?.qualification} />
+                <CriterionBadge label="Marks (> 60%)" value={resume.eligibilityBreakdown?.marks} />
+                <CriterionBadge label="Graduation Year" value={resume.eligibilityBreakdown?.graduation_year} />
+                <CriterionBadge label="No Active Backlogs" value={resume.eligibilityBreakdown?.backlog} />
+              </div>
+            </div>
+
+            <div className="border-b px-5 py-2 flex items-center justify-between shrink-0">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">AI Summary</span>
+              {resume.hasFile && (
+                <button
+                  onClick={() => setPreviewOpen(true)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-role-recruitment hover:underline"
+                >
+                  <FileTextIcon className="size-3.5" />
+                  View Original PDF
+                </button>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 text-xs">
-              {activeTab === "pdf" ? (
-                canPreviewInline ? (
-                  <iframe
-                    // #toolbar=0&navpanes=0 suppresses the browser's native
-                    // PDF viewer chrome (its own dark toolbar/sidebar) so the
-                    // document sits cleanly inside our panel design.
-                    src={`${recruitmentApi.resumes.downloadUrl(resume.id)}#toolbar=0&navpanes=0`}
-                    title="Original resume PDF"
-                    className="h-[65vh] w-full rounded-md border-0 bg-background"
-                  />
+              <div className="space-y-4">
+                {aiSummary ? (
+                  <p className="leading-relaxed text-foreground">{aiSummary}</p>
                 ) : (
-                  <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-md border border-dashed text-center text-muted-foreground">
-                    <FileTextIcon className="size-8 text-muted-foreground/40" />
-                    <p>Inline preview isn&apos;t available for this file type.</p>
-                    <a
-                      href={recruitmentApi.resumes.downloadUrl(resume.id)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-role-recruitment hover:underline"
-                    >
-                      Download to view
-                    </a>
+                  <p className="text-muted-foreground">No AI summary available yet.</p>
+                )}
+
+                {skills.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="border-b pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Skills</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {skills.map((s, i) => (
+                        <span key={i} className="rounded-md border bg-muted px-2 py-0.5 text-[11px] text-foreground">
+                          {s.name}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                )
-              ) : (
-                <div className="space-y-4">
-                  {aiSummary ? (
-                    <p className="leading-relaxed text-foreground">{aiSummary}</p>
-                  ) : (
-                    <p className="text-muted-foreground">No AI summary available yet.</p>
-                  )}
+                )}
 
-                  {skills.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="border-b pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Skills</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {skills.map((s, i) => (
-                          <span key={i} className="rounded-md border bg-muted px-2 py-0.5 text-[11px] text-foreground">
-                            {s.name}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                {qualifications.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="border-b pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Qualifications</p>
+                    <ul className="space-y-1">
+                      {qualifications.map((q, i) => (
+                        <li key={i} className="text-foreground">
+                          {q.degree}
+                          {q.field_of_study ? ` in ${q.field_of_study}` : ""} — {q.institution || "—"}
+                          {q.year_completed ? ` (${q.year_completed})` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-                  {qualifications.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="border-b pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Qualifications</p>
-                      <ul className="space-y-1">
-                        {qualifications.map((q, i) => (
-                          <li key={i} className="text-foreground">
-                            {q.degree}
-                            {q.field_of_study ? ` in ${q.field_of_study}` : ""} — {q.institution || "—"}
-                            {q.year_completed ? ` (${q.year_completed})` : ""}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {experiences.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="border-b pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Experience</p>
-                      <ul className="space-y-1">
-                        {experiences.map((e, i) => (
-                          <li key={i} className="text-foreground">
-                            {e.job_title} at {e.company_name}
-                            {e.duration_months ? ` (${e.duration_months} mos)` : ""}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
+                {experiences.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="border-b pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Experience</p>
+                    <ul className="space-y-1">
+                      {experiences.map((e, i) => (
+                        <li key={i} className="text-foreground">
+                          {e.job_title} at {e.company_name}
+                          {e.duration_months ? ` (${e.duration_months} mos)` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
+
+            <ResumePreviewModal
+              resumeId={resume.id}
+              fileName={resume.fileName}
+              contentType={resume.contentType}
+              open={previewOpen}
+              onOpenChange={setPreviewOpen}
+            />
 
             {/* Sticky action bar — quiet utility actions on the left,
                 everything building toward a hiring decision grouped on the
@@ -370,7 +391,7 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
             </div>
           </div>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   )
 }
