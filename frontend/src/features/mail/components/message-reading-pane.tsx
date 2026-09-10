@@ -187,93 +187,67 @@ export function MessageReadingPane({
     )
   }
 
+  const hasResumeAttachment = message.attachments?.some((a) => isResumeAttachment(a.name)) ?? false
+
   return (
     <div className="flex h-full flex-col min-h-0 overflow-hidden">
       {/* Header */}
-      <div className="border-b p-5 pr-12 bg-muted/15 shrink-0">
-        <div className="flex items-center justify-between gap-2 mb-2">
-          {onBack && (
-            <Button variant="ghost" size="sm" className="mb-1 -ml-2 md:hidden" onClick={onBack}>
-              <ArrowLeftIcon className="size-4" /> Back
-            </Button>
-          )}
+      <div className="border-b p-5 pr-14 bg-muted/15 shrink-0">
+        {onBack && (
+          <Button variant="ghost" size="sm" className="mb-2 -ml-2 md:hidden" onClick={onBack}>
+            <ArrowLeftIcon className="size-4" /> Back
+          </Button>
+        )}
 
-          {/* Quick Actions Bar */}
-          <div className="flex items-center gap-1 ml-auto">
-            {onReply && (
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={() => onReply(message)}
-                className="gap-1 text-xs"
-                title="Reply to email"
-              >
-                <ReplyIcon className="size-3.5" />
-                <span>Reply</span>
-              </Button>
-            )}
-
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => {
-                if (!connectionId) return
-                markReadMutation.mutate({
-                  connectionId,
-                  messageId: message.id,
-                  read: !message.isRead,
-                })
-              }}
-              className="gap-1 text-xs"
-              title={message.isRead ? "Mark as unread" : "Mark as read"}
-            >
-              {message.isRead ? (
-                <>
-                  <MailIcon className="size-3.5" />
-                  <span>Mark unread</span>
-                </>
-              ) : (
-                <>
-                  <MailOpenIcon className="size-3.5" />
-                  <span>Mark read</span>
-                </>
-              )}
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-              className="gap-1 text-xs text-destructive hover:bg-destructive/10"
-              title="Delete email"
-            >
-              <Trash2Icon className="size-3.5" />
-              <span>Delete</span>
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-1.5 text-left">
-          <h3 className="text-lg font-semibold leading-snug break-words">
-            {message.subject || "(no subject)"}
-          </h3>
-          <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
-            <span className="font-semibold text-foreground">{message.from}</span>
-            <span className="text-muted-foreground/60">•</span>
-            <span>to {message.to}</span>
-            <span className="text-muted-foreground/60">•</span>
-            <span>{new Date(message.receivedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</span>
-            {message.attachments && message.attachments.length > 0 && (
-              <>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent-mail/12 text-accent-mail">
+              <MailIcon className="size-5" />
+            </span>
+            <div className="min-w-0 flex flex-col gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-bold leading-snug break-words text-foreground">
+                  {message.subject || "(no subject)"}
+                </h3>
+                {hasResumeAttachment && (
+                  <span className="inline-flex items-center rounded-full bg-role-recruitment/12 px-2 py-0.5 text-[11px] font-semibold text-role-recruitment shrink-0">
+                    Recruitment
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="font-semibold text-foreground">{message.from}</span>
                 <span className="text-muted-foreground/60">•</span>
-                <span className="inline-flex items-center gap-1 font-medium text-foreground/90">
-                  <PaperclipIcon className="size-3" />
-                  {message.attachments.length} {message.attachments.length === 1 ? "attachment" : "attachments"}
-                </span>
-              </>
-            )}
+                <span>to {message.to}</span>
+                <span className="text-muted-foreground/60">•</span>
+                <span>{new Date(message.receivedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</span>
+                {message.attachments && message.attachments.length > 0 && (
+                  <>
+                    <span className="text-muted-foreground/60">•</span>
+                    <span className="inline-flex items-center gap-1 font-medium text-foreground/90">
+                      <PaperclipIcon className="size-3" />
+                      {message.attachments.length} {message.attachments.length === 1 ? "attachment" : "attachments"}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
+
+          {/* Quick toggle — Reply/Delete live in the sticky bottom bar */}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => {
+              if (!connectionId) return
+              markReadMutation.mutate({ connectionId, messageId: message.id, read: !message.isRead })
+            }}
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+            title={message.isRead ? "Mark as unread" : "Mark as read"}
+          >
+            {message.isRead ? <MailIcon className="size-4" /> : <MailOpenIcon className="size-4" />}
+            <span className="sr-only">{message.isRead ? "Mark unread" : "Mark read"}</span>
+          </Button>
         </div>
       </div>
 
@@ -401,6 +375,25 @@ export function MessageReadingPane({
           </div>
         </div>
       )}
+
+      {/* Sticky primary actions */}
+      <div className="flex items-center justify-between gap-2 border-t bg-background px-5 py-3 shrink-0">
+        <Button
+          variant="outline"
+          onClick={handleDelete}
+          disabled={deleteMutation.isPending}
+          className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+        >
+          <Trash2Icon className="size-4" />
+          Delete
+        </Button>
+        {onReply && (
+          <Button onClick={() => onReply(message)} className="gap-1.5 shadow-2xs">
+            <ReplyIcon className="size-4" />
+            Reply
+          </Button>
+        )}
+      </div>
     </div>
   )
 }

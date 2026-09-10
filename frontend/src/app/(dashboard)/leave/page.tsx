@@ -1,5 +1,7 @@
 "use client"
 
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { CalendarDaysIcon, CheckIcon } from "lucide-react"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -11,12 +13,24 @@ import { RejectLeaveDialog } from "@/features/leave/components/reject-leave-dial
 import { useMyLeaveRequests, usePendingLeaveRequests, useReviewLeaveRequest } from "@/features/leave/hooks/use-leave"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
+import { HIDDEN_FEATURES } from "@/constants/feature-flags"
 
+// Hidden for this rollout (see feature-flags.ts) — direct navigation here
+// bounces to the dashboard instead of rendering the page below, which stays
+// fully intact for when this flag flips back.
 export default function LeavePage() {
+  const router = useRouter()
+
+  useEffect(() => {
+    if (HIDDEN_FEATURES.leave) router.replace("/")
+  }, [router])
+
   const canApprove = usePermission(PERMISSIONS.leaveApprove)
   const { data: myRequests, isLoading: myLoading } = useMyLeaveRequests()
   const { data: pending, isLoading: pendingLoading } = usePendingLeaveRequests()
   const { approve, reject } = useReviewLeaveRequest()
+
+  if (HIDDEN_FEATURES.leave) return null
 
   return (
     <div className="grid gap-4">

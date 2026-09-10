@@ -81,6 +81,14 @@ const STATUS_BAR: Record<string, string> = {
 // but real data always wins over a hardcoded list) sort after known ones.
 const PIPELINE_ORDER = ["needs_review", "applied", "screening", "interviewing", "shortlisted", "offered", "rejected"]
 
+// Aggregation endpoints can surface a null/blank status when a row's raw DB
+// value falls outside the enum's mapped range (e.g. stale/corrupt data) —
+// keep that from crashing the dashboard.
+function humanizeStatus(status: string | null | undefined): string {
+  if (!status) return "Unknown"
+  return status.replace(/\b\w/g, (c) => c.toUpperCase()).replace(/_/g, " ")
+}
+
 // Matches the same resume processing-status colors/labels used in resumes-view.tsx.
 const RESUME_STATUS_BADGE: Record<string, string> = {
   pending: "bg-blue-500/10 text-blue-600",
@@ -252,7 +260,7 @@ function DetailPanel({ detail, onNavigateTab, onClose }: {
                   <span
                     className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[c.status] || "bg-muted text-muted-foreground"}`}
                   >
-                    {c.status.replace(/_/g, " ")}
+                    {humanizeStatus(c.status)}
                   </span>
                 </div>
               ))}
@@ -277,7 +285,7 @@ function DetailPanel({ detail, onNavigateTab, onClose }: {
                 <span
                   className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${RESUME_STATUS_BADGE[r.processingStatus] || "bg-muted text-muted-foreground"}`}
                 >
-                  {RESUME_STATUS_LABEL[r.processingStatus] || r.processingStatus.replace(/_/g, " ")}
+                  {RESUME_STATUS_LABEL[r.processingStatus] || humanizeStatus(r.processingStatus)}
                 </span>
               </div>
             ))}
@@ -483,17 +491,17 @@ export function DashboardView({ onNavigateTab, detail, onOpenDetail, onCloseDeta
               ) : pipeline.some((p) => p.count > 0) ? (
                 <div className="flex flex-wrap items-center gap-1.5">
                   {pipeline.map((p, idx) => {
-                    const label = p.status.replace(/\b\w/g, (c) => c.toUpperCase()).replace(/_/g, " ")
+                    const label = humanizeStatus(p.status)
                     return (
-                      <div key={p.status} className="flex items-center gap-1.5">
+                      <div key={p.status ?? `unknown-${idx}`} className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() =>
-                            onOpenDetail({ type: "candidates", status: p.status as CandidateStatus, label: `${label} Candidates` })
+                            onOpenDetail({ type: "candidates", status: (p.status ?? "") as CandidateStatus, label: `${label} Candidates` })
                           }
                           className={cn(
                             "flex min-w-28 flex-col gap-0.5 rounded-lg px-3.5 py-2.5 text-left transition-transform cursor-pointer hover:-translate-y-0.5",
-                            STATUS_BADGE[p.status] || "bg-muted text-muted-foreground"
+                            (p.status && STATUS_BADGE[p.status]) || "bg-muted text-muted-foreground"
                           )}
                         >
                           <span className="text-lg font-bold">{p.count}</span>
@@ -540,7 +548,7 @@ export function DashboardView({ onNavigateTab, detail, onOpenDetail, onCloseDeta
                           <Icon className="size-4" />
                         </span>
                         <span className="flex-1 truncate text-sm font-medium text-foreground">
-                          {RESUME_STATUS_LABEL[s.status] || s.status.replace(/_/g, " ")}
+                          {RESUME_STATUS_LABEL[s.status] || humanizeStatus(s.status)}
                         </span>
                         <span className="text-lg font-bold text-foreground">{s.count}</span>
                       </button>
@@ -612,7 +620,7 @@ export function DashboardView({ onNavigateTab, detail, onOpenDetail, onCloseDeta
                       <span
                         className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${STATUS_BADGE[c.status] || "bg-muted text-muted-foreground"}`}
                       >
-                        {c.status.replace(/_/g, " ")}
+                        {humanizeStatus(c.status)}
                       </span>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{c.city || "—"}</TableCell>

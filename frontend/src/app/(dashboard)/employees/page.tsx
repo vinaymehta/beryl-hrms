@@ -12,6 +12,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet"
 import { EmployeeTable } from "@/features/employees/components/employee-table"
+import { EmployeeDetailPanel } from "@/features/employees/components/employee-detail-panel"
 import { EmployeeFilters } from "@/features/employees/components/employee-filters"
 import { EmployeeForm } from "@/features/employees/components/employee-form"
 import { useEmployees } from "@/features/employees/hooks/use-employees"
@@ -23,6 +24,7 @@ import type { EmployeeListParams } from "@/types/employees"
 export default function EmployeesPage() {
   const [params, setParams] = useState<EmployeeListParams>({ page: 1 })
   const [addOpen, setAddOpen] = useState(false)
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null)
   const { data, isLoading } = useEmployees(params)
   const createEmployee = useCreateEmployee()
   const canCreate = usePermission(PERMISSIONS.employeesCreate)
@@ -45,7 +47,11 @@ export default function EmployeesPage() {
 
       <EmployeeFilters params={params} onChange={setParams} />
 
-      <EmployeeTable employees={data?.data ?? []} isLoading={isLoading} />
+      <EmployeeTable
+        employees={data?.data ?? []}
+        isLoading={isLoading}
+        onSelectEmployee={setSelectedEmployeeId}
+      />
 
       {data && data.meta.totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
@@ -74,12 +80,19 @@ export default function EmployeesPage() {
       )}
 
       <Sheet open={addOpen} onOpenChange={setAddOpen}>
-        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
-          <SheetHeader>
-            <SheetTitle>Add employee</SheetTitle>
-            <SheetDescription>Create a new employee profile for your company.</SheetDescription>
+        <SheetContent side="right" className="w-full p-0 flex flex-col gap-0 sm:w-[45vw] sm:min-w-180 sm:max-w-275">
+          <SheetHeader className="border-b bg-role-hr/5 pr-14">
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-role-hr/12 text-role-hr">
+                <PlusIcon className="size-5" />
+              </span>
+              <div>
+                <SheetTitle className="text-lg">Add Employee</SheetTitle>
+                <SheetDescription>Create a new employee profile for your organization.</SheetDescription>
+              </div>
+            </div>
           </SheetHeader>
-          <div className="px-4 pb-4">
+          <div className="flex-1 overflow-y-auto p-4">
             <EmployeeForm
               isPending={createEmployee.isPending}
               onSubmit={(values) =>
@@ -87,8 +100,23 @@ export default function EmployeesPage() {
               }
             />
           </div>
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t bg-background p-4">
+            <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" form="employee-form" disabled={createEmployee.isPending} className="gap-1.5">
+              <PlusIcon className="size-4" />
+              {createEmployee.isPending ? "Adding…" : "Add Employee"}
+            </Button>
+          </div>
         </SheetContent>
       </Sheet>
+
+      <EmployeeDetailPanel
+        employeeId={selectedEmployeeId}
+        open={!!selectedEmployeeId}
+        onOpenChange={(open) => !open && setSelectedEmployeeId(null)}
+      />
     </div>
   )
 }

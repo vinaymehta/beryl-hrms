@@ -34,6 +34,35 @@ module Api
             )
           end
 
+          # Candidate eligibility status (needs_review/shortlisted/rejected/...)
+          # — distinct from processing_status above. This is how the Quick
+          # Stats "Needs Review"/"Rejected Resumes" cards surface a filtered
+          # view now that the full Candidates workspace is hidden.
+          if params[:candidateStatus].present?
+            scope = scope.joins(:candidate).where(candidates: { status: params[:candidateStatus] })
+          end
+
+          if params[:dateFrom].present?
+            scope = scope.where("candidate_resumes.created_at >= ?", Date.parse(params[:dateFrom]).beginning_of_day)
+          end
+          if params[:dateTo].present?
+            scope = scope.where("candidate_resumes.created_at <= ?", Date.parse(params[:dateTo]).end_of_day)
+          end
+
+          # .reorder (not .order) — the scope already carries an
+          # `.order(created_at: :desc)` from above, which .order would only
+          # ever APPEND to, leaving created_at as the primary sort key and
+          # silently no-op'ing every one of these picks.
+          scope = case params[:sortBy]
+          when "criteria_match_desc" then scope.reorder(Arel.sql("candidate_resumes.criteria_match_percentage DESC NULLS LAST"))
+          when "criteria_match_asc" then scope.reorder(Arel.sql("candidate_resumes.criteria_match_percentage ASC NULLS LAST"))
+          when "ats_score_desc" then scope.reorder(Arel.sql("candidate_resumes.ats_score DESC NULLS LAST"))
+          when "ats_score_asc" then scope.reorder(Arel.sql("candidate_resumes.ats_score ASC NULLS LAST"))
+          when "status" then scope.reorder(processing_status: :asc, created_at: :desc)
+          when "date" then scope.reorder(created_at: :asc)
+          else scope
+          end
+
           page = [params[:page].to_i, 1].max
           per_page = 20
           total_count = scope.count
@@ -158,71 +187,95 @@ module Api
         end
 
         # POST /api/v1/recruitment/resumes/scan_zoho_mail
-        # Permission-controlled: scans only the explicitly authorized Zoho connection
+        # Permission-controlled: scans only the explicitly authorized Zoho
+        # connection, and only within an HR-selected date range — scanning
+        # the whole mailbox is not allowed.
+        MAX_SCAN_PAGES = 20
+        SCAN_PAGE_SIZE = 25
+
         def scan_zoho_mail
           authorize CandidateResume, :create?
+
+          from_date = parse_scan_date(params[:from])
+          to_date = parse_scan_date(params[:to])
+          if from_date.nil? || to_date.nil?
+            render json: { errors: [{ message: "Please select a date range before scanning." }] }, status: :unprocessable_entity
+            return
+          end
+          range_start = from_date.beginning_of_day
+          range_end = to_date.end_of_day
 
           connection = resolve_connection!
           return unless connection
 
           account_id = account_id_for(connection)
 
-          messages_resp = zoho_client.list_messages(
-            access_token: connection.access_token,
-            account_id: account_id,
-            folder: "inbox",
-            limit: 30
-          )
-
-          messages = Array(messages_resp["data"])
           imported_count = 0
-          scanned_count = messages.size
+          scanned_count = 0
 
-          messages.each do |msg|
-            next unless msg["hasAttachment"].to_s == "1" || msg["hasAttachment"] == true || msg["attachments"].present?
-
-            # Fetch full message details if needed or inspect attachments
-            full_msg = zoho_client.get_message(
+          MAX_SCAN_PAGES.times do |page_index|
+            messages_resp = zoho_client.list_messages(
               access_token: connection.access_token,
               account_id: account_id,
-              message_id: msg["messageId"],
-              folder_id: msg["folderId"]
+              folder: "inbox",
+              page: page_index + 1,
+              limit: SCAN_PAGE_SIZE
             )
-            attachments = Array(full_msg["attachments"])
+            messages = Array(messages_resp["data"])
+            break if messages.empty?
 
-            attachments.each do |att|
-              name = att[:name].to_s.downcase
-              next unless name.end_with?(".pdf", ".docx", ".doc") || name.include?("resume") || name.include?("cv")
+            in_range = messages.select { |msg| message_received_at(msg).between?(range_start, range_end) }
+            scanned_count += in_range.size
 
-              att_id = att[:id]
-              next if current_company.candidate_resumes.exists?(source_attachment_id: att_id)
+            in_range.each do |msg|
+              next unless msg["hasAttachment"].to_s == "1" || msg["hasAttachment"] == true || msg["attachments"].present?
 
-              file_data = zoho_client.download_attachment(
+              full_msg = zoho_client.get_message(
                 access_token: connection.access_token,
                 account_id: account_id,
                 message_id: msg["messageId"],
-                attachment_id: att_id
+                folder_id: msg["folderId"]
               )
+              attachments = Array(full_msg["attachments"])
 
-              resume = current_company.candidate_resumes.create!(
-                file_name: file_data[:filename] || att["attachmentName"],
-                content_type: file_data[:content_type] || "application/pdf",
-                file_size: file_data[:body].bytesize,
-                source: "zoho_mail",
-                source_email_id: msg["messageId"],
-                source_attachment_id: att_id,
-                processing_status: :pending
-              )
+              attachments.each do |att|
+                name = att[:name].to_s.downcase
+                next unless name.end_with?(".pdf", ".docx", ".doc") || name.include?("resume") || name.include?("cv")
 
-              resume.file.attach(
-                io: StringIO.new(file_data[:body]),
-                filename: resume.file_name,
-                content_type: resume.content_type
-              )
+                att_id = att[:id]
+                next if current_company.candidate_resumes.exists?(source_attachment_id: att_id)
 
-              ResumeProcessingJob.perform_later(resume.id)
-              imported_count += 1
+                file_data = zoho_client.download_attachment(
+                  access_token: connection.access_token,
+                  account_id: account_id,
+                  message_id: msg["messageId"],
+                  attachment_id: att_id
+                )
+
+                resume = current_company.candidate_resumes.create!(
+                  file_name: file_data[:filename] || att["attachmentName"],
+                  content_type: file_data[:content_type] || "application/pdf",
+                  file_size: file_data[:body].bytesize,
+                  source: "zoho_mail",
+                  source_email_id: msg["messageId"],
+                  source_attachment_id: att_id,
+                  processing_status: :pending
+                )
+
+                resume.file.attach(
+                  io: StringIO.new(file_data[:body]),
+                  filename: resume.file_name,
+                  content_type: resume.content_type
+                )
+
+                ResumeProcessingJob.perform_later(resume.id)
+                imported_count += 1
+              end
             end
+
+            # Inbox is listed newest-first — once an entire page is older
+            # than the requested range, nothing further back is in range.
+            break if messages.all? { |msg| message_received_at(msg) < range_start }
           end
 
           render json: {
@@ -254,6 +307,20 @@ module Api
           @resume = policy_scope(CandidateResume).find(params[:id])
         end
 
+        def parse_scan_date(value)
+          return nil if value.blank?
+          Date.parse(value.to_s)
+        rescue ArgumentError
+          nil
+        end
+
+        # Same receivedTime (epoch ms) field Zoho::MessagePresenter already
+        # relies on for the mail workspace's own date display.
+        def message_received_at(msg)
+          ms = msg["receivedTime"].to_i
+          ms > 0 ? Time.at(ms / 1000.0) : Time.current
+        end
+
         def resume_summary(r)
           {
             id: r.id.to_s,
@@ -271,9 +338,15 @@ module Api
             candidateName: r.candidate&.full_name,
             candidateEmail: r.candidate&.email,
             candidateStatus: r.candidate&.status,
+            candidateCity: r.candidate&.city,
+            candidateQualification: r.candidate&.highest_qualification,
+            candidateExperienceYears: r.candidate&.experience_years&.to_f,
             hasFile: r.file.attached?,
             isCurrent: r.is_current,
-            duplicateOfId: r.duplicate_of_id&.to_s
+            duplicateOfId: r.duplicate_of_id&.to_s,
+            isDuplicate: r.processing_status == "duplicate" || r.duplicate_of_id.present?,
+            atsScore: r.ats_score,
+            criteriaMatchPercentage: r.criteria_match_percentage
           }
         end
 
@@ -284,6 +357,7 @@ module Api
             provenanceData: r.provenance_data,
             aiMetadata: r.ai_metadata,
             fileHash: r.file_hash,
+            eligibilityBreakdown: r.eligibility_breakdown,
             candidate: r.candidate ? {
               id: r.candidate.id.to_s,
               fullName: r.candidate.full_name,

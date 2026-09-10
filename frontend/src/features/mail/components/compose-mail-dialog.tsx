@@ -1,21 +1,21 @@
 "use client"
 
 import { useState } from "react"
-import { SendIcon, PaperclipIcon, XIcon, PlusIcon } from "lucide-react"
+import { SendIcon, PenSquareIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
-} from "@/components/ui/dialog"
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+  SheetClose,
+} from "@/components/ui/sheet"
 import { useSendMailMessage } from "@/features/mail/hooks/use-mail-messages"
 
 export function ComposeMailDialog({
@@ -74,14 +74,21 @@ export function ComposeMailDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
-        <DialogHeader className="p-4 border-b bg-muted/20 pr-10">
-          <DialogTitle className="text-base font-semibold">New Message</DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
-            Send an email directly through your connected Zoho Mail account.
-          </DialogDescription>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:w-[45vw] sm:min-w-180 sm:max-w-275 flex flex-col p-0 gap-0 overflow-hidden">
+        <SheetHeader className="border-b bg-muted/20 pr-14">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent-mail/12 text-accent-mail">
+              <PenSquareIcon className="size-5" />
+            </span>
+            <div>
+              <SheetTitle className="text-base font-semibold">New Message</SheetTitle>
+              <SheetDescription className="text-xs text-muted-foreground">
+                Send an email directly through your connected Zoho Mail account.
+              </SheetDescription>
+            </div>
+          </div>
+        </SheetHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="p-4 space-y-3 flex-1 overflow-y-auto min-h-0">
@@ -211,10 +218,10 @@ export function ComposeMailDialog({
             </div>
           </div>
 
-          <DialogFooter className="m-0 p-3 border-t bg-muted/20 flex flex-row items-center justify-between sm:justify-between rounded-b-xl">
-            <DialogClose render={<Button type="button" variant="outline" size="sm" />}>
+          <SheetFooter className="m-0 p-3 border-t bg-background flex-row items-center justify-between shrink-0">
+            <SheetClose render={<Button type="button" variant="outline" size="sm" />}>
               Cancel
-            </DialogClose>
+            </SheetClose>
             <Button
               type="submit"
               size="sm"
@@ -233,9 +240,9 @@ export function ComposeMailDialog({
                 </>
               )}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }

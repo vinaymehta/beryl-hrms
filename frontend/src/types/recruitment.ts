@@ -71,9 +71,15 @@ export interface CandidateResumeSummary {
   candidateName?: string | null
   candidateEmail?: string | null
   candidateStatus?: string | null
+  candidateCity?: string | null
+  candidateQualification?: string | null
+  candidateExperienceYears?: number | null
   hasFile: boolean
   isCurrent: boolean
   duplicateOfId: string | null
+  isDuplicate: boolean
+  atsScore: number | null
+  criteriaMatchPercentage: number | null
   aiMetadata?: {
     provider?: string
     model?: string
@@ -95,6 +101,12 @@ export interface CandidateResumeDetail extends CandidateResumeSummary {
     processed_at?: string
   }
   fileHash: string | null
+  eligibilityBreakdown: {
+    qualification: boolean | null
+    marks: boolean | null
+    graduation_year: boolean | null
+    backlog: boolean | null
+  } | null
   candidate?: {
     id: string
     fullName: string
@@ -122,6 +134,15 @@ export interface CandidateSummary {
   skills: string[]
   hasResume: boolean
   latestResumeId: string | null
+  // Tri-state (null = unconfirmed, never coerced to a pass/fail) —
+  // see Recruitment::EligibilityEvaluator on the backend.
+  academicPercentage: number | null
+  academicCgpa: number | null
+  graduationYear: number | null
+  activeBacklogs: boolean | null
+  criteriaMatchPercentage: number | null
+  atsScore: number | null
+  resumeDate: string | null
 }
 
 export interface CandidateDetail extends CandidateSummary {
@@ -189,6 +210,10 @@ export interface RecruitmentDashboardStats {
   shortlistedCandidates: number
   needsReviewCandidates: number
   hiredThisMonth: number
+  totalResumes: number
+  needsReviewResumes: number
+  shortlistedResumes: number
+  rejectedResumes: number
 }
 
 export interface RecruitmentAnalytics {

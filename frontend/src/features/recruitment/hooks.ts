@@ -72,6 +72,11 @@ export function useCandidateMutations() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recruitment", "candidates"] })
       queryClient.invalidateQueries({ queryKey: ["recruitment", "dashboard"] })
+      // Resumes embed candidateStatus/candidate.status — the Resume detail
+      // panel's Shortlist/Reject buttons read straight from this cache, so
+      // without this it'd keep showing the pre-shortlist state until some
+      // unrelated refetch happened to run.
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "resumes"] })
     },
   })
 
@@ -80,6 +85,7 @@ export function useCandidateMutations() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recruitment", "candidates"] })
       queryClient.invalidateQueries({ queryKey: ["recruitment", "dashboard"] })
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "resumes"] })
     },
   })
 
@@ -124,7 +130,16 @@ export function useCandidateMutations() {
   }
 }
 
-export function useResumes(params?: { status?: string; search?: string; page?: number; enabled?: boolean }) {
+export function useResumes(params?: {
+  status?: string
+  candidateStatus?: string
+  search?: string
+  page?: number
+  dateFrom?: string
+  dateTo?: string
+  sortBy?: string
+  enabled?: boolean
+}) {
   const { enabled, ...queryParams } = params ?? {}
   return useQuery({
     queryKey: ["recruitment", "resumes", queryParams],
@@ -172,7 +187,8 @@ export function useResumeMutations() {
   })
 
   const scanZohoMailMutation = useMutation({
-    mutationFn: (connectionId: string) => recruitmentApi.resumes.scanZohoMail(connectionId),
+    mutationFn: ({ connectionId, from, to }: { connectionId: string; from: string; to: string }) =>
+      recruitmentApi.resumes.scanZohoMail(connectionId, { from, to }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recruitment", "resumes"] })
       queryClient.invalidateQueries({ queryKey: ["recruitment", "dashboard"] })

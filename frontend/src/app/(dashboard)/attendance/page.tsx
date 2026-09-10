@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { ClockIcon, LogInIcon, LogOutIcon } from "lucide-react"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -11,17 +12,32 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useTodayAttendance, useAttendanceHistory, useCheckInOut } from "@/features/attendance/hooks/use-attendance"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
+import { HIDDEN_FEATURES } from "@/constants/feature-flags"
 
 function fmtTime(iso: string | null) {
   return iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"
 }
 
+// Hidden for this rollout (see feature-flags.ts) — direct navigation here
+// bounces to the dashboard instead of rendering the page below, which stays
+// fully intact for when this flag flips back.
 export default function AttendancePage() {
+  const router = useRouter()
+
+  useEffect(() => {
+    if (HIDDEN_FEATURES.attendance) router.replace("/")
+  }, [router])
+
   const canManage = usePermission(PERMISSIONS.attendanceManage)
   const { data: today, isLoading: todayLoading } = useTodayAttendance()
   const { checkIn, checkOut } = useCheckInOut()
   const [range, setRange] = useState<{ from?: string; to?: string }>({})
   const { data: history, isLoading: historyLoading } = useAttendanceHistory(range)
+
+  // Hooks above still run once (harmless) so the redirect effect can fire
+  // without breaking rules-of-hooks — this just stops the real page from
+  // ever painting.
+  if (HIDDEN_FEATURES.attendance) return null
 
   return (
     <div className="grid gap-4">

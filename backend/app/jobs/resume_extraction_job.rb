@@ -45,12 +45,34 @@ class ResumeExtractionJob < ApplicationJob
 
     sync_candidate_profile(candidate, parsed[:candidate], parsed[:ai_summary])
 
+    # Deterministic eligibility decides shortlist/needs-review — the AI ATS
+    # score is supplementary/display-only and never influences this. Only
+    # ever auto-transitions a candidate still sitting at the needs_review
+    # default; once HR (or a prior auto-shortlist) has moved them anywhere
+    # else, later resumes update the displayed numbers but never silently
+    # change status again.
+    eligibility = Recruitment::EligibilityEvaluator.call(candidate)
+    candidate.update!(status: eligibility.status) if candidate.needs_review?
+
+    ats_score = Ai::AtsScorer.score(raw_text: resume.raw_text, extracted_candidate: parsed[:candidate], resume: resume)
+
     resume.update!(
       processing_status: :completed,
-      extracted_data: parsed[:candidate],
+      # ai_summary folded into this resume's own snapshot (not just synced
+      # onto the candidate, which only reflects whichever resume is current)
+      # so the AI Summary panel is accurate even when viewing an older resume.
+      extracted_data: parsed[:candidate].merge(ai_summary: parsed[:ai_summary]),
       provenance_data: parsed[:provenance],
       ai_metadata: parsed[:ai_metadata],
-      processed_at: Time.current
+      processed_at: Time.current,
+      ats_score: ats_score,
+      criteria_match_percentage: eligibility.match_percentage,
+      eligibility_breakdown: {
+        qualification: eligibility.qualification,
+        marks: eligibility.marks,
+        graduation_year: eligibility.graduation_year,
+        backlog: eligibility.backlog
+      }
     )
   rescue *RETRYABLE_ERRORS => e
     Rails.logger.warn("ResumeExtractionJob transient failure for CandidateResume##{resume.id}, will retry: #{e.message}")
@@ -157,6 +179,13 @@ class ResumeExtractionJob < ApplicationJob
       notice_period: data[:notice_period],
       industry: data[:industry],
       languages: Array(data[:languages]),
+      # Tri-state eligibility facts — pass through as-is (nil/true/false),
+      # never coerced, so "confirmed false" and "not extracted" stay distinct
+      # all the way to Recruitment::EligibilityEvaluator.
+      academic_percentage: data[:academic_percentage],
+      academic_cgpa: data[:academic_cgpa],
+      graduation_year: data[:graduation_year],
+      active_backlogs: data[:active_backlogs],
       notes: summary.presence || candidate.notes
     )
 

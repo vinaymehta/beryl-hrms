@@ -21,7 +21,7 @@ import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useMailConnections, useConnectMailbox } from "@/features/mail/hooks/use-mail-connections"
 import { useMailMessages, useMailSearch, useMailStats, useMarkMailRead, useDeleteMailMessage } from "@/features/mail/hooks/use-mail-messages"
@@ -338,7 +338,7 @@ export function MailWorkspace() {
       </div>
 
       {/* Mailbox workspace — folders / messages; clicking a message opens the
-          reading pane in a modal instead of a persistent third column */}
+          reading pane in a right-side panel instead of a persistent third column */}
       <div className="grid gap-3 lg:grid-cols-5 min-w-0">
         <Card className="p-0 flex flex-col overflow-hidden lg:col-span-1">
           <div className="border-b p-3 shrink-0">
@@ -432,14 +432,15 @@ export function MailWorkspace() {
         </Card>
       </div>
 
-      {/* Email preview modal */}
-      <Dialog
+      {/* Email reading panel — a right-side panel, not a modal, so the
+          message list behind it stays visible */}
+      <Sheet
         open={Boolean(selectedId)}
         onOpenChange={(open) => {
           if (!open) setSelectedId(undefined)
         }}
       >
-        <DialogContent className="sm:max-w-3xl md:max-w-4xl h-[85vh] max-h-[85vh] p-0 flex flex-col gap-0 overflow-hidden">
+        <SheetContent side="right" className="w-full sm:w-[45vw] sm:min-w-180 sm:max-w-275 p-0 flex flex-col gap-0 overflow-hidden">
           <MessageReadingPane
             connectionId={connection.id}
             messageId={selectedId}
@@ -447,8 +448,8 @@ export function MailWorkspace() {
             onReply={handleReply}
             onDeleted={() => setSelectedId(undefined)}
           />
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       {/* Compose & Send Email Dialog */}
       <ComposeMailDialog

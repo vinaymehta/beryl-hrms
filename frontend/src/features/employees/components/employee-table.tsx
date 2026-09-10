@@ -1,7 +1,5 @@
 "use client"
 
-import { useRouter } from "next/navigation"
-
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -15,16 +13,17 @@ function initials(first: string, last: string) {
 // Plain mapped table, not TanStack Table: the list is already paginated/
 // filtered server-side, so there's no client-side sort/filter logic here
 // that would justify the extra abstraction — see employee-filters.tsx for
-// where the actual filtering UI lives.
+// where the actual filtering UI lives. Structure/spacing mirrors the
+// Candidates list (recruitment feature) for visual consistency.
 export function EmployeeTable({
   employees,
   isLoading,
+  onSelectEmployee,
 }: {
   employees: Employee[]
   isLoading: boolean
+  onSelectEmployee: (id: string) => void
 }) {
-  const router = useRouter()
-
   if (isLoading) {
     return (
       <div className="grid gap-2">
@@ -36,11 +35,16 @@ export function EmployeeTable({
   }
 
   if (!employees.length) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">No employees match these filters.</p>
+    return (
+      <div className="rounded-xl border border-dashed p-10 text-center text-xs text-muted-foreground space-y-1.5">
+        <p className="font-semibold text-foreground text-sm">No employees found</p>
+        <p>No employees match these filters.</p>
+      </div>
+    )
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border">
+    <div className="rounded-xl border shadow-2xs overflow-hidden overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
@@ -55,23 +59,23 @@ export function EmployeeTable({
             <TableRow
               key={employee.id}
               className="cursor-pointer"
-              onClick={() => router.push(`/employees/${employee.id}`)}
+              onClick={() => onSelectEmployee(employee.id)}
             >
               <TableCell>
-                <div className="flex items-center gap-2.5">
-                  <Avatar className="size-8">
-                    <AvatarFallback className="bg-role-hr/15 text-xs text-role-hr">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Avatar size="sm">
+                    <AvatarFallback className="bg-role-hr/12 text-[11px] text-role-hr">
                       {initials(employee.firstName, employee.lastName)}
                     </AvatarFallback>
                   </Avatar>
-                  <div>
-                    <p className="font-medium">{employee.firstName} {employee.lastName}</p>
-                    <p className="text-xs text-muted-foreground">{employee.employeeCode}</p>
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-foreground">{employee.firstName} {employee.lastName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{employee.employeeCode}</p>
                   </div>
                 </div>
               </TableCell>
-              <TableCell>{employee.department?.name ?? "—"}</TableCell>
-              <TableCell>{employee.designation?.title ?? "—"}</TableCell>
+              <TableCell className="text-muted-foreground">{employee.department?.name ?? "—"}</TableCell>
+              <TableCell className="text-muted-foreground">{employee.designation?.title ?? "—"}</TableCell>
               <TableCell><EmployeeStatusBadge status={employee.status} /></TableCell>
             </TableRow>
           ))}

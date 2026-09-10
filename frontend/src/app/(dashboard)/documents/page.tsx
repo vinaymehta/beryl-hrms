@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { FileTextIcon, DownloadIcon, TrashIcon } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
@@ -19,6 +20,7 @@ import {
 import { UploadDocumentDialog } from "@/features/documents/components/upload-document-dialog"
 import { useDocuments, useDeleteDocument } from "@/features/documents/hooks/use-documents"
 import { documentsApi } from "@/features/documents/api"
+import { HIDDEN_FEATURES } from "@/constants/feature-flags"
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
@@ -26,10 +28,21 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+// Hidden for this rollout (see feature-flags.ts) — direct navigation here
+// bounces to the dashboard instead of rendering the page below, which stays
+// fully intact for when this flag flips back.
 export default function DocumentsPage() {
+  const router = useRouter()
+
+  useEffect(() => {
+    if (HIDDEN_FEATURES.documents) router.replace("/")
+  }, [router])
+
   const { data: documents, isLoading } = useDocuments()
   const deleteDocument = useDeleteDocument()
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+
+  if (HIDDEN_FEATURES.documents) return null
 
   return (
     <div className="grid gap-4">

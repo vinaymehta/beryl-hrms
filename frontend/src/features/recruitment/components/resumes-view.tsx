@@ -1,12 +1,15 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState } from "react"
 import { useResumes, useResumeMutations } from "../hooks"
-import { ResumeDetailModal } from "./resume-detail-modal"
+import { ResumeDetailPanel } from "./resume-detail-panel"
+import { DateRangeFilter } from "./date-range-filter"
+import type { DateRangePreset } from "../lib/date-range-presets"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -19,82 +22,100 @@ import {
 import { toast } from "sonner"
 import {
   FileTextIcon,
-  UploadCloudIcon,
   SearchIcon,
   RefreshCwIcon,
   DownloadIcon,
   AlertCircleIcon,
   CheckCircle2Icon,
-  ClockIcon,
   Loader2Icon,
   Trash2Icon,
-  ExternalLinkIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  XIcon,
+  CopyIcon,
+  StarIcon,
+  XCircleIcon,
+  FilterIcon,
+  type LucideIcon,
 } from "lucide-react"
 import { recruitmentApi } from "../api"
 import type { CandidateResumeSummary } from "@/types/recruitment"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
+import { cn } from "cn"
 
 interface ResumesViewProps {
   onOpenCandidate?: (candidateId: string) => void
   initialStatus?: string
+  /** Candidate eligibility status (needs_review/shortlisted/rejected/...) — distinct from the processing-status filter above. Drives the Quick Stats "Needs Review"/"Rejected Resumes" cards. */
+  initialCandidateStatus?: string
 }
 
-export function ResumesView({ onOpenCandidate, initialStatus = "" }: ResumesViewProps) {
+// Mirrors each Quick Stat card's own icon/color exactly (recruitment-workspace.tsx's
+// kpis array) so a filtered-by-candidate-status list reads as "you clicked that card".
+const CANDIDATE_STATUS_META: Record<string, { label: string; icon: LucideIcon; className: string }> = {
+  needs_review: { label: "Needs Review", icon: AlertCircleIcon, className: "bg-amber-500/10 text-amber-600" },
+  shortlisted: { label: "Shortlisted", icon: StarIcon, className: "bg-emerald-500/10 text-emerald-600" },
+  rejected: { label: "Rejected", icon: XCircleIcon, className: "bg-red-500/10 text-red-600" },
+}
+
+const SORT_OPTIONS = [
+  { value: "", label: "Newest first" },
+  { value: "date", label: "Oldest first" },
+  { value: "criteria_match_desc", label: "Highest Criteria Match %" },
+  { value: "criteria_match_asc", label: "Lowest Criteria Match %" },
+  { value: "ats_score_desc", label: "Highest ATS Score" },
+  { value: "ats_score_asc", label: "Lowest ATS Score" },
+  { value: "status", label: "Status" },
+]
+
+export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandidateStatus = "" }: ResumesViewProps) {
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState<string>(initialStatus)
+  // Set once from the Quick Stats card that opened this view (see
+  // recruitment-workspace.tsx) — clearing it means navigating back via the
+  // Resumes tab itself, which remounts this component with a fresh filter.
+  const candidateStatus = initialCandidateStatus
+  const [datePreset, setDatePreset] = useState<DateRangePreset | "">("")
+  const [customFrom, setCustomFrom] = useState("")
+  const [customTo, setCustomTo] = useState("")
+  const [dateRange, setDateRange] = useState<{ from: string; to: string } | null>(null)
+  const [sortBy, setSortBy] = useState("")
+  const [showFilters, setShowFilters] = useState(false)
   const [page, setPage] = useState(1)
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [pendingDelete, setPendingDelete] = useState<CandidateResumeSummary | null>(null)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [bulkPending, setBulkPending] = useState(false)
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const canProcess = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.resumesProcess])
   const canManage = usePermission(PERMISSIONS.recruitmentManage)
 
+  const activeFilterCount = (dateRange ? 1 : 0) + (sortBy ? 1 : 0)
+
+  function resetFilters() {
+    setDatePreset("")
+    setCustomFrom("")
+    setCustomTo("")
+    setDateRange(null)
+    setSortBy("")
+    setPage(1)
+  }
+
   const { data: response, isLoading } = useResumes({
     search: search.trim() || undefined,
     status: status || undefined,
+    candidateStatus: candidateStatus || undefined,
+    dateFrom: dateRange?.from,
+    dateTo: dateRange?.to,
+    sortBy: sortBy || undefined,
     page,
   })
 
-  const { upload, reprocess, deleteResume } = useResumeMutations()
+  const { reprocess, deleteResume } = useResumeMutations()
 
   const resumes = response?.data ?? []
   const meta = response?.meta
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setSelectedFile(file)
-  }
-
-  const clearSelectedFile = () => {
-    setSelectedFile(null)
-    if (fileInputRef.current) fileInputRef.current.value = ""
-  }
-
-  const handleUploadClick = async () => {
-    if (!selectedFile) return
-
-    setUploading(true)
-    try {
-      await upload.mutateAsync(selectedFile)
-      toast.success("File uploaded successfully")
-      clearSelectedFile()
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to upload resume")
-    } finally {
-      setUploading(false)
-    }
-  }
 
   const handleReprocess = async (r: CandidateResumeSummary, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -177,8 +198,6 @@ export function ResumesView({ onOpenCandidate, initialStatus = "" }: ResumesView
 
   const statusPills = [
     { label: "All Resumes", value: "" },
-    { label: "Completed", value: "completed" },
-    { label: "Processing", value: "processing" },
     { label: "Needs Retry / Failed", value: "failed" },
     { label: "Not a Resume", value: "not_a_resume" },
     { label: "Duplicate", value: "duplicate" },
@@ -186,116 +205,109 @@ export function ResumesView({ onOpenCandidate, initialStatus = "" }: ResumesView
 
   return (
     <div className="space-y-4">
-      {/* Upload Zone & Header */}
-      {canProcess && (
-      <div className="rounded-xl border-2 border-dashed p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3 text-left">
-          <div className="flex size-11 items-center justify-center rounded-xl bg-role-recruitment/12 text-role-recruitment">
-            <UploadCloudIcon className="size-6" />
+      {/* Filter Row — resume ingestion happens via Zoho scan (see the
+          Scan Mail button above), not direct upload from this view. */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-48">
+            <SearchIcon className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                setPage(1)
+              }}
+              placeholder="Search resumes by filename or matched candidate name..."
+              className="pl-8 text-xs h-9"
+            />
           </div>
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Upload Candidate Resumes</h3>
-            <p className="text-xs text-muted-foreground">
-              Direct upload PDF, DOCX, or DOC. Ingests text deterministically, parses with Claude, and links candidate records.
-            </p>
-          </div>
-        </div>
 
-        <div className="shrink-0 flex flex-col items-end gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.docx,.doc"
-            onChange={handleFileSelect}
-            className="hidden"
-            id="resume-file-input"
-          />
-
-          {!selectedFile ? (
-            <Button
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              className="text-xs gap-1.5 shadow-2xs"
-            >
-              <UploadCloudIcon className="size-3.5" /> Choose Resume File
-            </Button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="flex max-w-48 items-center gap-1.5 truncate rounded-md border bg-background px-2.5 py-1.5 text-xs text-foreground shadow-2xs">
-                <FileTextIcon className="size-3.5 shrink-0 text-role-recruitment" />
-                <span className="truncate">{selectedFile.name}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+            className={cn(
+              "relative h-9 gap-1.5 rounded-full text-xs shrink-0",
+              (showFilters || activeFilterCount > 0) && "border-role-recruitment text-role-recruitment bg-role-recruitment/5"
+            )}
+          >
+            <FilterIcon className="size-3.5" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-role-recruitment text-[10px] font-bold text-role-recruitment-foreground">
+                {activeFilterCount}
               </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={clearSelectedFile}
-                disabled={uploading}
-                className="size-8 shrink-0 p-0 text-muted-foreground hover:text-destructive"
-                title="Remove selected file"
-              >
-                <XIcon className="size-3.5" />
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleUploadClick}
-                disabled={uploading}
-                className="shrink-0 text-xs gap-1.5 shadow-2xs"
-              >
-                {uploading ? (
-                  <>
-                    <Loader2Icon className="size-3.5 animate-spin" /> Uploading...
-                  </>
-                ) : (
-                  <>
-                    <UploadCloudIcon className="size-3.5" /> Upload
-                  </>
-                )}
-              </Button>
-            </div>
+            )}
+          </Button>
+          {activeFilterCount > 0 && (
+            <Button variant="outline" size="sm" onClick={resetFilters} className="h-9 rounded-full text-xs shrink-0">
+              Reset
+            </Button>
           )}
         </div>
-      </div>
-      )}
 
-      {/* Filter Row */}
-      <div className="space-y-3">
-        <div className="relative">
-          <SearchIcon className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setPage(1)
-            }}
-            placeholder="Search resumes by filename or matched candidate name..."
-            className="pl-8 text-xs h-9"
-          />
+        {/* Always mounted (just visually hidden) rather than conditionally
+            rendered — unmounting/remounting the Select components on every
+            toggle made them briefly show their raw value instead of the
+            matching option's label the first time they re-registered. */}
+        <div hidden={!showFilters} className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 p-3">
+            <DateRangeFilter
+              preset={datePreset}
+              customFrom={customFrom}
+              customTo={customTo}
+              allowClear
+              onChange={({ preset, customFrom: f, customTo: t, resolved }) => {
+                setDatePreset(preset)
+                setCustomFrom(f)
+                setCustomTo(t)
+                setDateRange(resolved)
+                setPage(1)
+              }}
+            />
+
+            <Select items={SORT_OPTIONS} value={sortBy} onValueChange={(v) => { setSortBy(v || ""); setPage(1) }}>
+              <SelectTrigger aria-label="Sort resumes" className="h-8 w-48 text-xs">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                {SORT_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
         </div>
 
         {/* Status Tabs — active pill uses the same semantic color as its
-            status badge on each resume row, instead of a uniform violet. */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b text-xs">
-          {statusPills.map((p) => {
-            const isActive = status === p.value
-            const activeColor = p.value ? statusColors[p.value] : "bg-primary/10 text-primary border-primary/30"
-            return (
-            <button
-              key={p.value}
-              onClick={() => {
-                setStatus(p.value)
-                setPage(1)
-              }}
-              className={`rounded-md border px-3 py-1.5 font-medium whitespace-nowrap transition-colors ${
-                isActive
-                  ? activeColor
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
-              }`}
-            >
-              {p.label}
-            </button>
-            )
-          })}
-        </div>
+            status badge on each resume row, instead of a uniform violet.
+            Hidden while a candidate-status filter (Needs Review/Rejected,
+            from the Quick Stats cards) is active — that's already a fixed,
+            single-purpose view, not a processing-status switcher. */}
+        {!candidateStatus && (
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b text-xs">
+            {statusPills.map((p) => {
+              const isActive = status === p.value
+              const activeColor = p.value ? statusColors[p.value] : "bg-primary/10 text-primary border-primary/30"
+              return (
+              <button
+                key={p.value}
+                onClick={() => {
+                  setStatus(p.value)
+                  setPage(1)
+                }}
+                className={`rounded-md border px-3 py-1.5 font-medium whitespace-nowrap transition-colors ${
+                  isActive
+                    ? activeColor
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                }`}
+              >
+                {p.label}
+              </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Resume List */}
@@ -309,10 +321,10 @@ export function ResumesView({ onOpenCandidate, initialStatus = "" }: ResumesView
         <div className="rounded-xl border border-dashed p-10 text-center text-xs text-muted-foreground space-y-1.5">
           <FileTextIcon className="size-8 text-muted-foreground/40 mx-auto" />
           <p className="font-semibold text-foreground text-sm">No resumes found</p>
-          <p>Upload resumes directly above, or scan authorized Zoho Mailboxes.</p>
+          <p>Scan an authorized Zoho mailbox to import resumes, or adjust your filters.</p>
         </div>
       ) : (
-        <div className="rounded-xl border shadow-2xs overflow-hidden">
+        <div className="rounded-xl border shadow-2xs overflow-hidden overflow-x-auto">
           {canManage && checkedIds.size > 0 && (
             <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-4 py-2">
               <span className="text-xs font-medium text-foreground">{checkedIds.size} selected</span>
@@ -345,11 +357,13 @@ export function ResumesView({ onOpenCandidate, initialStatus = "" }: ResumesView
                     />
                   </TableHead>
                 )}
-                <TableHead>File</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Candidate</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead>Size</TableHead>
+                <TableHead>Candidate / File</TableHead>
+                {!candidateStatus && <TableHead>Status</TableHead>}
+                <TableHead>Criteria Match</TableHead>
+                <TableHead>ATS Score</TableHead>
+                <TableHead>Location</TableHead>
+                <TableHead>Qualification</TableHead>
+                <TableHead>Experience</TableHead>
                 <TableHead>Added</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -374,38 +388,75 @@ export function ResumesView({ onOpenCandidate, initialStatus = "" }: ResumesView
                   )}
                   <TableCell>
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                        <FileTextIcon className="size-4" />
-                      </span>
+                      {candidateStatus && CANDIDATE_STATUS_META[candidateStatus] ? (
+                        <span
+                          className={cn(
+                            "flex size-8 shrink-0 items-center justify-center rounded-md",
+                            CANDIDATE_STATUS_META[candidateStatus].className
+                          )}
+                        >
+                          {(() => {
+                            const Icon = CANDIDATE_STATUS_META[candidateStatus].icon
+                            return <Icon className="size-4" />
+                          })()}
+                        </span>
+                      ) : (
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                          <FileTextIcon className="size-4" />
+                        </span>
+                      )}
                       <div className="min-w-0">
-                        <p className="truncate font-medium text-foreground text-xs max-w-xs">{resume.fileName}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="truncate font-medium text-foreground text-xs max-w-48">
+                            {resume.candidateName || resume.fileName}
+                          </p>
+                          {resume.isDuplicate && (
+                            <span
+                              title="Duplicate of an existing resume"
+                              className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-medium text-violet-600"
+                            >
+                              <CopyIcon className="size-2.5" /> Duplicate
+                            </span>
+                          )}
+                        </div>
+                        <p className="truncate text-[11px] text-muted-foreground max-w-48">{resume.fileName}</p>
                         {resume.errorMessage && (
-                          <p className="truncate text-[11px] text-destructive max-w-xs">Error: {resume.errorMessage}</p>
+                          <p className="truncate text-[11px] text-destructive max-w-48">Error: {resume.errorMessage}</p>
                         )}
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${
-                        statusColors[resume.processingStatus] || "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {resume.processingStatus === "processing" && (
-                        <Loader2Icon className="size-2.5 animate-spin" />
-                      )}
-                      {resume.processingStatus === "completed" && (
-                        <CheckCircle2Icon className="size-2.5 text-emerald-500" />
-                      )}
-                      {resume.processingStatus === "failed" && (
-                        <AlertCircleIcon className="size-2.5 text-red-500" />
-                      )}
-                      {resume.processingStatus.replace("_", " ")}
-                    </span>
+                  {!candidateStatus && (
+                    <TableCell>
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${
+                          statusColors[resume.processingStatus] || "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {resume.processingStatus === "processing" && (
+                          <Loader2Icon className="size-2.5 animate-spin" />
+                        )}
+                        {resume.processingStatus === "completed" && (
+                          <CheckCircle2Icon className="size-2.5 text-emerald-500" />
+                        )}
+                        {resume.processingStatus === "failed" && (
+                          <AlertCircleIcon className="size-2.5 text-red-500" />
+                        )}
+                        {resume.processingStatus.replace(/_/g, " ")}
+                      </span>
+                    </TableCell>
+                  )}
+                  <TableCell className="text-muted-foreground">
+                    {resume.criteriaMatchPercentage != null ? `${resume.criteriaMatchPercentage}%` : "—"}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{resume.candidateName || "—"}</TableCell>
-                  <TableCell className="text-muted-foreground capitalize">{resume.source.replace("_", " ")}</TableCell>
-                  <TableCell className="text-muted-foreground">{(resume.fileSize / 1024).toFixed(1)} KB</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {resume.atsScore != null ? `ATS Score: ${resume.atsScore}` : "—"}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{resume.candidateCity || "—"}</TableCell>
+                  <TableCell className="text-muted-foreground truncate max-w-32">{resume.candidateQualification || "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {resume.candidateExperienceYears ? `${resume.candidateExperienceYears} yrs` : "—"}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{new Date(resume.createdAt).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
@@ -482,7 +533,7 @@ export function ResumesView({ onOpenCandidate, initialStatus = "" }: ResumesView
         </div>
       )}
 
-      <ResumeDetailModal
+      <ResumeDetailPanel
         resumeId={selectedResumeId}
         open={!!selectedResumeId}
         onOpenChange={(open) => !open && setSelectedResumeId(null)}

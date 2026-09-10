@@ -15,13 +15,12 @@ import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
 import type { CandidateStatus } from "@/types/recruitment"
 import {
-  LayoutDashboardIcon,
   UsersIcon,
   FileTextIcon,
   SparklesIcon,
-  BriefcaseIcon,
   StarIcon,
   AlertCircleIcon,
+  XCircleIcon,
   RefreshCwIcon,
   MailSearchIcon,
   type LucideIcon,
@@ -41,11 +40,12 @@ interface Kpi {
 export function RecruitmentWorkspace() {
   const [activeTab, setActiveTab] = useState<
     "dashboard" | "candidates" | "resumes" | "search" | "jobs" | "shortlisted"
-  >("dashboard")
+  >("resumes")
   const [scanModalOpen, setScanModalOpen] = useState(false)
   const [dashboardDetail, setDashboardDetail] = useState<DashboardDetail | null>(null)
   const [candidatesFilter, setCandidatesFilter] = useState<CandidateStatus | "">("")
   const [resumesFilter, setResumesFilter] = useState<string>("")
+  const [resumesCandidateStatusFilter, setResumesCandidateStatusFilter] = useState<string>("")
 
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useRecruitmentStats()
   const { refetch: refetchAnalytics } = useRecruitmentAnalytics()
@@ -63,77 +63,79 @@ export function RecruitmentWorkspace() {
   // An optional filter seeds the Candidates/Resumes view's initial status.
   function navigateTab(tab: string, filter?: string) {
     if (tab === "candidates") setCandidatesFilter((filter as CandidateStatus) || "")
-    if (tab === "resumes") setResumesFilter(filter || "")
+    if (tab === "resumes") {
+      setResumesFilter(filter || "")
+      setResumesCandidateStatusFilter("")
+    }
     setActiveTab(tab as any)
   }
 
+  // Needs Review / Rejected Resumes Quick Stats — filter Resumes by the
+  // candidate's eligibility status (a different dimension than the
+  // processing-status filter navigateTab sets above).
+  function openResumesByCandidateStatus(candidateStatus: string) {
+    setResumesFilter("")
+    setResumesCandidateStatusFilter(candidateStatus)
+    setActiveTab("resumes")
+  }
+
+  // Exactly the 4 required Quick Stats — all resume-oriented, matching the
+  // Resumes-first UI. Each routes to the Resumes tab filtered accordingly
+  // (Needs Review/Rejected by candidate eligibility status, Shortlisted to
+  // its own tab) so every number is actually reachable, now that the full
+  // Candidates/Dashboard workspace is hidden.
   const kpis: Kpi[] = [
     {
       key: "total",
-      label: "Total Candidates",
-      value: stats?.totalCandidates,
+      label: "Total Resumes",
+      value: stats?.totalResumes,
       caption: "All time",
-      icon: UsersIcon,
+      icon: FileTextIcon,
       iconTint: "bg-role-recruitment text-role-recruitment-foreground",
       wash: "bg-role-recruitment/10 border-role-recruitment/15",
-    },
-    {
-      key: "new",
-      label: "New Resumes",
-      value: stats?.newResumes,
-      caption: "Last 7 days",
-      icon: FileTextIcon,
-      iconTint: "bg-blue-500 text-white",
-      wash: "bg-blue-500/10 border-blue-500/15",
-      onClick: () => openDashboardDetail({ type: "resumes", status: "", label: "Recently Added Resumes" }),
+      onClick: () => navigateTab("resumes"),
     },
     {
       key: "review",
       label: "Needs Review",
-      value: stats?.needsReviewCandidates,
+      value: stats?.needsReviewResumes,
       caption: "Pending review",
       icon: AlertCircleIcon,
       iconTint: "bg-amber-500 text-white",
       wash: "bg-amber-500/10 border-amber-500/15",
-      onClick: () => openDashboardDetail({ type: "candidates", status: "needs_review", label: "Needs Review Candidates" }),
+      onClick: () => openResumesByCandidateStatus("needs_review"),
     },
     {
       key: "shortlisted",
-      label: "Shortlisted",
-      value: stats?.shortlistedCandidates,
-      caption: "In pipeline",
+      label: "Shortlisted Resumes",
+      value: stats?.shortlistedResumes,
+      caption: "Passed all 4 criteria",
       icon: StarIcon,
-      iconTint: "bg-role-recruitment text-role-recruitment-foreground",
-      wash: "bg-role-recruitment/10 border-role-recruitment/15",
-      onClick: () => openDashboardDetail({ type: "candidates", status: "shortlisted", label: "Shortlisted Candidates" }),
-    },
-    {
-      key: "hired",
-      label: "Hired",
-      value: stats?.hiredThisMonth,
-      caption: "This month",
-      icon: BriefcaseIcon,
       iconTint: "bg-emerald-500 text-white",
       wash: "bg-emerald-500/10 border-emerald-500/15",
-      onClick: () => openDashboardDetail({ type: "candidates", status: "offered", label: "Hired Candidates" }),
+      onClick: () => openResumesByCandidateStatus("shortlisted"),
     },
+    {
+      key: "rejected",
+      label: "Rejected Resumes",
+      value: stats?.rejectedResumes,
+      caption: "Reviewed & declined",
+      icon: XCircleIcon,
+      iconTint: "bg-red-500 text-white",
+      wash: "bg-red-500/10 border-red-500/15",
+      onClick: () => openResumesByCandidateStatus("rejected"),
+    },
+    // Hired KPI/action hidden for this rollout — `hiredThisMonth` and the
+    // `offered` status stay fully intact in the backend.
   ]
 
+  // Dashboard/Candidates/Job Matching stay fully implemented (components,
+  // routes, and their "View all" targets from navigateTab below) but are
+  // hidden from this tab bar for the current rollout — not deleted.
   const tabs = [
     {
-      id: "dashboard",
-      label: "Dashboard",
-      icon: LayoutDashboardIcon,
-    },
-    {
-      id: "candidates",
-      label: "Candidates",
-      icon: UsersIcon,
-      badge: stats?.totalCandidates,
-    },
-    {
       id: "resumes",
-      label: "Resumes & Ingestion",
+      label: "Resumes",
       icon: FileTextIcon,
       badge: stats?.newResumes ? `+${stats.newResumes}` : undefined,
     },
@@ -142,17 +144,10 @@ export function RecruitmentWorkspace() {
       label: "AI Discovery",
       icon: SparklesIcon,
     },
-    {
-      id: "jobs",
-      label: "Job Matching",
-      icon: BriefcaseIcon,
-    },
-    {
-      id: "shortlisted",
-      label: "Shortlisted",
-      icon: StarIcon,
-      badge: stats?.shortlistedCandidates,
-    },
+    // Shortlisted tab hidden — reachable via the "Shortlisted Resumes" Quick
+    // Stat card instead, same as Needs Review/Rejected (filters Resumes by
+    // candidate status rather than being its own tab). CandidatesView/the
+    // "shortlisted" panel below stay intact, just unreachable via the bar.
   ]
 
   return (
@@ -186,16 +181,10 @@ export function RecruitmentWorkspace() {
           {canProcess && (
             <Button onClick={() => setScanModalOpen(true)} className="gap-1.5 shadow-sm">
               <MailSearchIcon className="size-4" />
-              Scan Zoho Mail
+              Scan Mail
             </Button>
           )}
 
-          {canProcess && (
-            <Button variant="outline" onClick={() => navigateTab("resumes")} className="gap-1.5">
-              <FileTextIcon className="size-4" />
-              Upload Resume
-            </Button>
-          )}
         </div>
       </div>
 
@@ -286,7 +275,13 @@ export function RecruitmentWorkspace() {
           />
         )}
         {activeTab === "candidates" && <CandidatesView key={candidatesFilter} initialStatus={candidatesFilter} />}
-        {activeTab === "resumes" && <ResumesView key={resumesFilter} initialStatus={resumesFilter} />}
+        {activeTab === "resumes" && (
+          <ResumesView
+            key={`${resumesFilter}:${resumesCandidateStatusFilter}`}
+            initialStatus={resumesFilter}
+            initialCandidateStatus={resumesCandidateStatusFilter}
+          />
+        )}
         {activeTab === "search" && <AiSearchView />}
         {activeTab === "jobs" && <JobsMatchingView />}
         {activeTab === "shortlisted" && <CandidatesView initialStatus="shortlisted" />}

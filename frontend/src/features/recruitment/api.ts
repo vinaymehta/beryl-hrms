@@ -96,11 +96,23 @@ export const recruitmentApi = {
   },
 
   resumes: {
-    list: (params?: { status?: string; search?: string; page?: number }) => {
+    list: (params?: {
+      status?: string
+      candidateStatus?: string
+      search?: string
+      page?: number
+      dateFrom?: string
+      dateTo?: string
+      sortBy?: string
+    }) => {
       const q = new URLSearchParams()
       if (params?.status) q.set("status", params.status)
+      if (params?.candidateStatus) q.set("candidateStatus", params.candidateStatus)
       if (params?.search) q.set("search", params.search)
       if (params?.page) q.set("page", String(params.page))
+      if (params?.dateFrom) q.set("dateFrom", params.dateFrom)
+      if (params?.dateTo) q.set("dateTo", params.dateTo)
+      if (params?.sortBy) q.set("sortBy", params.sortBy)
 
       const queryStr = q.toString()
       return apiClient.getPaginated<PaginatedResponse<CandidateResumeSummary>>(
@@ -132,10 +144,10 @@ export const recruitmentApi = {
       contentType?: string
     }) => apiClient.post<CandidateResumeDetail>("/recruitment/resumes/import_from_zoho", params),
 
-    scanZohoMail: (connectionId: string) =>
+    scanZohoMail: (connectionId: string, range: { from: string; to: string }) =>
       apiClient.post<{ scannedMessages: number; detectedResumes: number }>(
         "/recruitment/resumes/scan_zoho_mail",
-        { connectionId }
+        { connectionId, from: range.from, to: range.to }
       ),
 
     delete: (id: string) => apiClient.delete<void>(`/recruitment/resumes/${id}`),

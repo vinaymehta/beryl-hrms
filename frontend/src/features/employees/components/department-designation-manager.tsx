@@ -208,29 +208,9 @@ export function DepartmentDesignationManager() {
           </span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab("designations")}
-          className={cn(
-            "flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
-            activeTab === "designations"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"
-          )}
-        >
-          <BadgeIcon className="size-4" />
-          <span>Designations</span>
-          <span
-            className={cn(
-              "ml-1 rounded-full px-2 py-0.5 text-xs font-semibold",
-              activeTab === "designations"
-                ? "bg-primary/15 text-primary"
-                : "bg-muted text-muted-foreground"
-            )}
-          >
-            {designations?.length ?? 0}
-          </span>
-        </button>
+        {/* Designations tab hidden for this rollout — model/API/dialogs
+            below stay intact, just unreachable since nothing can set
+            activeTab to "designations" anymore. */}
       </div>
 
       {/* Tab Panels */}

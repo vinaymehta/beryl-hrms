@@ -1,6 +1,6 @@
 module Ai
   class ResumeParser
-    PROMPT_VERSION = "v2".freeze
+    PROMPT_VERSION = "v3".freeze
 
     def self.parse(raw_text, resume: nil, provider: nil)
       new(provider: provider).parse(raw_text, resume: resume)
@@ -58,6 +58,10 @@ module Ai
         notice_period: extract_scalar(raw_cand["notice_period"]),
         industry: extract_scalar(raw_cand["industry"]),
         languages: Array(extract_scalar(raw_cand["languages"])),
+        academic_percentage: extract_scalar(raw_cand["academic_percentage"]),
+        academic_cgpa: extract_scalar(raw_cand["academic_cgpa"]),
+        graduation_year: extract_scalar(raw_cand["graduation_year"]),
+        active_backlogs: extract_boolean_scalar(raw_cand["active_backlogs"]),
         skills: Array(raw_cand["skills"]),
         qualifications: Array(raw_cand["qualifications"]),
         experiences: Array(raw_cand["experiences"]),
@@ -92,6 +96,17 @@ module Ai
       else
         field.presence
       end
+    end
+
+    # extract_scalar's `.presence` call would silently turn a confirmed
+    # `false` into `nil` (ActiveSupport's blank? treats `false` as blank) —
+    # fatal for a tri-state field like active_backlogs, where "confirmed no
+    # backlogs" (false) must never collapse into "unknown" (nil).
+    def extract_boolean_scalar(field)
+      return nil if field.nil?
+      val = field.is_a?(Hash) ? field["value"] : field
+      return nil unless [true, false].include?(val)
+      val
     end
 
     def empty_result

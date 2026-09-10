@@ -8,6 +8,10 @@ module Api
         def stats
           candidates = policy_scope(Candidate)
           resumes = policy_scope(CandidateResume)
+          # "Real" resumes only — same default scope resumes_controller#index
+          # uses (attachments the AI ruled out, and repeat submissions of a
+          # file already on file, don't count as resumes here either).
+          real_resumes = resumes.where.not(processing_status: [ :not_a_resume, :duplicate ])
 
           render json: {
             data: {
@@ -23,7 +27,14 @@ module Api
               # real proxy available.
               hiredThisMonth: candidates.where(status: :offered)
                                         .where("candidates.updated_at >= ?", Time.current.beginning_of_month)
-                                        .count
+                                        .count,
+              # Recruitment Quick Stats (resume-oriented, per current UI) —
+              # each counts real resumes by their linked candidate's
+              # deterministic eligibility status.
+              totalResumes: real_resumes.count,
+              needsReviewResumes: real_resumes.joins(:candidate).where(candidates: { status: :needs_review }).count,
+              shortlistedResumes: real_resumes.joins(:candidate).where(candidates: { status: :shortlisted }).count,
+              rejectedResumes: real_resumes.joins(:candidate).where(candidates: { status: :rejected }).count
             }
           }
         end

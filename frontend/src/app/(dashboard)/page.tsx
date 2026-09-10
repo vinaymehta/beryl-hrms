@@ -1,63 +1,31 @@
 "use client"
 
 import Link from "next/link"
-import { UsersIcon, Building2Icon, CalendarDaysIcon, ClockIcon, TrendingUpIcon, ActivityIcon, ArrowUpRightIcon } from "lucide-react"
-import { cn } from "cn"
+import { UsersIcon, Building2Icon, TrendingUpIcon, ArrowUpRightIcon } from "lucide-react"
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { RoleBadge } from "@/components/layout/role-badge"
-import { AttendanceOverviewChart } from "@/features/dashboard/components/attendance-overview-chart"
 import { useCurrentUser } from "@/features/auth/hooks/use-current-user"
 import { useDashboardSummary } from "@/features/dashboard/hooks/use-dashboard-summary"
-
-const ICON_TINT_CLASSES: Record<string, string> = {
-  "role-hr": "bg-role-hr text-role-hr-foreground",
-  warning: "bg-warning text-warning-foreground",
-  info: "bg-info text-info-foreground",
-}
-
-const WASH_CLASSES: Record<string, string> = {
-  "role-hr": "bg-role-hr/10 border-role-hr/15",
-  warning: "bg-warning/10 border-warning/15",
-  info: "bg-info/10 border-info/15",
-}
 
 export default function DashboardPage() {
   const { user, isLoading } = useCurrentUser()
   const { data: summary, isLoading: isSummaryLoading } = useDashboardSummary()
 
-  // One highlighted "hero" metric (solid brand fill) + three lighter
-  // info-panel metrics with distinct tinted icon chips — deliberately not
-  // four identical white rectangles (see docs/DESIGN_SYSTEM.md "Cards").
-  // Employees/Departments are real counts; the other two have no backing
-  // model yet (Attendance/Leave arrive in Phase 5) so they stay an honest
-  // placeholder rather than a faked number.
+  // One highlighted "hero" metric (solid brand fill) + a lighter info-panel
+  // metric — deliberately not identical white rectangles (see
+  // docs/DESIGN_SYSTEM.md "Cards"). Attendance/Leave widgets are hidden for
+  // this rollout (see src/constants/feature-flags.ts) without touching the
+  // summary API those fields still come from.
   const heroValue = isSummaryLoading ? null : (summary?.employeeCount ?? 0)
   const HERO_STAT = { label: "Employees", value: heroValue, icon: UsersIcon, href: "/employees" }
-  const PANEL_STATS = [
-    {
-      label: "Departments",
-      value: isSummaryLoading ? null : (summary?.departmentCount ?? 0),
-      icon: Building2Icon,
-      tint: "role-hr" as const,
-      href: "/departments",
-    },
-    {
-      label: "On leave today",
-      value: isSummaryLoading ? null : (summary?.onLeaveToday ?? 0),
-      icon: CalendarDaysIcon,
-      tint: "warning" as const,
-      href: "/leave",
-    },
-    {
-      label: "Pending approvals",
-      value: isSummaryLoading ? null : (summary?.pendingApprovals ?? 0),
-      icon: ClockIcon,
-      tint: "info" as const,
-      href: "/leave",
-    },
-  ]
+  const DEPARTMENTS_STAT = {
+    label: "Departments",
+    value: isSummaryLoading ? null : (summary?.departmentCount ?? 0),
+    icon: Building2Icon,
+    href: "/departments",
+  }
 
   return (
     <div className="grid gap-6">
@@ -81,7 +49,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         {/* One consistent counting-card layout across the app: a tinted icon
             chip on the left, the number on the right, then the label below
             — see the KPI cards in Mail and Recruitment for the same pattern. */}
@@ -107,46 +75,28 @@ export default function DashboardPage() {
           </Card>
         </Link>
 
-        {PANEL_STATS.map((stat) => (
-          <Link key={stat.label} href={stat.href} className="group block h-full">
-            <Card className={cn("h-full border cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5", WASH_CLASSES[stat.tint])}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className={cn("flex size-9 items-center justify-center rounded-xl transition-colors", ICON_TINT_CLASSES[stat.tint])}>
-                    <stat.icon className="size-4.5" />
-                  </span>
-                  <div className="text-3xl font-bold text-foreground">
-                    {stat.value === null ? <Skeleton className="h-8 w-10" /> : stat.value}
-                  </div>
+        <Link href={DEPARTMENTS_STAT.href} className="group block h-full">
+          <Card className="h-full border cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 bg-role-hr/10 border-role-hr/15">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex size-9 items-center justify-center rounded-xl bg-role-hr text-role-hr-foreground transition-colors">
+                  <DEPARTMENTS_STAT.icon className="size-4.5" />
+                </span>
+                <div className="text-3xl font-bold text-foreground">
+                  {DEPARTMENTS_STAT.value === null ? <Skeleton className="h-8 w-10" /> : DEPARTMENTS_STAT.value}
                 </div>
-                <p className="mt-2 flex items-center gap-1.5 text-xs text-foreground/70">
-                  <span>{stat.label}</span>
-                  <ArrowUpRightIcon className="size-3 opacity-0 group-hover:opacity-100 text-primary transition-opacity" />
-                </p>
-                <p className="mt-2 text-[11px] text-foreground/70 group-hover:text-primary transition-colors">
-                  View details →
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+              </div>
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-foreground/70">
+                <span>{DEPARTMENTS_STAT.label}</span>
+                <ArrowUpRightIcon className="size-3 opacity-0 group-hover:opacity-100 text-primary transition-opacity" />
+              </p>
+              <p className="mt-2 text-[11px] text-foreground/70 group-hover:text-primary transition-colors">
+                View details →
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
-
-      <Card className="overflow-hidden">
-        <div className="h-1 bg-gradient-to-r from-role-hr to-info" />
-        <CardHeader className="flex-row items-center justify-between space-y-0">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <ActivityIcon className="size-4 text-role-hr" />
-              Attendance this week
-            </CardTitle>
-            <CardDescription>Daily present headcount for the current week.</CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <AttendanceOverviewChart data={summary?.weeklyAttendance} />
-        </CardContent>
-      </Card>
     </div>
   )
 }

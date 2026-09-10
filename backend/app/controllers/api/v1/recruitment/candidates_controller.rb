@@ -151,7 +151,16 @@ module Api
             createdAt: c.created_at.iso8601,
             skills: c.candidate_skills.limit(5).map(&:name),
             hasResume: latest.present?,
-            latestResumeId: latest&.id&.to_s
+            latestResumeId: latest&.id&.to_s,
+            # Deterministic eligibility facts (tri-state: null = unconfirmed,
+            # never coerced to a pass/fail) — see Recruitment::EligibilityEvaluator.
+            academicPercentage: c.academic_percentage&.to_f,
+            academicCgpa: c.academic_cgpa&.to_f,
+            graduationYear: c.graduation_year,
+            activeBacklogs: c.active_backlogs,
+            criteriaMatchPercentage: latest&.criteria_match_percentage,
+            atsScore: latest&.ats_score,
+            resumeDate: latest&.created_at&.iso8601
           }
         end
 

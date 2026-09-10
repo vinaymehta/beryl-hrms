@@ -38,6 +38,10 @@ interface CandidatesViewProps {
 }
 
 export function CandidatesView({ initialStatus = "" }: CandidatesViewProps) {
+  // The Shortlisted tab reuses this view (initialStatus="shortlisted") but
+  // shows the four deterministic eligibility facts plus Criteria Match %/
+  // ATS Score inline, since those are exactly why a candidate is here.
+  const isShortlistedView = initialStatus === "shortlisted"
   const [search, setSearch] = useState("")
   const [city, setCity] = useState("")
   const [state, setState] = useState("")
@@ -148,9 +152,6 @@ export function CandidatesView({ initialStatus = "" }: CandidatesViewProps) {
     { label: "All Candidates", value: "" },
     { label: "Needs Review", value: "needs_review" },
     { label: "Shortlisted", value: "shortlisted" },
-    { label: "Screening", value: "screening" },
-    { label: "Interviewing", value: "interviewing" },
-    { label: "Offered", value: "offered" },
     { label: "Rejected", value: "rejected" },
   ]
 
@@ -352,29 +353,33 @@ export function CandidatesView({ initialStatus = "" }: CandidatesViewProps) {
         {/* Status Tabs — each pill uses the same semantic color as its
             status badge elsewhere in the app (candidate rows, dashboard
             pipeline), so the active state reads as that status's color
-            rather than a uniform violet regardless of which one is picked. */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b text-xs">
-          {statusPills.map((p) => {
-            const isActive = status === p.value
-            const activeColor = p.value ? statusColors[p.value] : "bg-primary/10 text-primary border-primary/30"
-            return (
-              <button
-                key={p.value}
-                onClick={() => {
-                  setStatus(p.value)
-                  setPage(1)
-                }}
-                className={`rounded-md border px-3 py-1.5 font-medium whitespace-nowrap transition-colors ${
-                  isActive
-                    ? activeColor
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                }`}
-              >
-                {p.label}
-              </button>
-            )
-          })}
-        </div>
+            rather than a uniform violet regardless of which one is picked.
+            Hidden on the Shortlisted tab — that view has one fixed purpose
+            (shortlisted candidates only), not a status switcher. */}
+        {!isShortlistedView && (
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b text-xs">
+            {statusPills.map((p) => {
+              const isActive = status === p.value
+              const activeColor = p.value ? statusColors[p.value] : "bg-primary/10 text-primary border-primary/30"
+              return (
+                <button
+                  key={p.value}
+                  onClick={() => {
+                    setStatus(p.value)
+                    setPage(1)
+                  }}
+                  className={`rounded-md border px-3 py-1.5 font-medium whitespace-nowrap transition-colors ${
+                    isActive
+                      ? activeColor
+                      : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Candidate List */}
@@ -429,6 +434,16 @@ export function CandidatesView({ initialStatus = "" }: CandidatesViewProps) {
                 <TableHead>Location</TableHead>
                 <TableHead>Experience</TableHead>
                 <TableHead>Qualification</TableHead>
+                {isShortlistedView && (
+                  <>
+                    <TableHead>Marks</TableHead>
+                    <TableHead>Grad. Year</TableHead>
+                    <TableHead>Backlogs</TableHead>
+                    <TableHead>Criteria Match</TableHead>
+                    <TableHead>ATS Score</TableHead>
+                    <TableHead>Resume Date</TableHead>
+                  </>
+                )}
                 <TableHead>Skills</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -489,6 +504,26 @@ export function CandidatesView({ initialStatus = "" }: CandidatesViewProps) {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{candidate.experienceYears} yrs</TableCell>
                   <TableCell className="text-muted-foreground">{candidate.highestQualification || "—"}</TableCell>
+                  {isShortlistedView && (
+                    <>
+                      <TableCell className="text-muted-foreground">
+                        {candidate.academicPercentage != null ? `${candidate.academicPercentage}%` : "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{candidate.graduationYear ?? "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {candidate.activeBacklogs === false ? "None" : candidate.activeBacklogs === true ? "Active" : "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {candidate.criteriaMatchPercentage != null ? `${candidate.criteriaMatchPercentage}%` : "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {candidate.atsScore != null ? `ATS Score: ${candidate.atsScore}` : "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {candidate.resumeDate ? new Date(candidate.resumeDate).toLocaleDateString() : "—"}
+                      </TableCell>
+                    </>
+                  )}
                   <TableCell>
                     {candidate.skills && candidate.skills.length > 0 ? (
                       <div className="flex flex-wrap gap-1 max-w-56">

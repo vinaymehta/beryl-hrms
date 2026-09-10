@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_09_062251) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_10_070444) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -174,11 +174,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_062251) do
 
   create_table "candidate_resumes", force: :cascade do |t|
     t.jsonb "ai_metadata", default: {}
+    t.integer "ats_score"
     t.bigint "candidate_id"
     t.bigint "company_id", null: false
     t.string "content_type"
     t.datetime "created_at", null: false
+    t.integer "criteria_match_percentage"
     t.bigint "duplicate_of_id"
+    t.jsonb "eligibility_breakdown", default: {}
     t.text "error_message"
     t.jsonb "extracted_data", default: {}
     t.string "file_hash"
@@ -216,6 +219,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_062251) do
   end
 
   create_table "candidates", force: :cascade do |t|
+    t.decimal "academic_cgpa", precision: 4, scale: 2
+    t.decimal "academic_percentage", precision: 5, scale: 2
+    t.boolean "active_backlogs"
     t.string "city"
     t.bigint "company_id", null: false
     t.string "country"
@@ -227,6 +233,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_062251) do
     t.decimal "experience_years", precision: 4, scale: 1, default: "0.0", null: false
     t.string "first_name"
     t.string "full_name"
+    t.integer "graduation_year"
     t.string "highest_qualification"
     t.string "industry"
     t.jsonb "languages", default: [], null: false
