@@ -24,13 +24,30 @@ RSpec.describe ResumeExtractionJob, type: :job do
       resume.reload
       expect(resume.processing_status).to eq("completed")
       expect(resume.ai_metadata).to be_present
-      expect(resume.ai_metadata["prompt_version"]).to eq("v2")
+      expect(resume.ai_metadata["prompt_version"]).to eq(Ai::ResumeParser::PROMPT_VERSION)
 
       candidate = resume.candidate
       expect(candidate).to be_present
       expect(candidate.email).to eq("alice.dev@test.com")
-      expect(candidate.status).to eq("needs_review") # Human in the loop review state required!
       expect(candidate.candidate_skills.pluck(:name)).to include("Ruby")
+    end
+  end
+
+  # The evaluator has its own exhaustive spec; this pins the wiring — that
+  # the job actually runs it and persists the verdict onto both records.
+  it "stores the deterministic eligibility verdict on the resume and candidate" do
+    described_class.new.perform(resume.id)
+
+    ActsAsTenant.with_tenant(company) do
+      resume.reload
+      # The fixture graduates in 2020 with no marks stated, so: accepted
+      # qualification and no backlog mentioned, but the year is too old and
+      # the marks are unreadable — 2 of 4 confirmed, so not shortlisted.
+      expect(resume.eligibility_breakdown).to include(
+        "qualification" => true, "graduation_year" => false, "marks" => nil, "backlog" => true
+      )
+      expect(resume.criteria_match_percentage).to eq(50)
+      expect(resume.candidate.status).to eq("rejected")
     end
   end
 
@@ -106,10 +123,11 @@ RSpec.describe ResumeExtractionJob, type: :job do
   it "logs a success entry to the AI audit trail" do
     expect {
       described_class.new.perform(resume.id)
-    }.to change { ActsAsTenant.with_tenant(company) { AiProcessingLog.count } }.by(1)
+      # Scoped to the parse operation: the pipeline also scores the resume
+      # for ATS, which logs its own entry.
+    }.to change { ActsAsTenant.with_tenant(company) { AiProcessingLog.where(operation: "resume_parse").count } }.by(1)
 
-    log = ActsAsTenant.with_tenant(company) { AiProcessingLog.last }
-    expect(log.operation).to eq("resume_parse")
+    log = ActsAsTenant.with_tenant(company) { AiProcessingLog.where(operation: "resume_parse").last }
     expect(log.status).to eq("success")
     expect(log.provider).to eq("mock")
   end

@@ -1,6 +1,6 @@
 module Ai
   class ResumeParser
-    PROMPT_VERSION = "v3".freeze
+    PROMPT_VERSION = "v4".freeze
 
     def self.parse(raw_text, resume: nil, provider: nil)
       new(provider: provider).parse(raw_text, resume: resume)

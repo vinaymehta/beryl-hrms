@@ -28,9 +28,13 @@ module Ai
     private
 
     def mock_resume_parsing_response(prompt)
-      # Extract some keywords from prompt if present
-      email = prompt[/[\w.+-]+@[\w-]+\.[\w.-]+/] || "candidate@example.com"
-      name = prompt[/([A-Z][a-z]+ [A-Z][a-z]+)/] || "Alex Rivera"
+      # Scrape the resume itself, never the instruction template that
+      # precedes it: the template's own examples (field names like "Computer
+      # Science") would otherwise be read as the candidate's name, making
+      # every mocked result depend on the current prompt's wording.
+      document = prompt.split("DOCUMENT TEXT TO ANALYZE:").last.to_s
+      email = document[/[\w.+-]+@[\w-]+\.[\w.-]+/] || "candidate@example.com"
+      name = document[/([A-Z][a-z]+ [A-Z][a-z]+)/] || "Alex Rivera"
 
       {
         candidate: {

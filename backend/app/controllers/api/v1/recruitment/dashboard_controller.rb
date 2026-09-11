@@ -36,7 +36,11 @@ module Api
               totalResumes: real_resumes.count,
               needsReviewResumes: real_resumes.eligibility_needs_review.count,
               shortlistedResumes: real_resumes.eligibility_shortlisted.count,
-              rejectedResumes: real_resumes.eligibility_rejected.count
+              rejectedResumes: real_resumes.eligibility_rejected.count,
+              # "Other" — attachments the AI determined weren't resumes at
+              # all, excluded from every count above; surfaced here so
+              # they're not just silently dropped from the Quick Stats.
+              otherResumes: resumes.where(processing_status: :not_a_resume).count
             }
           }
         end

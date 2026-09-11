@@ -17,11 +17,11 @@ import type { CandidateStatus } from "@/types/recruitment"
 import {
   UsersIcon,
   FileTextIcon,
-  SparklesIcon,
   StarIcon,
   XCircleIcon,
   RefreshCwIcon,
   MailSearchIcon,
+  FileQuestionIcon,
   type LucideIcon,
 } from "lucide-react"
 
@@ -115,6 +115,16 @@ export function RecruitmentWorkspace() {
       wash: "bg-red-500/10 border-red-500/15",
       onClick: () => openResumesByCandidateStatus("rejected"),
     },
+    {
+      key: "other",
+      label: "Other",
+      value: stats?.otherResumes,
+      caption: "Not a resume",
+      icon: FileQuestionIcon,
+      iconTint: "bg-slate-500 text-white",
+      wash: "bg-slate-500/10 border-slate-500/15",
+      onClick: () => navigateTab("resumes", "not_a_resume"),
+    },
     // Hired KPI/action hidden for this rollout — `hiredThisMonth` and the
     // `offered` status stay fully intact in the backend.
   ]
@@ -122,18 +132,21 @@ export function RecruitmentWorkspace() {
   // Dashboard/Candidates/Job Matching stay fully implemented (components,
   // routes, and their "View all" targets from navigateTab below) but are
   // hidden from this tab bar for the current rollout — not deleted.
-  const tabs = [
-    {
-      id: "resumes",
-      label: "Resumes",
-      icon: FileTextIcon,
-      badge: stats?.newResumes ? `+${stats.newResumes}` : undefined,
-    },
-    {
-      id: "search",
-      label: "AI Discovery",
-      icon: SparklesIcon,
-    },
+  // Resumes/AI Discovery tabs commented out per request — activeTab still
+  // defaults to "resumes" below, so that view keeps rendering by default
+  // with no visible tab bar to switch away from it.
+  const tabs: { id: string; label: string; icon: LucideIcon; badge?: string }[] = [
+    // {
+    //   id: "resumes",
+    //   label: "Resumes",
+    //   icon: FileTextIcon,
+    //   badge: stats?.newResumes ? `+${stats.newResumes}` : undefined,
+    // },
+    // {
+    //   id: "search",
+    //   label: "AI Discovery",
+    //   icon: SparklesIcon,
+    // },
     // Shortlisted tab hidden — reachable via the "Shortlisted Resumes" Quick
     // Stat card instead, same as Needs Review/Rejected (filters Resumes by
     // candidate status rather than being its own tab). CandidatesView/the
@@ -219,7 +232,9 @@ export function RecruitmentWorkspace() {
         </div>
       </div>
 
-      {/* Workspace Navigation Bar */}
+      {/* Workspace Navigation Bar — omitted entirely while there are no
+          visible tabs, rather than rendering an empty bordered bar. */}
+      {tabs.length > 0 && (
       <div className="relative border-b">
         <div className="flex items-center gap-5 overflow-x-auto">
           {tabs.map((tab) => {
@@ -253,6 +268,7 @@ export function RecruitmentWorkspace() {
             below the breakpoint where all tabs fit without scrolling. */}
         <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background to-transparent lg:hidden" />
       </div>
+      )}
 
       {/* Tab Panels */}
       <div>

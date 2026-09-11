@@ -1,13 +1,20 @@
 "use client"
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmployeeStatusBadge } from "@/features/employees/components/employee-status-badge"
 import type { Employee } from "@/types/employees"
 
 function initials(first: string, last: string) {
   return `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase()
+}
+
+// profilePhotoUrl is a path-only Active Storage blob route (served at the
+// backend's app root, not under /api/v1).
+function photoUrl(path: string | null) {
+  if (!path) return undefined
+  return `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"}${path}`
 }
 
 // Plain mapped table, not TanStack Table: the list is already paginated/
@@ -64,6 +71,9 @@ export function EmployeeTable({
               <TableCell>
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Avatar size="sm">
+                    {employee.profilePhotoUrl && (
+                      <AvatarImage src={photoUrl(employee.profilePhotoUrl)} alt={`${employee.firstName} ${employee.lastName}`} />
+                    )}
                     <AvatarFallback className="bg-role-hr/12 text-[11px] text-role-hr">
                       {initials(employee.firstName, employee.lastName)}
                     </AvatarFallback>

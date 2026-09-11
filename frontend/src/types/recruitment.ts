@@ -214,6 +214,7 @@ export interface RecruitmentDashboardStats {
   needsReviewResumes: number
   shortlistedResumes: number
   rejectedResumes: number
+  otherResumes: number
 }
 
 export interface RecruitmentAnalytics {

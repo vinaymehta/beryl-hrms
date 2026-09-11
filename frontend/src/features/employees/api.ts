@@ -21,7 +21,11 @@ export const employeesApi = {
   get: (id: string) => apiClient.get<Employee>(`/employees/${id}`),
   create: (values: EmployeeFormValues) => apiClient.post<Employee>("/employees", values),
   update: (id: string, values: Partial<EmployeeFormValues>) => apiClient.patch<Employee>(`/employees/${id}`, values),
-  deactivate: (id: string) => apiClient.patch<Employee>(`/employees/${id}`, { status: "inactive" }),
+  // Hits the dedicated /deactivate endpoint (not the plain update route) so
+  // it goes through its own permission check (employees.delete) and its own
+  // audit trail entry, in both directions — status: "active" reactivates.
+  deactivate: (id: string, status: "active" | "inactive" = "inactive") =>
+    apiClient.patch<Employee>(`/employees/${id}/deactivate`, { status }),
   reactivate: (id: string) => apiClient.patch<Employee>(`/employees/${id}`, { status: "active" }),
 }
 

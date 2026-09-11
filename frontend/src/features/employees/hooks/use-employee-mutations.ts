@@ -38,12 +38,24 @@ export function useUpdateEmployee(id: string) {
 export function useDeactivateEmployee() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) => employeesApi.deactivate(id),
+    mutationFn: (id: string) => employeesApi.deactivate(id, "inactive"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["employees"] })
       toast.success("Employee deactivated.")
     },
     onError: (error) => toast.error(errorMessage(error, "Couldn't deactivate that employee.")),
+  })
+}
+
+export function useReactivateEmployee() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => employeesApi.deactivate(id, "active"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["employees"] })
+      toast.success("Employee reactivated.")
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't reactivate that employee.")),
   })
 }
 

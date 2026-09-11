@@ -199,10 +199,12 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
     duplicate: "bg-violet-500/10 text-violet-600 border-violet-500/30",
   }
 
+  // "Not a Resume" isn't a pill here anymore — it now lives behind its own
+  // "Other" Quick Stat card (see recruitment-workspace.tsx), so it isn't
+  // duplicated as a filter option in this general-purpose row too.
   const statusPills = [
     { label: "All Resumes", value: "" },
-    { label: "Needs Retry / Failed", value: "failed" },
-    { label: "Not a Resume", value: "not_a_resume" },
+    { label: "Needs Attention", value: "failed" },
     { label: "Duplicate", value: "duplicate" },
   ]
 
@@ -285,9 +287,11 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
         {/* Status Tabs — active pill uses the same semantic color as its
             status badge on each resume row, instead of a uniform violet.
             Hidden while a candidate-status filter (Needs Review/Rejected,
-            from the Quick Stats cards) is active — that's already a fixed,
-            single-purpose view, not a processing-status switcher. */}
-        {!candidateStatus && (
+            from the Quick Stats cards) is active, or when this view was
+            opened via the "Other" Quick Stat card (initialStatus ===
+            "not_a_resume") — both are already fixed, single-purpose views,
+            not a processing-status switcher. */}
+        {!candidateStatus && initialStatus !== "not_a_resume" && (
           <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b text-xs">
             {statusPills.map((p) => {
               const isActive = status === p.value

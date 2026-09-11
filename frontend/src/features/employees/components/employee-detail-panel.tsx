@@ -18,9 +18,8 @@ export function EmployeeDetailPanel({ employeeId, open, onOpenChange }: Employee
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full overflow-y-auto sm:w-[45vw] sm:min-w-180 sm:max-w-275">
-        {/* pt-12 clears the Sheet's absolutely-positioned close button —
-            EmployeeDetailContent's header puts Edit/Deactivate in the same
-            top-right corner the close button occupies. */}
+        {/* pt-12 clears the Sheet's absolutely-positioned close button, which
+            would otherwise sit on top of the gradient header card. */}
         <div className="p-4 pt-12">{employeeId && <EmployeeDetailContent employeeId={employeeId} />}</div>
       </SheetContent>
     </Sheet>

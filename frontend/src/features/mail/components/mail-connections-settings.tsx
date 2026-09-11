@@ -5,13 +5,11 @@ import { BuildingIcon, MailIcon, PlugIcon, UnplugIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { usePermission } from "@/features/auth/hooks/use-permission"
 import {
   useConnectMailbox,
   useDisconnectMailbox,
   useMailConnections,
 } from "@/features/mail/hooks/use-mail-connections"
-import { PERMISSIONS } from "@/constants/permissions"
 import type { MailConnection, MailConnectionStatus } from "@/types/mail"
 
 const STATUS_BADGE: Record<MailConnectionStatus, { label: string; className: string }> = {
@@ -60,7 +58,6 @@ function ConnectionRow({ connection }: { connection: MailConnection }) {
 export function MailConnectionsSettings() {
   const { data: connections, isLoading } = useMailConnections()
   const connect = useConnectMailbox()
-  const canManageCompanyMailbox = usePermission(PERMISSIONS.zohoConnectionsManage)
 
   if (isLoading) {
     return (
@@ -69,6 +66,8 @@ export function MailConnectionsSettings() {
       </div>
     )
   }
+
+  const hasActiveConnection = connections?.some((c) => c.status === "active") ?? false
 
   return (
     <div className="grid gap-4">
@@ -83,14 +82,14 @@ export function MailConnectionsSettings() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled={connect.isPending} onClick={() => connect.mutate("individual")}>
-          <PlugIcon /> Connect my mailbox
+        <Button
+          variant="outline"
+          disabled={connect.isPending || hasActiveConnection}
+          onClick={() => connect.mutate("individual")}
+          title={hasActiveConnection ? "A mailbox is already connected — disconnect it first to connect a different one." : undefined}
+        >
+          <PlugIcon /> Connect to mailbox
         </Button>
-        {canManageCompanyMailbox && (
-          <Button variant="outline" disabled={connect.isPending} onClick={() => connect.mutate("company_managed")}>
-            <BuildingIcon /> Connect company mailbox
-          </Button>
-        )}
       </div>
     </div>
   )

@@ -32,7 +32,7 @@ import { MessageList, MessageListSkeleton } from "@/features/mail/components/mes
 import { MessageReadingPane } from "@/features/mail/components/message-reading-pane"
 import { ComposeMailDialog } from "@/features/mail/components/compose-mail-dialog"
 import { MailReauthAlert, MailRateLimitedAlert } from "@/features/mail/components/mail-status-alert"
-import type { MailFolder, MailMessageDetail, MailMessageSummary } from "@/types/mail"
+import type { MailFolder, MailMessageSummary } from "@/types/mail"
 
 const PANE_HEIGHT = "h-[75vh] min-h-135"
 
@@ -77,7 +77,6 @@ export function MailWorkspace() {
   const [selectedSummary, setSelectedSummary] = useState<MailMessageSummary | undefined>(undefined)
 
   const [composeOpen, setComposeOpen] = useState(false)
-  const [replyData, setReplyData] = useState<{ to: string; subject: string; body: string } | null>(null)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
 
   const connection = connections?.[0]
@@ -166,16 +165,6 @@ export function MailWorkspace() {
     if (clicked && !clicked.isRead && connection?.id) {
       markReadMutation.mutate({ connectionId: connection.id, messageId: id, read: true })
     }
-  }
-
-  function handleReply(message: MailMessageDetail) {
-    const rawBody = message.body ? message.body.replace(/<[^>]*>/g, "").trim() : ""
-    setReplyData({
-      to: message.from,
-      subject: message.subject.startsWith("Re:") ? message.subject : `Re: ${message.subject}`,
-      body: `\n\n\n--- Original Message ---\nFrom: ${message.from}\nDate: ${new Date(message.receivedAt).toLocaleString()}\n\n${rawBody}`,
-    })
-    setComposeOpen(true)
   }
 
   const unreadFolderCounts: Record<string, number> = {
@@ -277,13 +266,7 @@ export function MailWorkspace() {
             <RefreshCwIcon className={`size-4 ${statsFetching ? "animate-spin" : ""}`} />
             Sync Now
           </Button>
-          <Button
-            onClick={() => {
-              setReplyData(null)
-              setComposeOpen(true)
-            }}
-            className="gap-1.5 shadow-xs cursor-pointer"
-          >
+          <Button onClick={() => setComposeOpen(true)} className="gap-1.5 shadow-xs cursor-pointer">
             <PenSquareIcon className="size-4" />
             Compose
           </Button>
@@ -448,21 +431,12 @@ export function MailWorkspace() {
             messageId={selectedId}
             listSummary={selectedSummary}
             onBack={() => setSelectedId(undefined)}
-            onReply={handleReply}
-            onDeleted={() => setSelectedId(undefined)}
           />
         </SheetContent>
       </Sheet>
 
       {/* Compose & Send Email Dialog */}
-      <ComposeMailDialog
-        open={composeOpen}
-        onOpenChange={setComposeOpen}
-        connectionId={connection.id}
-        defaultTo={replyData?.to || ""}
-        defaultSubject={replyData?.subject || ""}
-        defaultBody={replyData?.body || ""}
-      />
+      <ComposeMailDialog open={composeOpen} onOpenChange={setComposeOpen} connectionId={connection.id} />
     </div>
   )
 }

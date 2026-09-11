@@ -19,8 +19,7 @@ export function ConnectMailboxEmptyState() {
       </span>
       <h2 className="relative text-lg font-semibold">Connect your mailbox</h2>
       <p className="relative max-w-sm text-sm text-muted-foreground">
-        Connect a Zoho Mail account to read and search mail without leaving the app. You can
-        connect your own mailbox, or an admin can connect a shared company mailbox from Settings.
+        Connect a Zoho Mail account to read and search mail without leaving the app.
       </p>
       <Button
         className="relative mt-2"
@@ -28,7 +27,7 @@ export function ConnectMailboxEmptyState() {
         onClick={() => connect.mutate("individual")}
       >
         <PlugIcon />
-        {connect.isPending ? "Connecting…" : "Connect my mailbox"}
+        {connect.isPending ? "Connecting…" : "Connect to mailbox"}
       </Button>
     </div>
   )

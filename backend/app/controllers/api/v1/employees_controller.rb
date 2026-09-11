@@ -58,11 +58,17 @@ module Api
 
       # PATCH /api/v1/employees/:id/deactivate — the "delete" action, per the
       # spec's "prefer deactivation over destroying historical records."
+      # Also doubles as the reactivate action (status: "active") — same
+      # permission gate and audit trail apply either direction.
       def deactivate
         employee = policy_scope(Employee).find(params[:id])
         authorize employee, :deactivate?
-        employee.update!(status: params[:status].presence || :inactive)
-        ::Audit::Record.call(action: "employee.deactivated", auditable: employee, request: request)
+        new_status = params[:status].presence || :inactive
+        employee.update!(status: new_status)
+        ::Audit::Record.call(
+          action: new_status.to_s == "active" ? "employee.reactivated" : "employee.deactivated",
+          auditable: employee, request: request
+        )
         render_data(Api::V1::EmployeeSerializer.new(employee).as_json)
       end
 

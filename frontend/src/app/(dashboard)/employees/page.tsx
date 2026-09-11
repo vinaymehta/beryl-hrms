@@ -100,11 +100,16 @@ export default function EmployeesPage() {
               }
             />
           </div>
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t bg-background p-4">
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t bg-background p-4 shadow-[0_-1px_8px_rgba(0,0,0,0.04)]">
             <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" form="employee-form" disabled={createEmployee.isPending} className="gap-1.5">
+            <Button
+              type="submit"
+              form="employee-form"
+              disabled={createEmployee.isPending}
+              className="gap-1.5 bg-role-hr text-role-hr-foreground hover:bg-role-hr/90 shadow-2xs"
+            >
               <PlusIcon className="size-4" />
               {createEmployee.isPending ? "Adding…" : "Add Employee"}
             </Button>

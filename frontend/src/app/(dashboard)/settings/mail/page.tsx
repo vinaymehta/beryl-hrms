@@ -32,7 +32,7 @@ export default function SettingsMailPage() {
         <CardHeader>
           <CardTitle>Zoho Mail</CardTitle>
           <CardDescription>
-            Connect a personal mailbox, or a shared company mailbox if you manage this workspace.
+            Connect your Zoho Mail mailbox to send and receive email from this workspace.
           </CardDescription>
         </CardHeader>
         <CardContent>

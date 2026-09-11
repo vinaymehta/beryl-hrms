@@ -19,6 +19,13 @@ import { employeeFormSchema, type EmployeeFormValues } from "@/features/employee
 import { useDepartments, useDesignations } from "@/features/employees/hooks/use-employees"
 import type { Employee } from "@/types/employees"
 
+const GENDER_OPTIONS = [
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+  { value: "other", label: "Other" },
+  { value: "prefer_not_to_say", label: "Prefer not to say" },
+]
+
 function SectionHeader({ icon: Icon, title, subtitle }: { icon: LucideIcon; title: string; subtitle: string }) {
   return (
     <div className="flex items-center justify-between gap-3">
@@ -53,8 +60,13 @@ export function EmployeeForm({
       firstName: employee?.firstName ?? "",
       lastName: employee?.lastName ?? "",
       employeeCode: employee?.employeeCode ?? "",
-      departmentId: employee?.department?.id ?? "",
-      designationId: employee?.designation?.id ?? "",
+      // The API returns these as numeric ids — the form schema expects
+      // strings (to match what <Select> emits), and zod doesn't coerce, so
+      // leaving a raw number here failed validation silently on every
+      // existing employee (no FormMessage was wired to surface it), which
+      // is why Save looked like it did nothing.
+      departmentId: employee?.department?.id != null ? String(employee.department.id) : "",
+      designationId: employee?.designation?.id != null ? String(employee.designation.id) : "",
       dateOfJoining: employee?.dateOfJoining ?? "",
       dateOfBirth: employee?.dateOfBirth ?? "",
       gender: employee?.gender ?? "",
@@ -136,6 +148,27 @@ export function EmployeeForm({
               )}
             />
           </div>
+          <div className="grid gap-1.5">
+            <Label>Gender</Label>
+            <Select
+              items={GENDER_OPTIONS}
+              // `null` (not `undefined`) for "nothing selected" — Base UI's
+              // Select treats a value of `undefined` as "uncontrolled" on
+              // the first render, so switching to a string once a value is
+              // picked trips its controlled/uncontrolled warning. `null`
+              // matches the component's own `defaultValue = null` convention
+              // for "empty," keeping it controlled from the very first render.
+              value={form.watch("gender") || null}
+              onValueChange={(v) => form.setValue("gender", v ?? "")}
+            >
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select gender" /></SelectTrigger>
+              <SelectContent>
+                {GENDER_OPTIONS.map((g) => (
+                  <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </FormSection>
 
         <FormSection>
@@ -144,7 +177,8 @@ export function EmployeeForm({
             <div className="grid gap-1.5">
               <Label>Department</Label>
               <Select
-                value={form.watch("departmentId") || undefined}
+                items={departments?.map((d) => ({ value: String(d.id), label: d.name }))}
+                value={form.watch("departmentId") || null}
                 onValueChange={(v) => {
                   form.setValue("departmentId", v ?? undefined)
                   form.setValue("designationId", "")
@@ -153,7 +187,7 @@ export function EmployeeForm({
                 <SelectTrigger className="w-full"><SelectValue placeholder="Select department" /></SelectTrigger>
                 <SelectContent>
                   {departments?.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                    <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -161,13 +195,14 @@ export function EmployeeForm({
             <div className="grid gap-1.5">
               <Label>Designation</Label>
               <Select
-                value={form.watch("designationId") || undefined}
+                items={designations?.map((d) => ({ value: String(d.id), label: d.title }))}
+                value={form.watch("designationId") || null}
                 onValueChange={(v) => form.setValue("designationId", v ?? undefined)}
               >
                 <SelectTrigger className="w-full"><SelectValue placeholder="Select designation" /></SelectTrigger>
                 <SelectContent>
                   {designations?.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>{d.title}</SelectItem>
+                    <SelectItem key={d.id} value={String(d.id)}>{d.title}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -235,7 +270,20 @@ export function EmployeeForm({
               </FormItem>
             )}
           />
-          <div className="grid grid-cols-3 gap-3">
+          <FormField
+            control={form.control}
+            name="addressLine2"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Address line 2</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="Apartment, suite, unit, etc. (optional)" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <div className="grid grid-cols-2 gap-3">
             <FormField
               control={form.control}
               name="city"
@@ -264,6 +312,17 @@ export function EmployeeForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Postal code</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="country"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Country</FormLabel>
                   <FormControl><Input {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
