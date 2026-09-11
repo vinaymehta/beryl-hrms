@@ -190,10 +190,10 @@ module Api
         # POST /api/v1/recruitment/resumes/scan_zoho_mail
         # Permission-controlled: scans only the explicitly authorized Zoho
         # connection, and only within an HR-selected date range — scanning
-        # the whole mailbox is not allowed.
-        MAX_SCAN_PAGES = 20
-        SCAN_PAGE_SIZE = 25
-
+        # the whole mailbox is not allowed. This is the on-demand, ad-hoc
+        # counterpart to ZohoAutoScanJob — deliberately separate from it,
+        # and never touches that job's cursor. Both share the same
+        # underlying inbox walk via Recruitment::ZohoMailScanner.
         def scan_zoho_mail
           authorize CandidateResume, :create?
 
@@ -203,96 +203,25 @@ module Api
             render json: { errors: [{ message: "Please select a date range before scanning." }] }, status: :unprocessable_entity
             return
           end
-          range_start = from_date.beginning_of_day
-          range_end = to_date.end_of_day
 
           connection = resolve_connection!
           return unless connection
 
-          account_id = account_id_for(connection)
-
-          imported_count = 0
-          scanned_count = 0
-          skipped_duplicate_count = 0
-          skipped_non_resume_count = 0
-
-          MAX_SCAN_PAGES.times do |page_index|
-            messages_resp = zoho_client.list_messages(
-              access_token: connection.access_token,
-              account_id: account_id,
-              folder: "inbox",
-              page: page_index + 1,
-              limit: SCAN_PAGE_SIZE
-            )
-            messages = Array(messages_resp["data"])
-            break if messages.empty?
-
-            in_range = messages.select { |msg| message_received_at(msg).between?(range_start, range_end) }
-            scanned_count += in_range.size
-
-            in_range.each do |msg|
-              next unless msg["hasAttachment"].to_s == "1" || msg["hasAttachment"] == true || msg["attachments"].present?
-
-              full_msg = zoho_client.get_message(
-                access_token: connection.access_token,
-                account_id: account_id,
-                message_id: msg["messageId"],
-                folder_id: msg["folderId"]
-              )
-              attachments = Array(full_msg["attachments"])
-
-              attachments.each do |att|
-                name = att[:name].to_s.downcase
-                unless name.end_with?(".pdf", ".docx", ".doc") || name.include?("resume") || name.include?("cv")
-                  skipped_non_resume_count += 1
-                  next
-                end
-
-                att_id = att[:id]
-                if current_company.candidate_resumes.exists?(source_attachment_id: att_id)
-                  skipped_duplicate_count += 1
-                  next
-                end
-
-                file_data = zoho_client.download_attachment(
-                  access_token: connection.access_token,
-                  account_id: account_id,
-                  message_id: msg["messageId"],
-                  attachment_id: att_id
-                )
-
-                resume = current_company.candidate_resumes.create!(
-                  file_name: file_data[:filename] || att["attachmentName"],
-                  content_type: file_data[:content_type] || "application/pdf",
-                  file_size: file_data[:body].bytesize,
-                  source: "zoho_mail",
-                  source_email_id: msg["messageId"],
-                  source_attachment_id: att_id,
-                  processing_status: :pending
-                )
-
-                resume.file.attach(
-                  io: StringIO.new(file_data[:body]),
-                  filename: resume.file_name,
-                  content_type: resume.content_type
-                )
-
-                ResumeProcessingJob.perform_later(resume.id)
-                imported_count += 1
-              end
-            end
-
-            # Inbox is listed newest-first — once an entire page is older
-            # than the requested range, nothing further back is in range.
-            break if messages.all? { |msg| message_received_at(msg) < range_start }
-          end
+          result = ::Recruitment::ZohoMailScanner.call(
+            company: current_company,
+            connection: connection,
+            account_id: account_id_for(connection),
+            from: from_date.beginning_of_day,
+            to: to_date.end_of_day,
+            zoho_client: zoho_client
+          )
 
           render json: {
             data: {
-              scannedMessages: scanned_count,
-              detectedResumes: imported_count,
-              skippedDuplicateAttachments: skipped_duplicate_count,
-              skippedNonResumeAttachments: skipped_non_resume_count
+              scannedMessages: result.scanned_messages,
+              detectedResumes: result.detected_resumes,
+              skippedDuplicateAttachments: result.skipped_duplicate_attachments,
+              skippedNonResumeAttachments: result.skipped_non_resume_attachments
             }
           }
         rescue ::Zoho::TokenExpiredError, ::Zoho::RateLimitedError, ::Zoho::ApiError,
@@ -327,11 +256,6 @@ module Api
 
         # Same receivedTime (epoch ms) field Zoho::MessagePresenter already
         # relies on for the mail workspace's own date display.
-        def message_received_at(msg)
-          ms = msg["receivedTime"].to_i
-          ms > 0 ? Time.at(ms / 1000.0) : Time.current
-        end
-
         def resume_summary(r)
           {
             id: r.id.to_s,

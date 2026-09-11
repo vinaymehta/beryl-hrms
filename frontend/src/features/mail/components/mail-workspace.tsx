@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   MailIcon,
   InboxIcon,
@@ -13,6 +13,7 @@ import {
   MailCheckIcon,
   Trash2Icon,
   XIcon,
+  FilterIcon,
   type LucideIcon,
 } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
@@ -32,6 +33,14 @@ import { MessageList, MessageListSkeleton } from "@/features/mail/components/mes
 import { MessageReadingPane } from "@/features/mail/components/message-reading-pane"
 import { ComposeMailDialog } from "@/features/mail/components/compose-mail-dialog"
 import { MailReauthAlert, MailRateLimitedAlert } from "@/features/mail/components/mail-status-alert"
+import { MailDateFilter } from "@/features/mail/components/mail-date-filter"
+import {
+  DEFAULT_MAIL_DATE_RANGE_PRESET,
+  MAIL_DATE_RANGE_PRESETS,
+  resolveMailDateRange,
+  type MailDateRange,
+  type MailDateRangePreset,
+} from "@/features/mail/lib/mail-date-ranges"
 import type { MailFolder, MailMessageSummary } from "@/types/mail"
 
 const PANE_HEIGHT = "h-[75vh] min-h-135"
@@ -56,12 +65,110 @@ interface Kpi {
   key: string
   label: string
   value: number | undefined
+  /** True when value is a lower bound, not an exact count — rendered as
+   *  "N+" instead of a falsely-precise "N" (see MailStats capped fields). */
+  capped?: boolean
   caption?: string
   captionTone?: "muted" | "attention"
   icon: LucideIcon
   iconTint: string
   wash: string
   onClick?: () => void
+}
+
+/** Compact trigger button, styled to match the "Filters" pill used
+ *  elsewhere (Resumes list / Scan Mail) — sits in the header next to Sync
+ *  Now / Compose. There is always an active range (the Default 15-day
+ *  window on load), so the button names it rather than showing a badge. */
+function MailFilterButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      data-filter-trigger
+      onClick={onClick}
+      className={cn("h-8 gap-1.5 rounded-full text-xs", active && "border-accent-mail text-accent-mail bg-accent-mail/5")}
+    >
+      <FilterIcon className="size-3.5" />
+      {label}
+    </Button>
+  )
+}
+
+/**
+ * The Mail page's date filter — the single source of truth for which slice
+ * of history is fetched from Zoho. Applying a range re-fetches exactly that
+ * range (message list and every count), stores nothing, and never touches
+ * ZohoAutoScanJob, which keeps picking up only newly received mail on its
+ * own cursor regardless of what is selected here.
+ */
+function MailFilterPanel({
+  preset: initialPreset,
+  customFrom: initialCustomFrom,
+  customTo: initialCustomTo,
+  onApply,
+  onClose,
+}: {
+  preset: MailDateRangePreset
+  customFrom: string
+  customTo: string
+  onApply: (next: { preset: MailDateRangePreset; customFrom: string; customTo: string; range: MailDateRange }) => void
+  onClose: () => void
+}) {
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [preset, setPreset] = useState<MailDateRangePreset>(initialPreset)
+  const [customFrom, setCustomFrom] = useState(initialCustomFrom)
+  const [customTo, setCustomTo] = useState(initialCustomTo)
+  const [resolvedRange, setResolvedRange] = useState<MailDateRange | null>(
+    resolveMailDateRange(initialPreset, { from: initialCustomFrom, to: initialCustomTo })
+  )
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as Node
+      if (panelRef.current?.contains(target)) return
+      // The Select's dropdown options render in a portal attached to
+      // document.body, outside panelRef's DOM subtree entirely — without
+      // this check, picking a preset registers as an "outside" click and
+      // closes the whole popover before Apply can ever be pressed.
+      if (target instanceof Element && (target.closest('[data-slot="select-content"]') || target.closest('[data-filter-trigger]'))) return
+      onClose()
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [onClose])
+
+  function handleApply() {
+    if (!resolvedRange) return
+    onApply({ preset, customFrom, customTo, range: resolvedRange })
+    onClose()
+  }
+
+  return (
+    <div
+      ref={panelRef}
+      className="absolute right-0 top-full z-50 mt-2 flex w-max flex-col gap-2 rounded-lg bg-popover p-3 text-popover-foreground shadow-lg ring-1 ring-foreground/10"
+    >
+      <p className="whitespace-nowrap text-xs font-medium text-foreground">Show mail from</p>
+      <div className="flex items-start gap-2">
+        <MailDateFilter
+          preset={preset}
+          customFrom={customFrom}
+          customTo={customTo}
+          onChange={({ preset: p, customFrom: f, customTo: t, resolved }) => {
+            setPreset(p)
+            setCustomFrom(f)
+            setCustomTo(t)
+            setResolvedRange(resolved)
+          }}
+        />
+        <Button size="sm" className="h-8 shrink-0 text-xs" disabled={!resolvedRange} onClick={handleApply}>
+          Apply
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 export function MailWorkspace() {
@@ -78,11 +185,40 @@ export function MailWorkspace() {
 
   const [composeOpen, setComposeOpen] = useState(false)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
+  const [rangeFilterOpen, setRangeFilterOpen] = useState(false)
+
+  // The single source of truth for how much mail history is fetched from
+  // Zoho — defaults to the last 15 days, drives both the message list and
+  // every KPI count, and is stored nowhere. Automatic new-mail scanning
+  // runs off its own cursor and is completely unaffected by this.
+  const [datePreset, setDatePreset] = useState<MailDateRangePreset>(DEFAULT_MAIL_DATE_RANGE_PRESET)
+  const [customFrom, setCustomFrom] = useState("")
+  const [customTo, setCustomTo] = useState("")
+  const [dateFilter, setDateFilter] = useState<MailDateRange | null>(() =>
+    resolveMailDateRange(DEFAULT_MAIL_DATE_RANGE_PRESET)
+  )
+
+  // What the Filters button names — the preset's own label, or the actual
+  // dates once a custom range is in effect.
+  const activeRangeLabel =
+    datePreset === "custom" && dateFilter
+      ? `${dateFilter.from} – ${dateFilter.to}`
+      : (MAIL_DATE_RANGE_PRESETS.find((p) => p.value === datePreset)?.label ?? "Date range")
 
   const connection = connections?.[0]
   const isSearching = searchQuery !== undefined
-  const { data: stats, isLoading: statsLoading, isFetching: statsFetching, refetch: refetchStats } = useMailStats(connection?.id)
-  const folderQuery = useMailMessages({ connectionId: connection?.id, folder, folderId, page })
+  const { data: stats, isLoading: statsLoading, isFetching: statsFetching, refetch: refetchStats } = useMailStats(
+    connection?.id,
+    dateFilter
+  )
+  const folderQuery = useMailMessages({
+    connectionId: connection?.id,
+    folder,
+    folderId,
+    page,
+    dateFrom: dateFilter?.from,
+    dateTo: dateFilter?.to,
+  })
   const searchResults = useMailSearch({ connectionId: connection?.id, q: searchQuery ?? "", page })
   const active = isSearching ? searchResults : folderQuery
   const visibleMessages = active.data?.data ?? []
@@ -187,6 +323,7 @@ export function MailWorkspace() {
       key: "total",
       label: "Total Emails",
       value: stats?.totalMessages,
+      capped: stats?.totalMessagesCapped,
       icon: MailIcon,
       iconTint: "bg-accent-mail text-accent-mail-foreground",
       wash: "bg-accent-mail/10 border-accent-mail/15",
@@ -195,6 +332,7 @@ export function MailWorkspace() {
       key: "unread",
       label: "Unread",
       value: stats?.totalUnread,
+      capped: stats?.totalUnreadCapped,
       caption: "Needs attention",
       captionTone: "attention",
       icon: AlertCircleIcon,
@@ -206,6 +344,7 @@ export function MailWorkspace() {
       key: "inbox",
       label: "Inbox",
       value: stats?.inboxCount,
+      capped: stats?.inboxCountCapped,
       caption: stats?.inboxUnread ? `${stats.inboxUnread} unread` : undefined,
       icon: InboxIcon,
       iconTint: "bg-blue-500 text-white",
@@ -216,6 +355,7 @@ export function MailWorkspace() {
       key: "sent",
       label: "Sent",
       value: stats?.sentCount,
+      capped: stats?.sentCountCapped,
       icon: SendIcon,
       iconTint: "bg-emerald-500 text-white",
       wash: "bg-emerald-500/10 border-emerald-500/15",
@@ -225,6 +365,7 @@ export function MailWorkspace() {
       key: "drafts",
       label: "Drafts",
       value: stats?.draftsCount,
+      capped: stats?.draftsCountCapped,
       icon: LayersIcon,
       iconTint: "bg-purple-500 text-white",
       wash: "bg-purple-500/10 border-purple-500/15",
@@ -252,6 +393,29 @@ export function MailWorkspace() {
         </div>
 
         <div className="flex items-center gap-2">
+          <div className="relative">
+            <MailFilterButton
+              active={rangeFilterOpen}
+              label={activeRangeLabel}
+              onClick={() => setRangeFilterOpen((v) => !v)}
+            />
+            {rangeFilterOpen && (
+              <MailFilterPanel
+                preset={datePreset}
+                customFrom={customFrom}
+                customTo={customTo}
+                onApply={({ preset, customFrom: f, customTo: t, range }) => {
+                  setDatePreset(preset)
+                  setCustomFrom(f)
+                  setCustomTo(t)
+                  setDateFilter(range)
+                  setSearchQuery(undefined)
+                  setPage(1)
+                }}
+                onClose={() => setRangeFilterOpen(false)}
+              />
+            )}
+          </div>
           <Button
             variant="outline"
             onClick={async () => {
@@ -273,7 +437,8 @@ export function MailWorkspace() {
         </div>
       </div>
 
-      {/* KPI cards */}
+      {/* KPI cards — whole-mailbox totals, independent of the range above */}
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">All Time</p>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {kpis.map((kpi) => (
           <Card
@@ -303,7 +468,7 @@ export function MailWorkspace() {
                   <kpi.icon className="size-4.5" />
                 </span>
                 <div className="text-2xl font-bold text-foreground">
-                  {statsLoading ? <Skeleton className="h-7 w-10" /> : (kpi.value ?? 0)}
+                  {statsLoading ? <Skeleton className="h-7 w-10" /> : `${kpi.value ?? 0}${kpi.capped ? "+" : ""}`}
                 </div>
               </div>
               <p className="mt-2 truncate text-xs text-foreground/70">{kpi.label}</p>
@@ -382,7 +547,8 @@ export function MailWorkspace() {
                 </div>
                 {!isSearching && (
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    {active.data?.meta?.totalCount ?? 0} total
+                    {active.data?.meta?.totalCount ?? 0}
+                    {active.data?.meta?.totalCountCapped ? "+" : ""} total
                   </span>
                 )}
               </>

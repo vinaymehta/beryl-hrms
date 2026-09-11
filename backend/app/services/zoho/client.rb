@@ -4,6 +4,12 @@ module Zoho
   class Client
     OAUTH_SCOPE = "ZohoMail.accounts.ALL,ZohoMail.messages.ALL,ZohoMail.folders.ALL,AaaServer.profile.READ".freeze
 
+    # Zoho exposes no cheap per-folder message-total field anywhere in this
+    # API (folders endpoint and messages/view both omit it) — fetch_stats
+    # approximates a folder's total by counting up to this many messages.
+    # Hitting the cap means "at least this many", not "exactly this many".
+    COUNT_CAP = 200
+
     def initialize(
       client_id: ENV.fetch("ZOHO_CLIENT_ID", nil),
       client_secret: ENV.fetch("ZOHO_CLIENT_SECRET", nil),
@@ -210,17 +216,26 @@ module Zoho
       parse_response(res)
     end
 
+    # Cached: the folder list is asked for by both the message-list and the
+    # stats path on every Mail page load (and once per scan), but folders
+    # are created/renamed about never — so this was a pure round trip on
+    # the critical path each time. Short enough that a newly created folder
+    # still shows up promptly.
+    FOLDERS_TTL = 5.minutes
+
     def fetch_folders(access_token:, account_id:)
-      res = authenticated_api_connection(access_token).get("accounts/#{account_id}/folders")
-      body = parse_response(res)
-      Array(body["data"]).map do |f|
-        {
-          id: f["folderId"].to_s,
-          name: f["folderName"].to_s,
-          path: f["folderPath"].to_s,
-          unreadCount: f["unreadCount"].to_i,
-          totalCount: (f["messageCount"] || f["totalCount"]).to_i
-        }
+      Rails.cache.fetch("zoho_mail_folders/#{account_id}", expires_in: FOLDERS_TTL) do
+        res = authenticated_api_connection(access_token).get("accounts/#{account_id}/folders")
+        body = parse_response(res)
+        Array(body["data"]).map do |f|
+          {
+            id: f["folderId"].to_s,
+            name: f["folderName"].to_s,
+            path: f["folderPath"].to_s,
+            unreadCount: f["unreadCount"].to_i,
+            totalCount: (f["messageCount"] || f["totalCount"]).to_i
+          }
+        end
       end
     end
 
@@ -244,7 +259,7 @@ module Zoho
         total_unread = 0
         begin
           unread_res = parse_response(
-            authenticated_api_connection(access_token).get("accounts/#{account_id}/messages/view", { status: "unread", limit: 200 })
+            authenticated_api_connection(access_token).get("accounts/#{account_id}/messages/view", { status: "unread", limit: COUNT_CAP })
           )
           unread_msgs = Array(unread_res["data"])
           total_unread = unread_msgs.size
@@ -253,7 +268,16 @@ module Zoho
           Rails.logger.warn("Could not fetch unread messages for stats: #{e.message}")
         end
 
-        # Count messages for core folders concurrently
+        # Zoho's folders endpoint carries no message-count field at all in
+        # this API (verified: messageCount/totalCount are simply absent —
+        # fetch_folders's fallback to them always resolves to 0), and
+        # messages/view returns no total either (no such field in the body,
+        # no count header) — there is no cheap, authoritative "how many
+        # messages does this folder have" answer available, so this counts
+        # up to COUNT_CAP messages and reports that. When a folder hits the
+        # cap exactly, totalCountCapped marks it as a lower bound rather
+        # than a real total, so the UI can show "200+" instead of a bare,
+        # falsely-precise "200".
         target_names = %w[inbox sent drafts trash spam templates]
         target_folders = folders.select { |f| target_names.include?(f[:name].to_s.downcase) }
         counts = {}
@@ -261,7 +285,7 @@ module Zoho
         threads = target_folders.map do |f|
           Thread.new do
             begin
-              res = authenticated_api_connection(access_token).get("accounts/#{account_id}/messages/view", { folderId: f[:id], limit: 200 })
+              res = authenticated_api_connection(access_token).get("accounts/#{account_id}/messages/view", { folderId: f[:id], limit: COUNT_CAP })
               data = Array(parse_response(res)["data"])
               counts[f[:id]] = data.size
             rescue => e
@@ -274,6 +298,7 @@ module Zoho
         folders.each do |f|
           f[:unreadCount] = unread_by_folder[f[:id]] || 0
           f[:totalCount] = counts[f[:id]] || 0
+          f[:totalCountCapped] = f[:totalCount] >= COUNT_CAP
         end
 
         inbox_folder = folders.find { |f| f[:name].to_s.casecmp?("inbox") } || {}
@@ -288,11 +313,16 @@ module Zoho
           displayName: first_acc["displayName"] || first_acc["accountName"] || "",
           status: first_acc["accountStatus"] || (first_acc["status"] ? "active" : "inactive"),
           totalMessages: folders.sum { |f| f[:totalCount] },
+          totalMessagesCapped: folders.any? { |f| f[:totalCountCapped] },
           totalUnread: total_unread,
+          totalUnreadCapped: total_unread >= COUNT_CAP,
           inboxCount: inbox_folder[:totalCount].to_i,
+          inboxCountCapped: inbox_folder[:totalCountCapped] || false,
           inboxUnread: inbox_folder[:unreadCount].to_i,
           sentCount: sent_folder[:totalCount].to_i,
+          sentCountCapped: sent_folder[:totalCountCapped] || false,
           draftsCount: drafts_folder[:totalCount].to_i,
+          draftsCountCapped: drafts_folder[:totalCountCapped] || false,
           trashCount: trash_folder[:totalCount].to_i,
           spamCount: spam_folder[:totalCount].to_i,
           folders: folders

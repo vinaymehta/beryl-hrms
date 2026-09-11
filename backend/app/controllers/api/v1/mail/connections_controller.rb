@@ -70,6 +70,11 @@ module Api
               action: "zoho.connection_created", actor: user || Current.user, company: company,
               auditable: connection, request: request
             )
+
+            # No date range is asked for or stored at connect time — the
+            # Mail page's own filter drives all historical fetching, and
+            # ZohoAutoScanJob picks this connection up on its own cadence
+            # for new mail without needing any trigger here.
           end
 
           redirect_to_frontend(connected: true)

@@ -63,32 +63,38 @@ export function DateRangePills({ preset, customFrom, customTo, onChange }: DateR
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">From</label>
-          <div className="relative">
-            <CalendarIcon className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
-            <Input
-              type="date"
-              value={fromValue}
-              onChange={(e) => editDate("customFrom", e.target.value)}
-              className="pl-8 text-xs bg-background"
-            />
+      {/* Only shown once "Custom Range" is actually selected — these used to
+          render unconditionally, so the From/To inputs were visible (and
+          pre-filled by whichever preset was picked) before the user had
+          ever asked for a custom range. */}
+      {preset === "custom" && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">From</label>
+            <div className="relative">
+              <CalendarIcon className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+              <Input
+                type="date"
+                value={fromValue}
+                onChange={(e) => editDate("customFrom", e.target.value)}
+                className="pl-8 text-xs bg-background"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">To</label>
+            <div className="relative">
+              <CalendarIcon className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+              <Input
+                type="date"
+                value={toValue}
+                onChange={(e) => editDate("customTo", e.target.value)}
+                className="pl-8 text-xs bg-background"
+              />
+            </div>
           </div>
         </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">To</label>
-          <div className="relative">
-            <CalendarIcon className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
-            <Input
-              type="date"
-              value={toValue}
-              onChange={(e) => editDate("customTo", e.target.value)}
-              className="pl-8 text-xs bg-background"
-            />
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   )
 }

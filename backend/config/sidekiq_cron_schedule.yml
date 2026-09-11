@@ -1,3 +1,8 @@
+# NOTE: this file is read ONCE, by the Sidekiq startup hook in
+# config/initializers/sidekiq.rb. Adding or changing an entry here has no
+# effect on an already-running Sidekiq — restart it, or the new job simply
+# never registers and silently never runs.
+
 cleanup_expired_sessions:
   cron: "0 * * * *" # hourly
   class: "CleanupExpiredSessionsJob"
@@ -5,3 +10,11 @@ cleanup_expired_sessions:
 zoho_token_refresh:
   cron: "*/5 * * * *" # every 5 minutes
   class: "ZohoTokenRefreshJob"
+
+zoho_auto_scan:
+  # Every 2 minutes: this is the worst-case delay between a mail arriving
+  # and its resumes being picked up. Overlapping ticks are safe — the job
+  # takes a per-connection Redis lock and a tick that finds one held just
+  # skips that connection.
+  cron: "*/2 * * * *"
+  class: "ZohoAutoScanJob"

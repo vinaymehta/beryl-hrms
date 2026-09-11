@@ -20,7 +20,9 @@ export function useMailConnections() {
   })
 }
 
-/** Kicks off the real Zoho OAuth handoff — redirects the whole page away. */
+/** Kicks off the real Zoho OAuth handoff — redirects the whole page away.
+ *  No date range is involved: history is chosen afterwards, from the Mail
+ *  page's own filter. */
 export function useConnectMailbox() {
   return useMutation({
     mutationFn: (type: MailConnectionType) => mailApi.connections.connect(type),

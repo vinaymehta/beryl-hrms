@@ -18,6 +18,10 @@ export interface PaginationMeta {
   perPage: number
   totalPages: number
   totalCount: number
+  /** True when totalCount is a lower bound, not an exact count (currently
+   *  only set by the mail messages endpoint — Zoho exposes no real
+   *  per-folder total, so it's approximated by counting up to a cap). */
+  totalCountCapped?: boolean
 }
 
 export interface PaginatedResponse<T> {

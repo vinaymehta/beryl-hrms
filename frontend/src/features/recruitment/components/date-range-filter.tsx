@@ -43,7 +43,11 @@ export function DateRangeFilter({ preset, customFrom, customTo, onChange, allowC
   }
 
   return (
-    <div className={`flex flex-wrap items-center gap-2 ${className ?? ""}`}>
+    // Stacked, not a wrapping row — the custom From/To fields always sit
+    // below the preset select once "Custom Range" is picked, never beside
+    // it. A row layout depends on the parent having room to wrap, which
+    // isn't reliable when this sits inside a shrink-to-fit container.
+    <div className={`flex flex-col items-start gap-2 ${className ?? ""}`}>
       <Select items={items} value={preset} onValueChange={handlePresetChange}>
         <SelectTrigger aria-label="Date range" className="h-8 w-40 text-xs">
           <SelectValue placeholder="Date range" />

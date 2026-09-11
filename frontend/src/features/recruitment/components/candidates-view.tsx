@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { cn } from "cn"
 import { useCandidates, useCandidateMutations } from "../hooks"
 import { CandidateDetailModal } from "./candidate-detail-modal"
 import { Button } from "@/components/ui/button"
@@ -62,6 +63,28 @@ export function CandidatesView({ initialStatus = "" }: CandidatesViewProps) {
   const [bulkPending, setBulkPending] = useState(false)
 
   const canManage = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.candidatesManage])
+
+  // Counts only the fields inside the collapsible Filters panel below —
+  // the Status pill row is a separate, always-visible control, not part
+  // of this count (matches resumes-view.tsx's Filters button).
+  const activeFilterCount = [
+    city, state, country, qualification, skill, jobTitle, previousCompany, certification, language, minExperience, processingStatus,
+  ].filter((v) => v.trim() !== "").length
+
+  function resetFilters() {
+    setCity("")
+    setState("")
+    setCountry("")
+    setQualification("")
+    setSkill("")
+    setJobTitle("")
+    setPreviousCompany("")
+    setCertification("")
+    setLanguage("")
+    setMinExperience("")
+    setProcessingStatus("")
+    setPage(1)
+  }
 
   const { data: response, isLoading } = useCandidates({
     search: search.trim() || undefined,
@@ -187,11 +210,24 @@ export function CandidatesView({ initialStatus = "" }: CandidatesViewProps) {
             size="sm"
             variant="outline"
             onClick={() => setShowFilters(!showFilters)}
-            className={`text-xs gap-1.5 h-9 shrink-0 ${showFilters ? "border-primary text-primary" : ""}`}
+            className={cn(
+              "relative h-9 gap-1.5 rounded-full text-xs shrink-0",
+              (showFilters || activeFilterCount > 0) && "border-role-recruitment text-role-recruitment bg-role-recruitment/5"
+            )}
           >
             <FilterIcon className="size-3.5" />
-            {showFilters ? "Hide Filters" : "Deterministic Filters"}
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-role-recruitment text-[10px] font-bold text-role-recruitment-foreground">
+                {activeFilterCount}
+              </span>
+            )}
           </Button>
+          {activeFilterCount > 0 && (
+            <Button variant="outline" size="sm" onClick={resetFilters} className="h-9 rounded-full text-xs shrink-0">
+              Reset
+            </Button>
+          )}
         </div>
 
         {/* Collapsible Deterministic Filter Row */}

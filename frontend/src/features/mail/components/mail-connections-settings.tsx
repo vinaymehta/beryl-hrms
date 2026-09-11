@@ -1,6 +1,6 @@
 "use client"
 
-import { BuildingIcon, MailIcon, PlugIcon, UnplugIcon } from "lucide-react"
+import { BuildingIcon, ClockIcon, MailIcon, PlugIcon, UnplugIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -37,9 +37,14 @@ function ConnectionRow({ connection }: { connection: MailConnection }) {
             {connection.emailAddress}
             <Badge className={status.className}>{status.label}</Badge>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="flex items-center gap-1 text-xs text-muted-foreground">
             {connection.connectionType === "company_managed" ? "Shared company mailbox" : "Personal mailbox"}
-            {connection.lastSyncedAt && ` · last synced ${new Date(connection.lastSyncedAt).toLocaleString()}`}
+            {connection.lastSyncedAt && (
+              <span className="inline-flex items-center gap-1">
+                <ClockIcon className="size-3" />
+                auto-scanned as of {new Date(connection.lastSyncedAt).toLocaleString()}
+              </span>
+            )}
           </p>
         </div>
       </div>
@@ -91,6 +96,10 @@ export function MailConnectionsSettings() {
           <PlugIcon /> Connect to mailbox
         </Button>
       </div>
+
+      <p className="text-xs text-muted-foreground">
+        How much mail history you see is chosen on the Mail page itself, with its date filter.
+      </p>
     </div>
   )
 }

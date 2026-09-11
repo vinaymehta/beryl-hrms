@@ -36,8 +36,17 @@ class ResumeProcessingJob < ApplicationJob
     file_hash = Digest::SHA256.hexdigest(binary)
     resume.update!(file_hash: file_hash, file_size: binary.bytesize)
 
+    # `duplicate_of_id: nil` alone is NOT a reliable "this row is an
+    # original" test. Deleting a resume nullifies its duplicates' pointers
+    # (has_many :duplicates, dependent: :nullify) but leaves their status
+    # as `duplicate` — so a deleted original leaves behind orphans that
+    # look like originals to this query. Re-sending that same file then
+    # matched an orphan, marked the new copy duplicate too, and the file
+    # stayed invisible no matter how many times it was re-sent. Excluding
+    # rows that are themselves duplicates makes the test mean what it says.
     original = resume.company.candidate_resumes
                      .where(file_hash: file_hash, duplicate_of_id: nil)
+                     .where.not(processing_status: :duplicate)
                      .where.not(id: resume.id)
                      .order(:created_at)
                      .first

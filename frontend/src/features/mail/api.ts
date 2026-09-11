@@ -14,6 +14,8 @@ export const mailApi = {
   connections: {
     list: () => apiClient.get<MailConnection[]>("/mail/connections"),
 
+    // No date range is asked for at connect time — the Mail page's own
+    // filter is the single source of truth for historical fetching.
     connect: (type: MailConnectionType) => {
       // Backend routes use "company" not "company_managed" for the URL slug.
       const slug = type === "company_managed" ? "company" : type
@@ -23,9 +25,16 @@ export const mailApi = {
     disconnect: (id: string) => apiClient.delete<void>(`/mail/connections/${id}`),
   },
 
-  stats: (connectionId: string, refresh: boolean = false) =>
+  // range: the Mail page's active date filter — with it, every count
+  // describes only that range, so the KPI cards agree with the message
+  // list the same filter produced.
+  stats: (connectionId: string, refresh: boolean = false, range?: { from: string; to: string } | null) =>
     apiClient.get<import("@/types/mail").MailStats>(
-      `/mail/stats?connectionId=${encodeURIComponent(connectionId)}${refresh ? "&refresh=true" : ""}`
+      `/mail/stats?${new URLSearchParams({
+        connectionId,
+        ...(refresh ? { refresh: "true" } : {}),
+        ...(range ? { dateFrom: range.from, dateTo: range.to } : {}),
+      })}`
     ),
 
   folders: {
@@ -36,13 +45,20 @@ export const mailApi = {
   },
 
   messages: {
-    list: (params: { connectionId: string; folder?: MailFolder; folderId?: string; page?: number }) =>
+    // dateFrom/dateTo: a live view of the mailbox filtered to that range —
+    // real messages fetched from Zoho right now, walked and filtered
+    // server-side (see Mail::DateFilteredMessages). Independent of the
+    // Mail Settings historical-fetch feature entirely; passing these never
+    // touches that background job or its stored range.
+    list: (params: { connectionId: string; folder?: MailFolder; folderId?: string; page?: number; dateFrom?: string; dateTo?: string }) =>
       apiClient.getPaginated<PaginatedResponse<MailMessageSummary>>(
         `/mail/messages?${new URLSearchParams({
           connectionId: params.connectionId,
           ...(params.folder ? { folder: params.folder } : {}),
           ...(params.folderId ? { folderId: params.folderId } : {}),
           ...(params.page ? { page: String(params.page) } : {}),
+          ...(params.dateFrom ? { dateFrom: params.dateFrom } : {}),
+          ...(params.dateTo ? { dateTo: params.dateTo } : {}),
         })}`
       ),
 

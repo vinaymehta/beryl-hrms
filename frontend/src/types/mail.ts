@@ -10,6 +10,11 @@ export interface MailConnection {
   connectionType: MailConnectionType
   emailAddress: string
   status: MailConnectionStatus
+  /** Cursor for automatic new-mail scanning — the point up to which this
+   *  mailbox has already been incrementally scanned in the background. No
+   *  date range is stored per connection; the Mail page's own filter is
+   *  the single source of truth for historical fetching, and it never
+   *  touches this cursor. */
   lastSyncedAt: string | null
 }
 
@@ -57,11 +62,18 @@ export interface MailStats {
   displayName: string
   status: string
   totalMessages: number
+  /** True when Zoho gave no way to confirm totalMessages is exact — it's a
+   *  lower bound (hit the counting cap), not the mailbox's real size. */
+  totalMessagesCapped?: boolean
   totalUnread: number
+  totalUnreadCapped?: boolean
   inboxCount: number
+  inboxCountCapped?: boolean
   inboxUnread: number
   sentCount: number
+  sentCountCapped?: boolean
   draftsCount: number
+  draftsCountCapped?: boolean
   trashCount?: number
   spamCount?: number
   folders: MailFolderDetail[]

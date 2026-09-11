@@ -5,23 +5,39 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { mailApi } from "@/features/mail/api"
 import type { MailFolder } from "@/types/mail"
 
+/** How often the Mail page re-checks Zoho for new mail. The message list
+ *  and the stats/KPI cards poll on the SAME interval on purpose: they
+ *  describe the same mailbox, so refreshing them independently is what let
+ *  a newly arrived mail show in the list while the Unread card still
+ *  showed the pre-arrival number. */
+export const MAIL_POLL_INTERVAL_MS = 60_000
+
 export function useMailMessages(params: {
   connectionId: string | undefined
   folder?: MailFolder
   folderId?: string
   page: number
+  /** A live date-range view of the mailbox (real Zoho data, fetched now) —
+   *  unrelated to automatic new-mail scanning, which has its own cursor. */
+  dateFrom?: string
+  dateTo?: string
 }) {
   return useQuery({
-    queryKey: ["mail", "messages", params.connectionId, params.folder, params.folderId, params.page],
+    queryKey: ["mail", "messages", params.connectionId, params.folder, params.folderId, params.page, params.dateFrom, params.dateTo],
     queryFn: () =>
       mailApi.messages.list({
         connectionId: params.connectionId as string,
         folder: params.folder,
         folderId: params.folderId,
         page: params.page,
+        dateFrom: params.dateFrom,
+        dateTo: params.dateTo,
       }),
     enabled: !!params.connectionId,
     placeholderData: (previous) => previous,
+    // Without this, new mail only ever appeared after a manual page refresh.
+    refetchInterval: MAIL_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -57,12 +73,22 @@ export function useMailSearch(params: { connectionId: string | undefined; q: str
   })
 }
 
-export function useMailStats(connectionId: string | undefined) {
+/** `range` is the Mail page's active date filter — passing it makes every
+ *  count describe only that range, so the KPI cards always agree with the
+ *  message list the same filter produced. */
+export function useMailStats(connectionId: string | undefined, range?: { from: string; to: string } | null) {
   return useQuery({
-    queryKey: ["mail", "stats", connectionId],
-    queryFn: () => mailApi.stats(connectionId as string),
+    queryKey: ["mail", "stats", connectionId, range?.from, range?.to],
+    queryFn: () => mailApi.stats(connectionId as string, false, range),
     enabled: !!connectionId,
-    staleTime: 30_000,
+    // Deliberately NOT the app-wide 30s staleTime: the message list is
+    // uncached and refetches on mount, so a stale-but-fresh-enough stats
+    // entry would be served from cache while the list showed newer mail —
+    // the Unread card then sat on the pre-arrival count. Polls in lockstep
+    // with the list instead.
+    staleTime: 0,
+    refetchInterval: MAIL_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: false,
   })
 }
 

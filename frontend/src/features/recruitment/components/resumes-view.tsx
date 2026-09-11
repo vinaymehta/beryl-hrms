@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useResumes, useResumeMutations } from "../hooks"
 import { ResumeDetailPanel } from "./resume-detail-panel"
 import { DateRangeFilter } from "./date-range-filter"
@@ -95,6 +95,23 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
   const canManage = usePermission(PERMISSIONS.recruitmentManage)
 
   const activeFilterCount = (dateRange ? 1 : 0) + (sortBy ? 1 : 0)
+  const filterPanelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (!showFilters) return
+      const target = e.target as Node
+      if (filterPanelRef.current?.contains(target)) return
+      // The Select dropdowns render their options in a portal outside this
+      // panel's DOM subtree, and the trigger button itself already handles
+      // its own toggle — both are excluded so neither closes the panel out
+      // from under a click that's meant to interact with it.
+      if (target instanceof Element && (target.closest('[data-slot="select-content"]') || target.closest('[data-filter-trigger]'))) return
+      setShowFilters(false)
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [showFilters])
 
   function resetFilters() {
     setDatePreset("")
@@ -227,61 +244,70 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
             />
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowFilters(!showFilters)}
-            className={cn(
-              "relative h-9 gap-1.5 rounded-full text-xs shrink-0",
-              (showFilters || activeFilterCount > 0) && "border-role-recruitment text-role-recruitment bg-role-recruitment/5"
-            )}
-          >
-            <FilterIcon className="size-3.5" />
-            Filters
-            {activeFilterCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-role-recruitment text-[10px] font-bold text-role-recruitment-foreground">
-                {activeFilterCount}
-              </span>
-            )}
-          </Button>
+          <div className="relative">
+            <Button
+              variant="outline"
+              size="sm"
+              data-filter-trigger
+              onClick={() => setShowFilters(!showFilters)}
+              className={cn(
+                "relative h-9 gap-1.5 rounded-full text-xs shrink-0",
+                (showFilters || activeFilterCount > 0) && "border-role-recruitment text-role-recruitment bg-role-recruitment/5"
+              )}
+            >
+              <FilterIcon className="size-3.5" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-role-recruitment text-[10px] font-bold text-role-recruitment-foreground">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+
+            {/* Always mounted (just visually hidden via `hidden`, not
+                conditionally rendered) — unmounting/remounting the Select
+                components on every toggle made them briefly show their raw
+                value instead of the matching option's label the first time
+                they re-registered. A small anchored popover, not a
+                full-width strip — matches Mail Dashboard's Filters. */}
+            <div
+              ref={filterPanelRef}
+              hidden={!showFilters}
+              className="absolute right-0 top-full z-50 mt-2 flex w-max flex-col items-start gap-2 rounded-lg bg-popover p-3 text-popover-foreground shadow-lg ring-1 ring-foreground/10"
+            >
+              <DateRangeFilter
+                preset={datePreset}
+                customFrom={customFrom}
+                customTo={customTo}
+                allowClear
+                onChange={({ preset, customFrom: f, customTo: t, resolved }) => {
+                  setDatePreset(preset)
+                  setCustomFrom(f)
+                  setCustomTo(t)
+                  setDateRange(resolved)
+                  setPage(1)
+                }}
+              />
+
+              <Select items={SORT_OPTIONS} value={sortBy} onValueChange={(v) => { setSortBy(v || ""); setPage(1) }}>
+                <SelectTrigger aria-label="Sort resumes" className="h-8 w-48 text-xs">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SORT_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           {activeFilterCount > 0 && (
             <Button variant="outline" size="sm" onClick={resetFilters} className="h-9 rounded-full text-xs shrink-0">
               Reset
             </Button>
           )}
-        </div>
-
-        {/* Always mounted (just visually hidden) rather than conditionally
-            rendered — unmounting/remounting the Select components on every
-            toggle made them briefly show their raw value instead of the
-            matching option's label the first time they re-registered. */}
-        <div hidden={!showFilters} className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 p-3">
-            <DateRangeFilter
-              preset={datePreset}
-              customFrom={customFrom}
-              customTo={customTo}
-              allowClear
-              onChange={({ preset, customFrom: f, customTo: t, resolved }) => {
-                setDatePreset(preset)
-                setCustomFrom(f)
-                setCustomTo(t)
-                setDateRange(resolved)
-                setPage(1)
-              }}
-            />
-
-            <Select items={SORT_OPTIONS} value={sortBy} onValueChange={(v) => { setSortBy(v || ""); setPage(1) }}>
-              <SelectTrigger aria-label="Sort resumes" className="h-8 w-48 text-xs">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                {SORT_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
         </div>
 
         {/* Status Tabs — active pill uses the same semantic color as its

@@ -11,6 +11,14 @@ class ZohoConnection < ApplicationRecord
   enum :connection_type, { company_managed: 0, individual: 1 }
   enum :status, { active: 0, revoked: 1, error: 2 }, default: :active
 
+  # `last_synced_at`: the cursor for automatic new-mail scanning (see
+  # ZohoAutoScanJob) — the point in time up to which this mailbox's inbox
+  # has already been incrementally, successfully scanned. It is a
+  # forward-moving cursor, NOT a historical range: no date range is stored
+  # per connection at all any more (the Mail page's own date filter is the
+  # single source of truth for historical fetching), and nothing the user
+  # picks there ever touches this cursor.
+
   belongs_to :company
   belongs_to :user, optional: true
 
