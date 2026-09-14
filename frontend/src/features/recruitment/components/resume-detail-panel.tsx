@@ -5,6 +5,7 @@ import { useResume, useResumeMutations, useCandidateMutations } from "../hooks"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ResumePreviewModal } from "./resume-preview-modal"
 import { InterviewSchedulerDialog } from "./interview-scheduler-dialog"
+import { CandidatePersonalInfo } from "./candidate-personal-info"
 import { isInInterviewWorkflow } from "@/types/recruitment"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -107,6 +108,7 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
   const canManage = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.candidatesManage])
   const [previewOpen, setPreviewOpen] = useState(false)
   const [schedulerOpen, setSchedulerOpen] = useState(false)
+  const [tab, setTab] = useState<"summary" | "personal">("summary")
 
   if (!resumeId) return null
 
@@ -322,8 +324,30 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
               </div>
             )}
 
-            <div className="border-b px-5 py-2 flex items-center justify-between shrink-0">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">AI Summary</span>
+            {/* Same hand-rolled tab pattern the rest of the app uses (see
+                department-designation-manager.tsx) — no shared Tabs primitive
+                exists. */}
+            <div className="border-b px-5 flex items-center justify-between gap-4 shrink-0">
+              <div className="flex items-center gap-4">
+                {([
+                  { id: "summary", label: "AI Summary" },
+                  { id: "personal", label: "Personal Info" },
+                ] as const).map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    className={cn(
+                      "relative py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors",
+                      tab === t.id ? "text-role-recruitment" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {t.label}
+                    {tab === t.id && (
+                      <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-role-recruitment" />
+                    )}
+                  </button>
+                ))}
+              </div>
               {resume.hasFile && (
                 <button
                   onClick={() => setPreviewOpen(true)}
@@ -336,6 +360,15 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 text-xs">
+              {tab === "personal" ? (
+                resume.candidate ? (
+                  <CandidatePersonalInfo candidateId={resume.candidate.id} canManage={canManage} />
+                ) : (
+                  <p className="text-muted-foreground">
+                    This resume isn&apos;t linked to a candidate yet, so there is no profile to show.
+                  </p>
+                )
+              ) : (
               <div className="space-y-4">
                 {aiSummary ? (
                   <p className="leading-relaxed text-foreground">{aiSummary}</p>
@@ -385,6 +418,7 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
                   </div>
                 )}
               </div>
+              )}
             </div>
 
             <ResumePreviewModal

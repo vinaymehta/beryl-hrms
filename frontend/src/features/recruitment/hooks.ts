@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { recruitmentApi } from "./api"
-import type { CandidateStatus, DuplicateStatus, JobStatus, MatchStatus } from "@/types/recruitment"
+import type { CandidateDetail, CandidateStatus, DuplicateStatus, JobStatus, MatchStatus } from "@/types/recruitment"
 
 export function useRecruitmentStats() {
   return useQuery({

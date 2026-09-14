@@ -33,7 +33,7 @@ const RATING_LABELS = ["Poor", "Fair", "Good", "Great", "Excellent"]
 
 // Only the two stages a HUMAN actually decides. The feedback stages are not
 // here on purpose: they are driven by real events, not by an admin's opinion —
-// sending the form sets "Awaiting Feedback", and the candidate submitting it
+// sending the form sets "Link Sent", and the candidate submitting it
 // sets "Feedback Received". Letting an admin set those by hand would let the
 // status claim feedback arrived when nothing was ever submitted.
 const STATUS_OPTIONS: { value: CandidateStatus; label: string; caption: string; className: string }[] = [
@@ -55,8 +55,8 @@ const STATUS_OPTIONS: { value: CandidateStatus; label: string; caption: string; 
 // when the candidate is past the interview itself.
 const AUTOMATIC_STAGES: Record<string, { label: string; caption: string; className: string }> = {
   feedback_not_received: {
-    label: "Awaiting Feedback",
-    caption: "Set automatically when the form was sent",
+    label: "Link Sent",
+    caption: "Set automatically when the feedback form was sent",
     className: "border-orange-500/40 bg-orange-500/10 text-orange-600",
   },
   feedback_received: {
@@ -228,9 +228,9 @@ export function InterviewActionsPanel({ candidate, open, onOpenChange }: Intervi
                   </p>
                 ) : (
                   // Without an address there is nothing to send, and marking
-                  // them "Awaiting Feedback" would claim we're waiting on a
-                  // form that was never sent. Blocked rather than silently
-                  // half-done — add an email on the candidate first.
+                  // them "Link Sent" would claim a link went out when none
+                  // ever did. Blocked rather than silently half-done — add an
+                  // email on the candidate first.
                   <p className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
                     <AlertCircleIcon className="mt-0.5 size-3.5 shrink-0" />
                     No email address on file for {candidate.fullName}, so the form can&apos;t be sent. Their resume

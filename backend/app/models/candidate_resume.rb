@@ -36,7 +36,22 @@ class CandidateResume < ApplicationRecord
   #                     failed before evaluation ran) -> needs_review
   #   - 100% match   -> shortlisted
   #   - 0-99% match  -> rejected (evaluated, didn't confirm all 4 criteria)
-  scope :eligibility_shortlisted, -> { where(criteria_match_percentage: 100) }
+  # Shortlisted is a TO-DO list: resumes that passed all four criteria and are
+  # waiting for someone to act on them. Once a candidate has actually been
+  # actioned — an interview booked, held, or feedback chased — they belong to
+  # the Interview Scheduled view and drop off here, even though the resume's
+  # own criteria_match_percentage never changes (it records the AI/eligibility
+  # verdict for that submission, not where the person has got to since).
+  #
+  # Statuses are resolved inside the lambda rather than in a constant so this
+  # doesn't force Candidate to autoload while this class is being defined.
+  scope :eligibility_shortlisted, lambda {
+    interview_values = Candidate.statuses.values_at(*Candidate::INTERVIEW_WORKFLOW_STATUSES)
+    where(criteria_match_percentage: 100)
+      .left_joins(:candidate)
+      # A resume with no candidate attached is still un-actioned, so it stays.
+      .where("candidates.id IS NULL OR candidates.status NOT IN (?)", interview_values)
+  }
   scope :eligibility_rejected, -> { where.not(criteria_match_percentage: [nil, 100]) }
   scope :eligibility_needs_review, -> { where(criteria_match_percentage: nil) }
 

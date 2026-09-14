@@ -60,17 +60,48 @@ Rails.application.configure do
   # Set this to true and configure the email server for immediate delivery to raise delivery errors.
   # config.action_mailer.raise_delivery_errors = false
 
-  # Set host to be used by links generated in mailer templates.
-  config.action_mailer.default_url_options = { host: "example.com" }
+  # Links generated in mailer templates (password reset, the candidate feedback
+  # form) must point at the deployed FRONTEND, not at this API host and not at
+  # the "example.com" scaffold placeholder this used to carry.
+  frontend_uri = URI.parse(ENV.fetch("FRONTEND_ORIGINS", "http://localhost:3000").split(",").first.to_s.strip)
+  config.action_mailer.default_url_options = {
+    host: frontend_uri.host || "localhost",
+    port: frontend_uri.port,
+    protocol: frontend_uri.scheme || "http"
+  }.compact
 
-  # Specify outgoing SMTP server. Remember to add smtp/* credentials via bin/rails credentials:edit.
-  # config.action_mailer.smtp_settings = {
-  #   user_name: Rails.application.credentials.dig(:smtp, :user_name),
-  #   password: Rails.application.credentials.dig(:smtp, :password),
-  #   address: "smtp.example.com",
-  #   port: 587,
-  #   authentication: :plain
-  # }
+  # Outgoing SMTP, wired to the SMTP_* variables .env.example has always
+  # documented. This block was previously left commented at Rails' scaffold
+  # default, so delivery_method fell back to SMTP on localhost:25 and nothing —
+  # interview invitations, candidate feedback links, password resets — ever
+  # left the box. Credentials come from ENV rather than encrypted credentials
+  # to match how every other secret in this app is provisioned.
+  config.action_mailer.delivery_method = :smtp
+  config.action_mailer.perform_deliveries = true
+  # Deliberately loud. These are transactional mails a candidate is waiting on,
+  # so a failure should surface as a retrying Sidekiq job rather than being
+  # swallowed into a success the admin never questions.
+  config.action_mailer.raise_delivery_errors = true
+  config.action_mailer.smtp_settings = {
+    address: ENV["SMTP_ADDRESS"].presence,
+    port: ENV.fetch("SMTP_PORT", 587).to_i,
+    user_name: ENV["SMTP_USERNAME"].presence,
+    password: ENV["SMTP_PASSWORD"].presence,
+    authentication: :plain,
+    enable_starttls_auto: true
+  }.compact
+
+  # Without a host, ActionMailer quietly falls back to localhost:25 — the exact
+  # silent failure this block exists to end. Say so once, at boot, rather than
+  # letting it be discovered through candidates who never got their email.
+  config.after_initialize do
+    if ENV["SMTP_ADDRESS"].blank?
+      Rails.logger.warn("[mail] SMTP_ADDRESS is not set — outgoing mail WILL fail. Set SMTP_ADDRESS/PORT/USERNAME/PASSWORD.")
+    end
+    if ENV["MAIL_FROM"].blank?
+      Rails.logger.warn("[mail] MAIL_FROM is not set — mail will be sent from no-reply@localhost and is likely to be rejected.")
+    end
+  end
 
   # Enable locale fallbacks for I18n (makes lookups for any locale fall back to
   # the I18n.default_locale when a translation cannot be found).

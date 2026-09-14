@@ -13,7 +13,7 @@ import {
   SearchIcon,
   CalendarClockIcon,
   CheckCircle2Icon,
-  ClockIcon,
+  SendIcon,
   MinusCircleIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -41,12 +41,15 @@ const STAGE_PILLS: { label: string; value: CandidateStatus | "" }[] = [
   { label: "Scheduled", value: "interview_scheduled" },
   { label: "Completed", value: "interview_completed" },
   { label: "Feedback Received", value: "feedback_received" },
-  { label: "Awaiting Feedback", value: "feedback_not_received" },
+  { label: "Link Sent", value: "feedback_not_received" },
 ]
 
-// Feedback is a separate axis from the interview itself: a candidate is only
-// asked for feedback once the interview is done, and "not received" means the
-// request went out and nothing has come back — not that nothing was asked.
+// Feedback is a separate axis from the interview itself. Three distinct
+// states, deliberately not collapsed: the form was never sent, the form was
+// sent ("Link Sent"), or they answered. Labelling the middle one after what we
+// did — sending the link — rather than what the candidate hasn't done avoids
+// reading as though they ignored us when the request may have gone out minutes
+// ago.
 function FeedbackCell({ status, submitted }: { status: CandidateStatus; submitted: boolean }) {
   if (status === "feedback_received" || submitted) {
     return (
@@ -59,8 +62,8 @@ function FeedbackCell({ status, submitted }: { status: CandidateStatus; submitte
   if (status === "feedback_not_received") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-[11px] font-medium text-orange-600">
-        <ClockIcon className="size-3" />
-        Not Received
+        <SendIcon className="size-3" />
+        Link Sent
       </span>
     )
   }

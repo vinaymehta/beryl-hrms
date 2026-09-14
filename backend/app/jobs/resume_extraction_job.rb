@@ -110,10 +110,12 @@ class ResumeExtractionJob < ApplicationJob
   #  1. Email or phone match -> the same real person, confidently. Attach this
   #     resume to that existing candidate and make it the current one; no
   #     human review needed.
-  #  2. Only a normalized-name match (common names collide) -> too weak to
+  #  2. No email/phone match, but the resume is already attached to someone ->
+  #     keep that link. A reprocess is not new evidence about who sent it.
+  #  3. Only a normalized-name match (common names collide) -> too weak to
   #     auto-merge. A new candidate record is created instead, flagged
   #     potential_duplicate so HR can manually confirm/merge.
-  #  3. No signal matches anything -> brand new, unique candidate.
+  #  4. No signal matches anything -> brand new, unique candidate.
   # Resumes are never deleted or reassigned automatically here — exact
   # file-duplicate detection already short-circuited in ResumeProcessingJob
   # before this job ever runs.
@@ -126,6 +128,16 @@ class ResumeExtractionJob < ApplicationJob
     candidate = nil
     candidate = resume.company.candidates.where("LOWER(email) = ?", email).first if email
     candidate ||= resume.company.candidates.where(phone: phone).first if phone
+
+    # Still nothing, but this resume is ALREADY attributed to someone —
+    # keep it there. Re-running extraction is not new evidence about who sent
+    # it, so a reprocess must not re-attribute a resume that was already
+    # resolved. Without this, any resume yielding neither email nor phone (a
+    # PDF whose font mangles its own contact line, say) creates a brand-new
+    # candidate on every single run and silently strands the previous one —
+    # along with its interview, interviewer and feedback history, which live on
+    # the candidate rather than the resume.
+    candidate ||= resume.candidate
 
     if candidate
       mark_resume_current!(resume, candidate)
