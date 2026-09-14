@@ -1,4 +1,4 @@
-import { apiClient } from "@/lib/api-client"
+import { apiClient, API_BASE } from "@/lib/api-client"
 import { ApiError } from "@/types/api"
 import type { PaginatedResponse } from "@/types/api"
 import {
@@ -103,8 +103,7 @@ export const mailApi = {
       ),
 
     attachmentUrl: (connectionId: string, messageId: string, attachmentId: string) => {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
-      return `${baseUrl}/api/v1/mail/messages/${messageId}/attachments/${attachmentId}?connectionId=${encodeURIComponent(connectionId)}`
+      return `${API_BASE}/mail/messages/${messageId}/attachments/${attachmentId}?connectionId=${encodeURIComponent(connectionId)}`
     },
   },
 

@@ -194,10 +194,20 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
   }
 
   async function confirmBulkDelete() {
+    const ids = Array.from(checkedIds)
     setBulkPending(true)
     try {
-      await Promise.all(Array.from(checkedIds).map((id) => deleteResume.mutateAsync(id)))
-      toast.info(`${checkedIds.size} resume(s) deleted`)
+      // Dispatched a few at a time rather than all at once with Promise.all.
+      // The server runs a small, fixed number of request threads, so firing
+      // N deletes concurrently just queues them there — and each one's
+      // success invalidated the list, dashboard and candidates queries,
+      // adding refetches that competed for the very same threads. Deleting a
+      // page of resumes could stall the whole UI for tens of seconds.
+      const BATCH = 4
+      for (let i = 0; i < ids.length; i += BATCH) {
+        await Promise.all(ids.slice(i, i + BATCH).map((id) => deleteResume.mutateAsync(id)))
+      }
+      toast.info(`${ids.length} resume(s) deleted`)
       setCheckedIds(new Set())
     } catch (err: any) {
       toast.error(err?.message || "Failed to delete selected resumes")

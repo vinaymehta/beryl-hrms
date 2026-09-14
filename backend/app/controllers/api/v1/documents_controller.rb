@@ -30,7 +30,15 @@ module Api
         end
 
         ::Audit::Record.call(action: "document.downloaded", auditable: document, request: request)
-        redirect_to document.file.url(expires_in: 5.minutes), allow_other_host: true
+
+        # Streamed here rather than redirecting to a presigned storage URL —
+        # that URL is built from S3_ENDPOINT (storage as the SERVER sees it),
+        # which the browser cannot reach on a deployed box. See the matching
+        # comment in Recruitment::ResumesController#download.
+        send_data document.file.download,
+                  filename: document.file.filename.to_s,
+                  type: document.file.content_type.presence || "application/octet-stream",
+                  disposition: "attachment"
       end
 
       def destroy

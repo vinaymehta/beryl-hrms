@@ -5,7 +5,10 @@ default: &default
   port: <%= ENV.fetch("DATABASE_PORT", 5442) %>
   username: <%= ENV.fetch("DATABASE_USER", "hr_platform") %>
   password: <%= ENV.fetch("DATABASE_PASSWORD", "hr_platform_dev_password") %>
-  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  # Must stay >= Puma's thread count (config/puma.rb defaults to the same
+  # number), otherwise request threads simply queue on checking out a
+  # connection instead of on a thread — same stall, harder to spot.
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 8 } %>
 
 development:
   <<: *default

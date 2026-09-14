@@ -1,7 +1,24 @@
 import { ApiError, type ApiErrorBody } from "@/types/api"
 import { readCookie } from "@/lib/cookies"
 
-const API_BASE = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"}/api/v1`
+/**
+ * The single place the API host is decided. Import API_ORIGIN/API_BASE from
+ * here rather than reading NEXT_PUBLIC_API_URL again — every file that did
+ * its own `?? "http://localhost:3001"` was one more place that could ship a
+ * bundle pointing at the visitor's own machine.
+ *
+ * NEXT_PUBLIC_* is inlined by Next.js at BUILD time, not read at runtime, so
+ * setting it only in the process environment of the running server does
+ * nothing — it has to be present when `next build` runs.
+ *
+ * Unset falls back to the SAME ORIGIN that served the page (so requests go to
+ * "/api/v1/..."), which is correct whenever one web server fronts both the
+ * app and the API. It is deliberately not "localhost": a wrong-but-plausible
+ * default fails silently in production, while same-origin either works or
+ * fails in an obvious, local way.
+ */
+export const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/+$/, "")
+export const API_BASE = `${API_ORIGIN}/api/v1`
 
 // Confirmed against the backend's CsrfProtection concern
 // (app/controllers/concerns/csrf_protection.rb): cookie name is the literal

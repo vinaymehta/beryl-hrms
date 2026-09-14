@@ -1,4 +1,4 @@
-import { apiClient } from "@/lib/api-client"
+import { apiClient, API_BASE } from "@/lib/api-client"
 import type { PaginatedResponse } from "@/types/api"
 import type {
   CandidateDetail,
@@ -132,8 +132,7 @@ export const recruitmentApi = {
       apiClient.post<CandidateResumeDetail>(`/recruitment/resumes/${id}/reprocess`),
 
     downloadUrl: (id: string) => {
-      const apiBase = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"}/api/v1`
-      return `${apiBase}/recruitment/resumes/${id}/download`
+      return `${API_BASE}/recruitment/resumes/${id}/download`
     },
 
     importFromZoho: (params: {

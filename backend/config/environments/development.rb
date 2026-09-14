@@ -27,7 +27,14 @@ Rails.application.configure do
   config.cache_store = :memory_store
 
   # Store uploaded files on the local file system (see config/storage.yml for options).
-  config.active_storage.service = :s3_compatible # MinIO, via docker-compose
+  config.active_storage.service = :s3_compatible # MinIO or S3-compatible, via S3_* env vars
+
+  # Blob routes (used directly in <img src> for employee profile photos)
+  # stream through Rails instead of 302-ing to a presigned storage URL.
+  # That presigned URL is built from S3_ENDPOINT — storage as the SERVER
+  # sees it — which on a deployed box is an address the browser cannot
+  # reach, so photos silently failed to load.
+  config.active_storage.resolve_model_to_route = :rails_storage_proxy
 
   # Don't care if the mailer can't send.
   config.action_mailer.raise_delivery_errors = false

@@ -5,6 +5,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmployeeStatusBadge } from "@/features/employees/components/employee-status-badge"
 import type { Employee } from "@/types/employees"
+import { API_ORIGIN } from "@/lib/api-client"
 
 function initials(first: string, last: string) {
   return `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase()
@@ -14,7 +15,7 @@ function initials(first: string, last: string) {
 // backend's app root, not under /api/v1).
 function photoUrl(path: string | null) {
   if (!path) return undefined
-  return `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"}${path}`
+  return `${API_ORIGIN}${path}`
 }
 
 // Plain mapped table, not TanStack Table: the list is already paginated/

@@ -25,7 +25,15 @@
 # Any libraries that use a connection pool or another resource pool should
 # be configured to provide at least as many connections as the number of
 # threads. This includes Active Record's `pool` parameter in `database.yml`.
-threads_count = ENV.fetch("RAILS_MAX_THREADS", 3)
+# 3 was far too tight for this app: several screens poll in the background
+# (resumes, candidates, mail) and a single user action like deleting a resume
+# fans out into the request plus the refetches its invalidations trigger. With
+# 3 threads those queue 3-at-a-time — measured, a 0.17s request took 1.53s
+# once 9 were in flight, which reads as the UI hanging. Most of the work here
+# is waiting on Postgres or the Zoho API rather than burning CPU, so threads
+# are cheap. Keep RAILS_MAX_THREADS and DATABASE_POOL in step: the pool must
+# be >= this, or threads just queue on connections instead.
+threads_count = ENV.fetch("RAILS_MAX_THREADS", 8).to_i
 threads threads_count, threads_count
 
 # Specifies the `port` that Puma will listen on to receive requests; default is 3000.

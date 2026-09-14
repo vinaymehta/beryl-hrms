@@ -1,4 +1,4 @@
-import { apiClient } from "@/lib/api-client"
+import { apiClient, API_BASE } from "@/lib/api-client"
 import type { EmployeeDocument } from "@/types/documents"
 
 // GUESS: exact backend contract not confirmed against a live backend (built
@@ -16,5 +16,5 @@ export const documentsApi = {
   },
   delete: (id: string) => apiClient.delete<void>(`/documents/${id}`),
   downloadUrl: (id: string) =>
-    `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"}/api/v1/documents/${id}/download`,
+    `${API_BASE}/documents/${id}/download`,
 }

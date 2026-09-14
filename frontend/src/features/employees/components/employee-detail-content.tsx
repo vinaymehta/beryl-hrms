@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { API_ORIGIN } from "@/lib/api-client"
 import {
   Sheet,
   SheetContent,
@@ -37,7 +38,7 @@ function initials(first: string, last: string) {
 // prefixed the same way recruitmentApi.resumes.downloadUrl does.
 function photoUrl(path: string | null) {
   if (!path) return undefined
-  return `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"}${path}`
+  return `${API_ORIGIN}${path}`
 }
 
 function InfoRow({ label, value }: { label: string; value: string | null }) {

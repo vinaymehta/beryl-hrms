@@ -16,6 +16,12 @@ module Ai
     def complete(prompt:, system: nil, max_tokens: 4096, temperature: 0.1)
       if prompt =~ /candidate_matcher|match_score|job description/i
         mock_matching_response(prompt)
+      elsif prompt =~ /ats_score|ATS \(Applicant Tracking System\)|ATS resume quality/i
+        # Matched before the resume-parsing fallback below: without its own
+        # branch an ATS prompt fell through to mock_resume_parsing_response,
+        # so Ai::AtsScorer got a parsed-profile payload with no "ats_score"
+        # key, read nil, and every resume scored 0 against the mock provider.
+        mock_ats_response(prompt)
       elsif prompt =~ /search_parser|natural[- ]language|user search query|search interpretation/i
         mock_search_response(prompt)
       elsif prompt =~ /dashboard_insights|recruitment analytics/i
@@ -68,6 +74,19 @@ module Ai
           ]
         },
         ai_summary: "Experienced full-stack engineer with 4.5 years building robust web applications in Rails and React with solid database fundamentals."
+      }.to_json
+    end
+
+    # Varies with the document so a list of resumes doesn't render one
+    # identical score down the whole column, while staying deterministic for
+    # the same input.
+    def mock_ats_response(prompt)
+      document = prompt.split("RESUME TEXT:").last.to_s
+      score = 55 + (Digest::SHA256.hexdigest(document).to_i(16) % 41) # 55..95
+
+      {
+        ats_score: score,
+        summary: "Mock ATS score — no live AI provider is configured."
       }.to_json
     end
 

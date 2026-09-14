@@ -29,6 +29,13 @@ export function useCurrentUser() {
     isLoading: query.isLoading,
     isAuthenticated: !!query.data,
     isUnauthenticated,
+    // Distinct from isUnauthenticated on purpose: a 401 is a normal, expected
+    // state (show the login page), but anything else means the API could not
+    // be reached or answered at all — typically a misconfigured API URL or a
+    // backend that is down. Callers must not treat that as "logged out", or
+    // the user just gets a blank screen with no clue what went wrong.
+    isError: query.isError && !isUnauthenticated,
+    error: query.error,
     refetch: query.refetch,
   }
 }

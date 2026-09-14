@@ -144,7 +144,14 @@ export function useResumes(params?: {
   return useQuery({
     queryKey: ["recruitment", "resumes", queryParams],
     queryFn: () => recruitmentApi.resumes.list(queryParams),
-    refetchInterval: 10000, // auto poll while processing
+    // Only poll while something is actually being processed, which is what
+    // the interval was always for. It used to run every 10s forever, so an
+    // idle tab kept consuming one of the server's few request threads on a
+    // fixed cadence and competed with real user actions.
+    refetchInterval: (query) =>
+      query.state.data?.data?.some((r) => r.processingStatus === "pending" || r.processingStatus === "processing")
+        ? 10000
+        : false,
     enabled: enabled ?? true,
   })
 }

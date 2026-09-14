@@ -134,7 +134,18 @@ module Api
           end
 
           ::Audit::Record.call(action: "candidate_resume.downloaded", auditable: @resume, request: request)
-          redirect_to @resume.file.url(expires_in: 5.minutes, disposition: "inline"), allow_other_host: true
+
+          # Streamed through this action rather than redirecting to a
+          # presigned storage URL. That URL is built from S3_ENDPOINT, which
+          # points at storage as the SERVER sees it — on a deployed box that
+          # is an internal or loopback address, so the browser followed the
+          # redirect to a host it cannot reach and the PDF preview failed.
+          # Serving the bytes here keeps it on the already-reachable API
+          # origin and needs no extra proxy rules.
+          send_data @resume.file.download,
+                    filename: @resume.file_name.presence || "resume.pdf",
+                    type: @resume.content_type.presence || "application/pdf",
+                    disposition: "inline"
         end
 
         # POST /api/v1/recruitment/resumes/import_from_zoho
