@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_10_070444) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_073000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -231,11 +231,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_10_070444) do
     t.integer "duplicate_status", default: 0, null: false
     t.string "email"
     t.decimal "experience_years", precision: 4, scale: 1, default: "0.0", null: false
+    t.text "feedback_comments"
+    t.integer "feedback_rating"
+    t.datetime "feedback_requested_at"
+    t.datetime "feedback_submitted_at"
+    t.string "feedback_token"
+    t.boolean "feedback_would_recommend"
     t.string "first_name"
     t.string "full_name"
     t.integer "graduation_year"
     t.string "highest_qualification"
     t.string "industry"
+    t.datetime "interview_at"
+    t.bigint "interviewer_id"
     t.jsonb "languages", default: [], null: false
     t.string "last_name"
     t.text "notes"
@@ -254,6 +262,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_10_070444) do
     t.index ["company_id", "phone"], name: "index_candidates_on_company_id_and_phone"
     t.index ["company_id", "status"], name: "index_candidates_on_company_id_and_status"
     t.index ["company_id"], name: "index_candidates_on_company_id"
+    t.index ["feedback_token"], name: "index_candidates_on_feedback_token", unique: true
+    t.index ["interviewer_id"], name: "index_candidates_on_interviewer_id"
   end
 
   create_table "companies", force: :cascade do |t|
@@ -486,6 +496,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_10_070444) do
   add_foreign_key "candidate_skills", "candidates"
   add_foreign_key "candidate_skills", "companies"
   add_foreign_key "candidates", "companies"
+  add_foreign_key "candidates", "employees", column: "interviewer_id"
   add_foreign_key "departments", "companies"
   add_foreign_key "designations", "companies"
   add_foreign_key "designations", "departments"

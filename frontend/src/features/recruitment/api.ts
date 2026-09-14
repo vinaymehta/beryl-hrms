@@ -15,7 +15,17 @@ import type {
   RecruitmentDashboardStats,
   AiInsightsResponse,
   AiSearchResponse,
+  FeedbackForm,
 } from "@/types/recruitment"
+
+// The candidate-facing feedback form. Public and token-addressed — kept apart
+// from recruitmentApi because nothing here is an authenticated admin call.
+export const feedbackApi = {
+  get: (token: string) => apiClient.get<FeedbackForm>(`/feedback/${encodeURIComponent(token)}`),
+
+  submit: (token: string, values: { rating: number; wouldRecommend: boolean | null; comments: string }) =>
+    apiClient.post<FeedbackForm>(`/feedback/${encodeURIComponent(token)}`, values),
+}
 
 export const recruitmentApi = {
   dashboard: {
@@ -39,7 +49,7 @@ export const recruitmentApi = {
       language?: string
       processingStatus?: string
       duplicateStatus?: DuplicateStatus | ""
-      status?: CandidateStatus | ""
+      status?: CandidateStatus | CandidateStatus[] | ""
       search?: string
       page?: number
     }) => {
@@ -59,7 +69,10 @@ export const recruitmentApi = {
       if (params?.language) q.set("language", params.language)
       if (params?.processingStatus) q.set("processingStatus", params.processingStatus)
       if (params?.duplicateStatus) q.set("duplicateStatus", params.duplicateStatus)
-      if (params?.status) q.set("status", params.status)
+      // An array goes over as status[]=a&status[]=b, which Rails parses back
+      // into an array — the interview list filters on all four stages at once.
+      if (Array.isArray(params?.status)) params.status.forEach((st) => q.append("status[]", st))
+      else if (params?.status) q.set("status", params.status)
       if (params?.search) q.set("search", params.search)
       if (params?.page) q.set("page", String(params.page))
 
@@ -87,6 +100,17 @@ export const recruitmentApi = {
 
     setStatus: (id: string, status: CandidateStatus) =>
       apiClient.patch<CandidateDetail>(`/recruitment/candidates/${id}/status`, { status }),
+
+    // Schedules and reschedules alike — a candidate carries one interview, so
+    // sending this again just updates it (and re-sends the candidate's email
+    // with the new details). Date and time go over the wire separately because
+    // that's how the form collects them; the backend combines them.
+    scheduleInterview: (id: string, values: { interviewDate: string; interviewTime: string; interviewerId: string }) =>
+      apiClient.patch<CandidateDetail>(`/recruitment/candidates/${id}/schedule_interview`, values),
+
+    // Manual only — nothing sends a feedback request automatically.
+    requestFeedback: (id: string) =>
+      apiClient.patch<CandidateDetail>(`/recruitment/candidates/${id}/request_feedback`),
 
     confirmDuplicate: (id: string) =>
       apiClient.patch<CandidateDetail>(`/recruitment/candidates/${id}/confirm_duplicate`),

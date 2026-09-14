@@ -41,7 +41,7 @@ export function useCandidates(params?: {
   language?: string
   processingStatus?: string
   duplicateStatus?: DuplicateStatus | ""
-  status?: CandidateStatus | ""
+  status?: CandidateStatus | CandidateStatus[] | ""
   search?: string
   page?: number
   enabled?: boolean
@@ -95,6 +95,50 @@ export function useCandidateMutations() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recruitment", "candidates"] })
       queryClient.invalidateQueries({ queryKey: ["recruitment", "dashboard"] })
+      // The resume panel reads the candidate's status off the resume detail
+      // query, so a status change has to invalidate resumes too or the badge
+      // and the available actions stay stale until a manual refresh.
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "resumes"] })
+    },
+  })
+
+  const scheduleInterviewMutation = useMutation({
+    mutationFn: ({
+      id,
+      ...values
+    }: {
+      id: string
+      interviewDate: string
+      interviewTime: string
+      interviewerId: string
+    }) => recruitmentApi.candidates.scheduleInterview(id, values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "candidates"] })
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "dashboard"] })
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "resumes"] })
+    },
+  })
+
+  const requestFeedbackMutation = useMutation({
+    mutationFn: (id: string) => recruitmentApi.candidates.requestFeedback(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "candidates"] })
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "dashboard"] })
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "resumes"] })
+    },
+  })
+
+  // Lets an admin fill in or correct the profile the AI produced — the only
+  // way to supply something extraction couldn't recover (a resume whose PDF
+  // mangles its own contact line, say). Invalidates resumes too, since the
+  // resume panel reads the candidate through its own query.
+  const updateMutation = useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & Partial<CandidateDetail>) =>
+      recruitmentApi.candidates.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "candidates"] })
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "resumes"] })
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "dashboard"] })
     },
   })
 
@@ -124,6 +168,9 @@ export function useCandidateMutations() {
     shortlist: shortlistMutation,
     reject: rejectMutation,
     setStatus: setStatusMutation,
+    updateCandidate: updateMutation,
+    scheduleInterview: scheduleInterviewMutation,
+    requestFeedback: requestFeedbackMutation,
     deleteCandidate: deleteMutation,
     confirmDuplicate: confirmDuplicateMutation,
     dismissDuplicate: dismissDuplicateMutation,

@@ -40,7 +40,12 @@ module Api
               # "Other" — attachments the AI determined weren't resumes at
               # all, excluded from every count above; surfaced here so
               # they're not just silently dropped from the Quick Stats.
-              otherResumes: resumes.where(processing_status: :not_a_resume).count
+              otherResumes: resumes.where(processing_status: :not_a_resume).count,
+              # Interview stage. Counts every candidate past Shortlisted — not
+              # just interview_scheduled — because that's exactly the list the
+              # card opens: a candidate stays on it as they move through
+              # completed and feedback, rather than vanishing at each step.
+              interviewCandidates: candidates.where(status: Candidate::INTERVIEW_WORKFLOW_STATUSES).count
             }
           }
         end

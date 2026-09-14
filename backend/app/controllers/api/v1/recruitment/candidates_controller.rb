@@ -2,7 +2,9 @@ module Api
   module V1
     module Recruitment
       class CandidatesController < Api::V1::BaseController
-        before_action :set_candidate, only: %i[show update destroy shortlist reject status confirm_duplicate dismiss_duplicate]
+        before_action :set_candidate,
+                      only: %i[show update destroy shortlist reject status confirm_duplicate dismiss_duplicate
+                               schedule_interview request_feedback]
 
         # GET /api/v1/recruitment/candidates
         def index
@@ -21,7 +23,14 @@ module Api
           scope = scope.by_language(params[:language]) if params[:language].present?
           scope = scope.by_processing_status(params[:processingStatus]) if params[:processingStatus].present?
           scope = scope.by_duplicate_status(params[:duplicateStatus]) if params[:duplicateStatus].present?
-          scope = scope.where(status: params[:status]) if params[:status].present?
+          # Accepts one status or several (?status[]=a&status[]=b) — the
+          # interview list asks for all four workflow stages at once. Unknown
+          # values are dropped rather than passed to the enum, which would
+          # raise on an unmapped string.
+          if params[:status].present?
+            wanted = Array(params[:status]).map(&:to_s) & Candidate.statuses.keys
+            scope = wanted.any? ? scope.where(status: wanted) : scope.none
+          end
 
           if params[:search].present?
             q = "%#{params[:search].to_s.strip.downcase}%"
@@ -89,6 +98,63 @@ module Api
           render json: { data: candidate_detail(@candidate) }
         end
 
+        # PATCH /api/v1/recruitment/candidates/:id/schedule_interview
+        # Handles both the first schedule and every reschedule — the
+        # candidate carries one interview, so changing it is an update in
+        # place, and either way the candidate gets the current details.
+        def schedule_interview
+          authorize @candidate
+
+          # snake_case, not camelCase: the frontend sends interviewDate /
+          # interviewTime / interviewerId, and the JSON parser converts
+          # inbound body keys centrally (config/initializers/
+          # json_key_transform.rb). Reading the camelCase spelling here
+          # silently yields nil for every field.
+          interview_at = parse_interview_at(params[:interview_date], params[:interview_time])
+          if interview_at.nil?
+            return render json: { errors: [ { message: "Interview date and time are required." } ] },
+                          status: :unprocessable_entity
+          end
+
+          @candidate.assign_attributes(
+            interview_at: interview_at,
+            interviewer_id: params[:interviewer_id],
+            status: :interview_scheduled
+          )
+
+          # Presence of date/interviewer and the interviewer's tenancy are
+          # enforced on the model, so an invalid combination fails here
+          # rather than being half-saved.
+          unless @candidate.save
+            return render json: { errors: @candidate.errors.full_messages.map { |m| { message: m } } },
+                          status: :unprocessable_entity
+          end
+
+          deliver_candidate_mail(:interview_invitation)
+          render json: { data: candidate_detail(@candidate) }
+        end
+
+        # PATCH /api/v1/recruitment/candidates/:id/request_feedback
+        # Sent manually by an admin, never automatically. Moves the candidate
+        # to "feedback not received" — the ask is out, nothing is back yet.
+        def request_feedback
+          authorize @candidate
+
+          # A candidate who already answered shouldn't be dragged back to
+          # "not received" by a stray resend — their response still stands.
+          if @candidate.feedback_submitted?
+            return render json: { errors: [ { message: "#{@candidate.name} has already submitted their feedback." } ] },
+                          status: :unprocessable_entity
+          end
+
+          # Minted before the mail is built so the link in the email and the
+          # token stored on the row can never disagree.
+          @candidate.ensure_feedback_token!
+          @candidate.update!(feedback_requested_at: Time.current, status: :feedback_not_received)
+          deliver_candidate_mail(:feedback_request)
+          render json: { data: candidate_detail(@candidate) }
+        end
+
         # PATCH /api/v1/recruitment/candidates/:id/status
         def status
           authorize @candidate
@@ -125,6 +191,31 @@ module Api
           @candidate = policy_scope(Candidate).find(params[:id])
         end
 
+        # The UI collects date and time separately; they are stored as one
+        # instant. Returns nil if either half is missing or unparseable, so
+        # the caller can reject the request rather than persist a wrong time.
+        def parse_interview_at(date, time)
+          return nil if date.blank? || time.blank?
+
+          Time.zone.parse("#{date} #{time}")
+        rescue ArgumentError
+          nil
+        end
+
+        # Mail to an outside recipient must never take down the request that
+        # triggered it: a candidate with no email on file, or a transient SMTP
+        # problem, should not roll back an interview that is already booked.
+        def deliver_candidate_mail(mailer_action)
+          if @candidate.email.blank?
+            Rails.logger.warn("[CandidateMailer] #{mailer_action} skipped — candidate #{@candidate.id} has no email")
+            return
+          end
+
+          CandidateMailer.public_send(mailer_action, @candidate).deliver_later
+        rescue => e
+          Rails.logger.error("[CandidateMailer] #{mailer_action} failed for candidate #{@candidate.id}: #{e.class}: #{e.message}")
+        end
+
         def candidate_params
           params.permit(
             :first_name, :last_name, :full_name, :email, :phone,
@@ -146,6 +237,19 @@ module Api
             highestQualification: c.highest_qualification,
             experienceYears: c.experience_years.to_f,
             status: c.status,
+            # Interview stage — exposed on the SUMMARY (not just detail) so
+            # the list can show scheduling state without a per-row fetch.
+            interviewAt: c.interview_at&.iso8601,
+            interviewerId: c.interviewer_id&.to_s,
+            interviewerName: c.interviewer&.full_name,
+            feedbackRequestedAt: c.feedback_requested_at&.iso8601,
+            # The candidate's own answers. feedback_token is deliberately NOT
+            # exposed — it authenticates them on a public endpoint, so it never
+            # leaves the mail it was sent in.
+            feedbackSubmittedAt: c.feedback_submitted_at&.iso8601,
+            feedbackRating: c.feedback_rating,
+            feedbackWouldRecommend: c.feedback_would_recommend,
+            feedbackComments: c.feedback_comments,
             source: c.source,
             duplicateStatus: c.duplicate_status,
             createdAt: c.created_at.iso8601,

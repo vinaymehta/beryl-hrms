@@ -1,0 +1,11 @@
+Hi <%= @candidate.name %>,
+
+Thank you for your application. We'd like to invite you to an interview.
+
+Date: <%= @interview_at.strftime("%A, %d %B %Y") %>
+Time: <%= @interview_at.strftime("%I:%M %p") %>
+
+Please reply to this email if this time doesn't work for you, and we'll
+arrange an alternative.
+
+We look forward to speaking with you.

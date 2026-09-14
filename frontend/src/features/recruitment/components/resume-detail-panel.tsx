@@ -4,6 +4,8 @@ import { useState } from "react"
 import { useResume, useResumeMutations, useCandidateMutations } from "../hooks"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ResumePreviewModal } from "./resume-preview-modal"
+import { InterviewSchedulerDialog } from "./interview-scheduler-dialog"
+import { isInInterviewWorkflow } from "@/types/recruitment"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -16,11 +18,15 @@ import {
   MailIcon,
   PhoneIcon,
   MapPinIcon,
-  StarIcon,
   XCircleIcon,
   CheckCircle2Icon,
   MinusCircleIcon,
   CopyIcon,
+  CalendarClockIcon,
+  UserCheckIcon,
+  MessageSquareIcon,
+  ClipboardCheckIcon,
+  Loader2Icon,
 } from "lucide-react"
 import { recruitmentApi } from "../api"
 import { usePermission } from "@/features/auth/hooks/use-permission"
@@ -53,6 +59,10 @@ const CANDIDATE_STATUS_COLORS: Record<string, string> = {
   shortlisted: "bg-role-recruitment/10 text-role-recruitment",
   offered: "bg-emerald-500/10 text-emerald-600",
   rejected: "bg-muted text-muted-foreground",
+  interview_scheduled: "bg-cyan-500/10 text-cyan-600",
+  interview_completed: "bg-teal-500/10 text-teal-600",
+  feedback_received: "bg-emerald-500/10 text-emerald-600",
+  feedback_not_received: "bg-orange-500/10 text-orange-600",
 }
 
 function initials(name: string) {
@@ -84,17 +94,19 @@ function CriterionBadge({ label, value }: { label: string; value: boolean | null
 
 /**
  * Modal with the candidate/eligibility view of a resume — AI Summary, the
- * deterministic eligibility criteria, and the shortlist/reject decision.
+ * deterministic eligibility criteria, and the interview workflow. Shortlisting
+ * is automatic (Recruitment::EligibilityEvaluator), so it is not an action here.
  * The original PDF is a separate, dedicated action (ResumePreviewModal) from
  * the Resumes list, so it isn't duplicated here.
  */
 export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidate }: ResumeDetailPanelProps) {
   const { data: resume, isLoading } = useResume(resumeId || "")
   const { reprocess } = useResumeMutations()
-  const { shortlist, reject } = useCandidateMutations()
+  const { reject, setStatus, requestFeedback } = useCandidateMutations()
   const canProcess = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.resumesProcess])
   const canManage = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.candidatesManage])
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [schedulerOpen, setSchedulerOpen] = useState(false)
 
   if (!resumeId) return null
 
@@ -107,16 +119,6 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
     }
   }
 
-  const handleShortlist = async () => {
-    if (!resume?.candidate) return
-    try {
-      await shortlist.mutateAsync(resume.candidate.id)
-      toast.success(`${resume.candidate.fullName} marked as Shortlisted`)
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to shortlist")
-    }
-  }
-
   const handleReject = async () => {
     if (!resume?.candidate) return
     try {
@@ -126,6 +128,46 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
       toast.error(err?.message || "Failed to reject")
     }
   }
+
+  const handleMarkInterviewCompleted = async () => {
+    if (!resume?.candidate) return
+    try {
+      await setStatus.mutateAsync({ id: resume.candidate.id, status: "interview_completed" })
+      toast.success("Interview marked as completed")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update the interview")
+    }
+  }
+
+  // Always an explicit admin action — nothing requests feedback on its own.
+  const handleRequestFeedback = async () => {
+    if (!resume?.candidate) return
+    try {
+      await requestFeedback.mutateAsync(resume.candidate.id)
+      toast.success("Feedback request sent", {
+        description: resume.candidate.email
+          ? `Sent to ${resume.candidate.email}`
+          : "No email on file — the candidate was marked as awaiting feedback, but nothing was sent.",
+      })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to send the feedback request")
+    }
+  }
+
+  const handleFeedbackReceived = async () => {
+    if (!resume?.candidate) return
+    try {
+      await setStatus.mutateAsync({ id: resume.candidate.id, status: "feedback_received" })
+      toast.success("Feedback marked as received")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update feedback status")
+    }
+  }
+
+  const candidateStatus = resume?.candidate?.status
+  const inInterviewWorkflow = isInInterviewWorkflow(candidateStatus)
+  const interviewAt = resume?.candidate?.interviewAt ?? null
+  const interviewPending = setStatus.isPending || requestFeedback.isPending
 
   const aiSummary: string | undefined = resume?.extractedData?.ai_summary
   const skills: { name?: string; category?: string }[] = resume?.extractedData?.skills ?? []
@@ -249,6 +291,37 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
               </div>
             </div>
 
+            {/* Interview stage — only once there is one. The interviewer IS
+                shown here: this is the internal view. It is only the
+                candidate's email that deliberately leaves them out. */}
+            {inInterviewWorkflow && (
+              <div className="border-b bg-cyan-500/5 p-4">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Interview</p>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+                  <span className="inline-flex items-center gap-1.5 text-foreground">
+                    <CalendarClockIcon className="size-3.5 text-muted-foreground" />
+                    {interviewAt
+                      ? new Date(interviewAt).toLocaleString(undefined, {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })
+                      : "Not scheduled"}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-foreground">
+                    <UserCheckIcon className="size-3.5 text-muted-foreground" />
+                    {resume.candidate?.interviewerName || "No interviewer assigned"}
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">internal</span>
+                  </span>
+                  {resume.candidate?.feedbackRequestedAt && (
+                    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                      <MessageSquareIcon className="size-3.5" />
+                      Feedback requested {new Date(resume.candidate.feedbackRequestedAt).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="border-b px-5 py-2 flex items-center justify-between shrink-0">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">AI Summary</span>
               {resume.hasFile && (
@@ -322,10 +395,27 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
               onOpenChange={setPreviewOpen}
             />
 
+            {/* Mounted only while open, and keyed by the interview it's
+                editing, so the form always initializes from the candidate's
+                current booking instead of carrying over a previous edit. */}
+            {resume.candidate && schedulerOpen && (
+              <InterviewSchedulerDialog
+                key={`${resume.candidate.id}:${resume.candidate.interviewAt ?? "new"}`}
+                open={schedulerOpen}
+                onOpenChange={setSchedulerOpen}
+                candidateId={resume.candidate.id}
+                candidateName={resume.candidate.fullName}
+                candidateEmail={resume.candidate.email}
+                interviewAt={resume.candidate.interviewAt}
+                interviewerId={resume.candidate.interviewerId}
+                interviewerName={resume.candidate.interviewerName}
+              />
+            )}
+
             {/* Sticky action bar — quiet utility actions on the left,
                 everything building toward a hiring decision grouped on the
-                right in ascending order of weight, Shortlist as the final,
-                most prominent action. */}
+                right in ascending order of weight, the candidate's next
+                interview step as the final, most prominent action. */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-background p-3 shrink-0">
               <div className="flex flex-wrap items-center gap-0.5">
                 {resume.candidate && onOpenCandidate && (
@@ -376,16 +466,91 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
                     Reject
                   </Button>
                 )}
-                {canManage && resume.candidate && resume.candidate.status !== "shortlisted" && (
+                {/* No manual Shortlist button: shortlisting is decided
+                    automatically by Recruitment::EligibilityEvaluator when a
+                    resume is processed, so a button here would either
+                    duplicate that or silently override it. Reject stays — the
+                    evaluator never rejects on its own, so declining someone is
+                    only ever a human action. */}
+
+                {/* Interview workflow, one stage at a time: the only action
+                    offered is the next legitimate step from where the
+                    candidate actually is. */}
+                {canManage && resume.candidate && candidateStatus === "shortlisted" && (
                   <Button
                     size="sm"
-                    onClick={handleShortlist}
-                    disabled={shortlist.isPending}
+                    onClick={() => setSchedulerOpen(true)}
                     className="gap-1.5 bg-role-recruitment text-role-recruitment-foreground hover:bg-role-recruitment/90 shadow-2xs"
                   >
-                    <StarIcon className="size-3.5" />
-                    Shortlist
+                    <CalendarClockIcon className="size-3.5" />
+                    Schedule Interview
                   </Button>
+                )}
+
+                {canManage && resume.candidate && candidateStatus === "interview_scheduled" && (
+                  <>
+                    <Button size="sm" variant="outline" onClick={() => setSchedulerOpen(true)} className="gap-1.5">
+                      <CalendarClockIcon className="size-3.5" />
+                      Reschedule
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleMarkInterviewCompleted}
+                      disabled={interviewPending}
+                      className="gap-1.5 bg-role-recruitment text-role-recruitment-foreground hover:bg-role-recruitment/90 shadow-2xs"
+                    >
+                      {interviewPending ? (
+                        <Loader2Icon className="size-3.5 animate-spin" />
+                      ) : (
+                        <CheckCircle2Icon className="size-3.5" />
+                      )}
+                      Interview Completed
+                    </Button>
+                  </>
+                )}
+
+                {canManage && resume.candidate && candidateStatus === "interview_completed" && (
+                  <Button
+                    size="sm"
+                    onClick={handleRequestFeedback}
+                    disabled={interviewPending}
+                    className="gap-1.5 bg-role-recruitment text-role-recruitment-foreground hover:bg-role-recruitment/90 shadow-2xs"
+                  >
+                    {interviewPending ? (
+                      <Loader2Icon className="size-3.5 animate-spin" />
+                    ) : (
+                      <MessageSquareIcon className="size-3.5" />
+                    )}
+                    Send Feedback Request
+                  </Button>
+                )}
+
+                {canManage && resume.candidate && candidateStatus === "feedback_not_received" && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleRequestFeedback}
+                      disabled={interviewPending}
+                      className="gap-1.5"
+                    >
+                      <MessageSquareIcon className="size-3.5" />
+                      Resend Request
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleFeedbackReceived}
+                      disabled={interviewPending}
+                      className="gap-1.5 bg-role-recruitment text-role-recruitment-foreground hover:bg-role-recruitment/90 shadow-2xs"
+                    >
+                      {interviewPending ? (
+                        <Loader2Icon className="size-3.5 animate-spin" />
+                      ) : (
+                        <ClipboardCheckIcon className="size-3.5" />
+                      )}
+                      Feedback Received
+                    </Button>
+                  </>
                 )}
               </div>
             </div>

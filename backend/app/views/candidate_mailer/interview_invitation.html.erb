@@ -1,0 +1,12 @@
+<p>Hi <%= @candidate.name %>,</p>
+
+<p>Thank you for your application. We'd like to invite you to an interview.</p>
+
+<p>
+  <strong>Date:</strong> <%= @interview_at.strftime("%A, %d %B %Y") %><br>
+  <strong>Time:</strong> <%= @interview_at.strftime("%I:%M %p") %>
+</p>
+
+<p>Please reply to this email if this time doesn't work for you, and we'll arrange an alternative.</p>
+
+<p>We look forward to speaking with you.</p>

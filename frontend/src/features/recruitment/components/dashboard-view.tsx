@@ -65,6 +65,10 @@ const STATUS_BADGE: Record<string, string> = {
   shortlisted: "bg-role-recruitment/10 text-role-recruitment",
   offered: "bg-emerald-500/10 text-emerald-600",
   rejected: "bg-muted text-muted-foreground",
+  interview_scheduled: "bg-cyan-500/10 text-cyan-600",
+  interview_completed: "bg-teal-500/10 text-teal-600",
+  feedback_received: "bg-emerald-500/10 text-emerald-600",
+  feedback_not_received: "bg-orange-500/10 text-orange-600",
 }
 
 const STATUS_BAR: Record<string, string> = {
@@ -75,11 +79,29 @@ const STATUS_BAR: Record<string, string> = {
   shortlisted: "bg-role-recruitment",
   offered: "bg-emerald-500",
   rejected: "bg-muted-foreground/40",
+  interview_scheduled: "bg-cyan-500",
+  interview_completed: "bg-teal-500",
+  feedback_received: "bg-emerald-500",
+  feedback_not_received: "bg-orange-500",
 }
 
 // Funnel order for the pipeline view — unrecognized statuses (shouldn't occur,
 // but real data always wins over a hardcoded list) sort after known ones.
-const PIPELINE_ORDER = ["needs_review", "applied", "screening", "interviewing", "shortlisted", "offered", "rejected"]
+const PIPELINE_ORDER = [
+  "needs_review",
+  "applied",
+  "screening",
+  "interviewing",
+  "shortlisted",
+  // Interview workflow sits after Shortlisted, in the order a candidate
+  // actually moves through it.
+  "interview_scheduled",
+  "interview_completed",
+  "feedback_received",
+  "feedback_not_received",
+  "offered",
+  "rejected",
+]
 
 // Aggregation endpoints can surface a null/blank status when a row's raw DB
 // value falls outside the enum's mapped range (e.g. stale/corrupt data) —

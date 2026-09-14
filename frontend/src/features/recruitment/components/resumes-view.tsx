@@ -36,11 +36,13 @@ import {
   XCircleIcon,
   FilterIcon,
   EyeIcon,
+  CalendarClockIcon,
   type LucideIcon,
 } from "lucide-react"
 import { recruitmentApi } from "../api"
 import { ResumePreviewModal } from "./resume-preview-modal"
 import type { CandidateResumeSummary } from "@/types/recruitment"
+import { isInInterviewWorkflow } from "@/types/recruitment"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
 import { cn } from "cn"
@@ -58,6 +60,14 @@ const CANDIDATE_STATUS_META: Record<string, { label: string; icon: LucideIcon; c
   needs_review: { label: "Needs Review", icon: AlertCircleIcon, className: "bg-amber-500/10 text-amber-600" },
   shortlisted: { label: "Shortlisted", icon: StarIcon, className: "bg-emerald-500/10 text-emerald-600" },
   rejected: { label: "Rejected", icon: XCircleIcon, className: "bg-red-500/10 text-red-600" },
+}
+
+// Same hues the candidate-status badges use everywhere else.
+const INTERVIEW_BADGE: Record<string, string> = {
+  interview_scheduled: "bg-cyan-500/10 text-cyan-600",
+  interview_completed: "bg-teal-500/10 text-teal-600",
+  feedback_received: "bg-emerald-500/10 text-emerald-600",
+  feedback_not_received: "bg-orange-500/10 text-orange-600",
 }
 
 const SORT_OPTIONS = [
@@ -459,6 +469,22 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
                               className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-medium text-violet-600"
                             >
                               <CopyIcon className="size-2.5" /> Duplicate
+                            </span>
+                          )}
+                          {/* The row's icon chip reflects the resume's
+                              eligibility verdict, which never changes once the
+                              candidate moves on. This badge is what shows how
+                              far through the interview workflow they actually
+                              are, without opening each one. */}
+                          {isInInterviewWorkflow(resume.candidateStatus) && (
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium capitalize",
+                                INTERVIEW_BADGE[resume.candidateStatus!] || "bg-muted text-muted-foreground"
+                              )}
+                            >
+                              <CalendarClockIcon className="size-2.5" />
+                              {resume.candidateStatus!.replace(/_/g, " ")}
                             </span>
                           )}
                         </div>

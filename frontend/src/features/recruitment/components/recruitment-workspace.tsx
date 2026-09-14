@@ -5,6 +5,7 @@ import { DashboardView, type DashboardDetail } from "./dashboard-view"
 import { CandidatesView } from "./candidates-view"
 import { ResumesView } from "./resumes-view"
 import { AiSearchView } from "./ai-search-view"
+import { InterviewsView } from "./interviews-view"
 import { JobsMatchingView } from "./jobs-matching-view"
 import { ScanZohoModal } from "./scan-zoho-modal"
 import { useRecruitmentStats, useRecruitmentAnalytics } from "../hooks"
@@ -22,6 +23,7 @@ import {
   RefreshCwIcon,
   MailSearchIcon,
   FileQuestionIcon,
+  CalendarClockIcon,
   type LucideIcon,
 } from "lucide-react"
 
@@ -38,7 +40,7 @@ interface Kpi {
 
 export function RecruitmentWorkspace() {
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "candidates" | "resumes" | "search" | "jobs" | "shortlisted"
+    "dashboard" | "candidates" | "resumes" | "search" | "jobs" | "shortlisted" | "interviews"
   >("resumes")
   const [scanModalOpen, setScanModalOpen] = useState(false)
   const [dashboardDetail, setDashboardDetail] = useState<DashboardDetail | null>(null)
@@ -104,6 +106,16 @@ export function RecruitmentWorkspace() {
       iconTint: "bg-emerald-500 text-white",
       wash: "bg-emerald-500/10 border-emerald-500/15",
       onClick: () => openResumesByCandidateStatus("shortlisted"),
+    },
+    {
+      key: "interviews",
+      label: "Interview Scheduled",
+      value: stats?.interviewCandidates,
+      caption: "Scheduled through feedback",
+      icon: CalendarClockIcon,
+      iconTint: "bg-cyan-500 text-white",
+      wash: "bg-cyan-500/10 border-cyan-500/15",
+      onClick: () => setActiveTab("interviews"),
     },
     {
       key: "rejected",
@@ -291,6 +303,7 @@ export function RecruitmentWorkspace() {
         {activeTab === "search" && <AiSearchView />}
         {activeTab === "jobs" && <JobsMatchingView />}
         {activeTab === "shortlisted" && <CandidatesView initialStatus="shortlisted" />}
+        {activeTab === "interviews" && <InterviewsView />}
       </div>
 
       <ScanZohoModal open={scanModalOpen} onOpenChange={setScanModalOpen} />

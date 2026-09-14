@@ -11,6 +11,19 @@ class Candidate < ApplicationRecord
   has_many :jobs, through: :candidate_job_matches
   has_many :ai_processing_logs, dependent: :nullify
 
+  # The interviewer is an existing Employee, never a free-text name, so the
+  # picker can only offer real people and the record stays linked if they
+  # are later renamed.
+  belongs_to :interviewer, class_name: "Employee", optional: true
+
+  # 0-6 are the pre-existing values and keep their numbers — the interview
+  # stage is appended rather than renumbered so no stored row changes meaning.
+  #
+  # 7-10 are the post-shortlist workflow:
+  #   shortlisted -> interview_scheduled -> interview_completed
+  #                  -> feedback_not_received / feedback_received
+  # `interviewing` (3) predates this and is left untouched; the workflow uses
+  # the explicit interview_* values so the wording matches the UI exactly.
   enum :status, {
     needs_review: 0,
     applied: 1,
@@ -18,8 +31,47 @@ class Candidate < ApplicationRecord
     interviewing: 3,
     shortlisted: 4,
     offered: 5,
-    rejected: 6
+    rejected: 6,
+    interview_scheduled: 7,
+    interview_completed: 8,
+    feedback_received: 9,
+    feedback_not_received: 10
   }, default: :needs_review
+
+  # Statuses that mean "this candidate has moved past the automatic
+  # eligibility decision into the human-run interview workflow". Resume
+  # reprocessing must not drag them back to shortlisted/rejected — see
+  # ResumeExtractionJob.
+  INTERVIEW_WORKFLOW_STATUSES = %w[
+    interview_scheduled interview_completed feedback_received feedback_not_received
+  ].freeze
+
+  def in_interview_workflow?
+    INTERVIEW_WORKFLOW_STATUSES.include?(status)
+  end
+
+  FEEDBACK_RATING_RANGE = (1..5).freeze
+
+  # Feedback the CANDIDATE submits about their interview experience, via the
+  # public form. Ratings are bounded so a malformed submission on an endpoint
+  # with no session behind it can't store nonsense.
+  validates :feedback_rating,
+            inclusion: { in: FEEDBACK_RATING_RANGE, message: "must be between 1 and 5" },
+            allow_nil: true
+
+  def feedback_submitted?
+    feedback_submitted_at.present?
+  end
+
+  # The candidate's only credential on the public feedback endpoint, so it has
+  # to be unguessable — generated once and reused, so a resent request links to
+  # the same form rather than orphaning the previous link.
+  def ensure_feedback_token!
+    return feedback_token if feedback_token.present?
+
+    update_column(:feedback_token, SecureRandom.urlsafe_base64(32))
+    feedback_token
+  end
 
   enum :duplicate_status, {
     unique_record: 0,
@@ -28,6 +80,16 @@ class Candidate < ApplicationRecord
   }, default: :unique_record
 
   validates :full_name, presence: true
+
+  # An interview cannot exist without when it is and who is running it.
+  # Enforced on the record itself, not just in the controller, so no path
+  # (console, future endpoint, import) can leave a half-scheduled interview.
+  with_options if: :interview_scheduled? do
+    validates :interview_at, presence: { message: "and time are required to schedule an interview" }
+    validates :interviewer_id, presence: { message: "must be selected to schedule an interview" }
+  end
+
+  validate :interviewer_must_belong_to_same_company
 
   scope :by_city, ->(city) { where("LOWER(city) = ?", city.to_s.strip.downcase) if city.present? }
   scope :by_qualification, ->(qual) {
@@ -106,5 +168,16 @@ class Candidate < ApplicationRecord
   def name
     full_name.presence || [first_name, last_name].compact.join(" ").presence || "Unnamed Candidate"
   end
-end
 
+  private
+
+  # acts_as_tenant scopes queries, but a foreign key assigned directly still
+  # has to be checked — an interviewer from another company would otherwise
+  # be persistable and would leak that employee's name into this tenant's UI.
+  def interviewer_must_belong_to_same_company
+    return if interviewer_id.blank?
+    return if interviewer && interviewer.company_id == company_id
+
+    errors.add(:interviewer, "must be an employee of this company")
+  end
+end

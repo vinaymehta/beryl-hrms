@@ -40,6 +40,7 @@ export interface Employee {
 
 export interface EmployeeListParams {
   page?: number
+  perPage?: number
   departmentId?: string
   designationId?: string
   status?: EmployeeStatus

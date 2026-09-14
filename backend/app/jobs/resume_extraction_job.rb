@@ -53,7 +53,12 @@ class ResumeExtractionJob < ApplicationJob
     # a stronger follow-up resume can move a previously-rejected candidate to
     # Shortlisted, and vice versa).
     eligibility = Recruitment::EligibilityEvaluator.call(candidate)
-    candidate.update!(status: eligibility.status)
+    # ...but only while the candidate is still at the eligibility stage. Once
+    # a human has scheduled an interview, reprocessing a resume must not drag
+    # them back to shortlisted/rejected and silently discard the interview
+    # they were booked for — an auto-scan picking up a re-sent resume would
+    # otherwise undo the whole interview workflow behind the admin's back.
+    candidate.update!(status: eligibility.status) unless candidate.in_interview_workflow?
 
     ats_score = Ai::AtsScorer.score(raw_text: resume.raw_text, extracted_candidate: parsed[:candidate], resume: resume)
 

@@ -311,7 +311,15 @@ module Api
               phone: r.candidate.phone,
               city: r.candidate.city,
               currentRole: r.candidate.current_role,
-              status: r.candidate.status
+              status: r.candidate.status,
+              # Interview stage — the resume panel is the reachable surface for
+              # scheduling, so it needs the current interview state inline
+              # rather than a second fetch of the candidate.
+              interviewAt: r.candidate.interview_at&.iso8601,
+              interviewerId: r.candidate.interviewer_id&.to_s,
+              interviewerName: r.candidate.interviewer&.full_name,
+              feedbackRequestedAt: r.candidate.feedback_requested_at&.iso8601,
+              feedbackSubmittedAt: r.candidate.feedback_submitted_at&.iso8601
             } : nil
           )
         end

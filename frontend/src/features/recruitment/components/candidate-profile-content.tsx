@@ -22,7 +22,6 @@ import {
   BriefcaseIcon,
   GraduationCapIcon,
   FileTextIcon,
-  StarIcon,
   XCircleIcon,
   ClockIcon,
   SparklesIcon,
@@ -48,6 +47,12 @@ const statusColors: Record<string, string> = {
   interviewing: "bg-indigo-500/10 text-indigo-600 border-indigo-500/30",
   offered: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
   rejected: "bg-muted text-muted-foreground border-border",
+  // Interview workflow — one hue per stage, shared with every other
+  // candidate-status badge in the app.
+  interview_scheduled: "bg-cyan-500/10 text-cyan-600 border-cyan-500/30",
+  interview_completed: "bg-teal-500/10 text-teal-600 border-teal-500/30",
+  feedback_received: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
+  feedback_not_received: "bg-orange-500/10 text-orange-600 border-orange-500/30",
 }
 
 // Shared candidate profile body — rendered inside a Dialog by
@@ -56,18 +61,9 @@ const statusColors: Record<string, string> = {
 export function CandidateProfileContent({ candidateId }: { candidateId: string }) {
   const router = useRouter()
   const { data: candidate, isLoading } = useCandidate(candidateId)
-  const { shortlist, reject, deleteCandidate, confirmDuplicate, dismissDuplicate } = useCandidateMutations()
+  const { reject, deleteCandidate, confirmDuplicate, dismissDuplicate } = useCandidateMutations()
   const canManage = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.candidatesManage])
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-
-  const handleShortlist = async () => {
-    try {
-      await shortlist.mutateAsync(candidateId)
-      toast.success("Candidate marked as Shortlisted")
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to shortlist")
-    }
-  }
 
   const handleReject = async () => {
     try {
@@ -164,16 +160,12 @@ export function CandidateProfileContent({ candidateId }: { candidateId: string }
 
           {/* Actions */}
           <div className="flex items-center gap-1.5 shrink-0">
-            {canManage && candidate.status !== "shortlisted" && (
-              <Button
-                size="sm"
-                onClick={handleShortlist}
-                className="text-xs gap-1 shadow-2xs"
-              >
-                <StarIcon className="size-3.5" />
-                Shortlist
-              </Button>
-            )}
+            {/* No manual Shortlist: shortlisting is decided automatically by
+                Recruitment::EligibilityEvaluator when a resume is processed, so
+                a button here would either duplicate that or silently override
+                it — and for a candidate already in the interview workflow it
+                would drop them back out of it. Reject stays: the evaluator
+                never rejects on its own. */}
 
             {canManage && candidate.status !== "rejected" && (
               <Button

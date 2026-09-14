@@ -31,6 +31,17 @@ class CandidatePolicy < ApplicationPolicy
     update?
   end
 
+  # Interview stage. Same permission as any other candidate mutation — these
+  # are named explicitly (rather than authorized as :update?) so the interview
+  # workflow can be gated separately later without touching the controller.
+  def schedule_interview?
+    update?
+  end
+
+  def request_feedback?
+    update?
+  end
+
   class Scope < Scope
     def resolve
       if user.present?

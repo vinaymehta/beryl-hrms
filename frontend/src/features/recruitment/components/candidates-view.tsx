@@ -186,6 +186,10 @@ export function CandidatesView({ initialStatus = "" }: CandidatesViewProps) {
     interviewing: "bg-indigo-500/10 text-indigo-600 border-indigo-500/30",
     offered: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
     rejected: "bg-muted text-muted-foreground border-border",
+    interview_scheduled: "bg-cyan-500/10 text-cyan-600 border-cyan-500/30",
+    interview_completed: "bg-teal-500/10 text-teal-600 border-teal-500/30",
+    feedback_received: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
+    feedback_not_received: "bg-orange-500/10 text-orange-600 border-orange-500/30",
   }
 
   return (

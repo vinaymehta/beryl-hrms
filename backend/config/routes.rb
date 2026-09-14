@@ -34,6 +34,12 @@ Rails.application.routes.draw do
         patch "change_password", to: "password_changes#update"
       end
 
+      # Public, unauthenticated: the candidate's own interview-feedback form.
+      # Addressed by unguessable token, never by candidate id — see
+      # Api::V1::FeedbackController.
+      get "feedback/:token", to: "feedback#show", as: :candidate_feedback
+      post "feedback/:token", to: "feedback#create"
+
       get "dashboard/summary", to: "dashboard#summary"
 
       resources :employees, only: %i[ index show create update ] do
@@ -82,6 +88,10 @@ Rails.application.routes.draw do
             patch :shortlist
             patch :reject
             patch :status
+            # Scheduling and rescheduling are the same action — one interview
+            # per candidate, updated in place.
+            patch :schedule_interview
+            patch :request_feedback
             patch :confirm_duplicate
             patch :dismiss_duplicate
           end

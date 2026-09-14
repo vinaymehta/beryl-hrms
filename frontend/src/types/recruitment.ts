@@ -6,6 +6,26 @@ export type CandidateStatus =
   | "offered"
   | "rejected"
   | "needs_review"
+  // Interview workflow, in order: a Shortlisted candidate moves through these
+  // four and no further. Spelled exactly as the backend enum stores them.
+  | "interview_scheduled"
+  | "interview_completed"
+  | "feedback_received"
+  | "feedback_not_received"
+
+// The stages after Shortlisted. A candidate in any of these is out of the
+// eligibility stage — reprocessing a resume no longer rewrites their status
+// (see ResumeExtractionJob / Candidate#in_interview_workflow?).
+export const INTERVIEW_WORKFLOW_STATUSES: CandidateStatus[] = [
+  "interview_scheduled",
+  "interview_completed",
+  "feedback_received",
+  "feedback_not_received",
+]
+
+export function isInInterviewWorkflow(status: CandidateStatus | string | null | undefined): boolean {
+  return INTERVIEW_WORKFLOW_STATUSES.includes(status as CandidateStatus)
+}
 
 export type DuplicateStatus = "unique_record" | "potential_duplicate" | "confirmed_duplicate"
 
@@ -115,6 +135,11 @@ export interface CandidateResumeDetail extends CandidateResumeSummary {
     city: string | null
     currentRole: string | null
     status: CandidateStatus
+    interviewAt: string | null
+    interviewerId: string | null
+    interviewerName: string | null
+    feedbackRequestedAt: string | null
+    feedbackSubmittedAt: string | null
   } | null
 }
 
@@ -128,6 +153,18 @@ export interface CandidateSummary {
   highestQualification: string | null
   experienceYears: number
   status: CandidateStatus
+  // Interview stage. `interviewAt` is a single instant; the UI splits it back
+  // into date and time for editing, the same way scheduling sends them.
+  interviewAt: string | null
+  interviewerId: string | null
+  interviewerName: string | null
+  feedbackRequestedAt: string | null
+  // The candidate's own answers, submitted through the public form. Null
+  // until they actually respond — never inferred from the request going out.
+  feedbackSubmittedAt: string | null
+  feedbackRating: number | null
+  feedbackWouldRecommend: boolean | null
+  feedbackComments: string | null
   source: string
   duplicateStatus: DuplicateStatus
   createdAt: string
@@ -215,6 +252,9 @@ export interface RecruitmentDashboardStats {
   shortlistedResumes: number
   rejectedResumes: number
   otherResumes: number
+  // Candidates past Shortlisted — scheduled, completed, and either feedback
+  // state. Matches exactly what the Interview Scheduled card opens.
+  interviewCandidates: number
 }
 
 export interface RecruitmentAnalytics {
@@ -252,4 +292,16 @@ export interface AiSearchResponse {
     jobTitle?: string | null
   }
   candidates: CandidateSummary[]
+}
+
+// The public feedback form's view of a candidate — deliberately minimal, and
+// all the backend will return on an endpoint with no session behind it.
+export interface FeedbackForm {
+  candidateFirstName: string | null
+  companyName: string | null
+  submitted: boolean
+  submittedAt: string | null
+  rating: number | null
+  wouldRecommend: boolean | null
+  comments: string | null
 }
