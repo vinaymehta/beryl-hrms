@@ -1,0 +1,34 @@
+Hi <%= @interviewer&.full_name %>,
+
+An interview has been booked with you.
+
+Candidate: <%= @candidate.name %>
+Email:     <%= @candidate.email.presence || "not on file" %>
+When:      <%= @when_text %>
+<% if @candidate.phone.present? -%>
+Phone:     <%= @candidate.phone %>
+<% end -%>
+
+<% if @join_url.present? -%>
+JOIN THE INTERVIEW
+<%= @join_url %>
+<% else -%>
+JOIN THE INTERVIEW
+You've been added as a guest on the calendar invitation — the joining details
+are on that invite.
+<% end -%>
+
+<% if @resume_attached -%>
+Their resume is attached to this email.
+<% else -%>
+No resume file was available to attach.
+<% end -%>
+
+AFTER THE INTERVIEW
+Please fill in your feedback here — it takes about a minute and needs no login:
+<%= @feedback_url %>
+
+Keep this email: that link is how the hiring team receives your assessment.
+
+The candidate booked this slot themselves and cannot reschedule it. If they
+cancel, they are moved out of the interview stage automatically.

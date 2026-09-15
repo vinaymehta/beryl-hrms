@@ -34,9 +34,9 @@ Rails.application.routes.draw do
         patch "change_password", to: "password_changes#update"
       end
 
-      # Public, unauthenticated: the candidate's own interview-feedback form.
-      # Addressed by unguessable token, never by candidate id — see
-      # Api::V1::FeedbackController.
+      # Public, unauthenticated: the INTERVIEWER's write-up of a candidate.
+      # Addressed by unguessable token, never by candidate id, and needs no
+      # login by design — see Api::V1::FeedbackController.
       get "feedback/:token", to: "feedback#show", as: :candidate_feedback
       post "feedback/:token", to: "feedback#create"
 
@@ -78,6 +78,22 @@ Rails.application.routes.draw do
         get "search", to: "search#index"
       end
 
+      namespace :calendly do
+        # PUBLIC — Calendly posts booking/cancellation events here. Authenticated
+        # by HMAC signature only; see Api::V1::Calendly::WebhooksController.
+        post "webhooks", to: "webhooks#create"
+
+        post "connections", to: "connections#create"
+        get "connections", to: "connections#index"
+        # Hit by Calendly redirecting the browser, so it must be declared before
+        # the :id route or "callback" would be parsed as an id.
+        get "connections/callback", to: "connections#callback"
+        get "connections/event_types", to: "connections#event_types"
+        patch "connections/event_type", to: "connections#set_event_type"
+        post "connections/register_webhook", to: "connections#register_webhook"
+        delete "connections/:id", to: "connections#destroy"
+      end
+
       namespace :recruitment do
         get "dashboard/stats", to: "dashboard#stats"
         get "dashboard/analytics", to: "dashboard#analytics"
@@ -88,8 +104,9 @@ Rails.application.routes.draw do
             patch :shortlist
             patch :reject
             patch :status
-            # Scheduling and rescheduling are the same action — one interview
-            # per candidate, updated in place.
+            # Assigns the interviewer and sends the Calendly booking link. The
+            # candidate picks the slot; they cannot reschedule (the link is
+            # single-use), so there is no separate reschedule action.
             patch :schedule_interview
             patch :request_feedback
             patch :confirm_duplicate

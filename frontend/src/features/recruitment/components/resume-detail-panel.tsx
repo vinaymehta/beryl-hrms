@@ -19,6 +19,7 @@ import {
   MailIcon,
   PhoneIcon,
   MapPinIcon,
+  StarIcon,
   XCircleIcon,
   CheckCircle2Icon,
   MinusCircleIcon,
@@ -103,7 +104,7 @@ function CriterionBadge({ label, value }: { label: string; value: boolean | null
 export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidate }: ResumeDetailPanelProps) {
   const { data: resume, isLoading } = useResume(resumeId || "")
   const { reprocess } = useResumeMutations()
-  const { reject, setStatus, requestFeedback } = useCandidateMutations()
+  const { shortlist, reject, setStatus, requestFeedback } = useCandidateMutations()
   const canProcess = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.resumesProcess])
   const canManage = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.candidatesManage])
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -118,6 +119,17 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
       toast.success("Resume re-queued for AI parsing")
     } catch (err: any) {
       toast.error(err?.message || "Failed to reprocess resume")
+    }
+  }
+
+  // Only reachable from a rejected candidate — see the button's comment.
+  const handleShortlist = async () => {
+    if (!resume?.candidate) return
+    try {
+      await shortlist.mutateAsync(resume.candidate.id)
+      toast.success(`${resume.candidate.fullName} moved back to Shortlisted`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to move back to Shortlisted")
     }
   }
 
@@ -434,13 +446,13 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
                 current booking instead of carrying over a previous edit. */}
             {resume.candidate && schedulerOpen && (
               <InterviewSchedulerDialog
-                key={`${resume.candidate.id}:${resume.candidate.interviewAt ?? "new"}`}
+                key={`${resume.candidate.id}:${resume.candidate.interviewLinkSentAt ?? "new"}`}
                 open={schedulerOpen}
                 onOpenChange={setSchedulerOpen}
                 candidateId={resume.candidate.id}
                 candidateName={resume.candidate.fullName}
                 candidateEmail={resume.candidate.email}
-                interviewAt={resume.candidate.interviewAt}
+                interviewLinkSentAt={resume.candidate.interviewLinkSentAt}
                 interviewerId={resume.candidate.interviewerId}
                 interviewerName={resume.candidate.interviewerName}
               />
@@ -500,12 +512,25 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
                     Reject
                   </Button>
                 )}
-                {/* No manual Shortlist button: shortlisting is decided
-                    automatically by Recruitment::EligibilityEvaluator when a
-                    resume is processed, so a button here would either
-                    duplicate that or silently override it. Reject stays — the
-                    evaluator never rejects on its own, so declining someone is
-                    only ever a human action. */}
+                {/* Shortlist is offered ONLY to move a rejected candidate
+                    back — the reverse of Reject. It is deliberately absent
+                    everywhere else: shortlisting is decided automatically by
+                    Recruitment::EligibilityEvaluator when a resume is
+                    processed, so a general button would duplicate or silently
+                    override that. Reject has no such counterpart (the
+                    evaluator never rejects on its own), which is why the two
+                    are not symmetrical. */}
+                {canManage && resume.candidate && resume.candidate.status === "rejected" && (
+                  <Button
+                    size="sm"
+                    onClick={handleShortlist}
+                    disabled={shortlist.isPending}
+                    className="gap-1.5 bg-role-recruitment text-role-recruitment-foreground hover:bg-role-recruitment/90 shadow-2xs"
+                  >
+                    <StarIcon className="size-3.5" />
+                    Move to Shortlisted
+                  </Button>
+                )}
 
                 {/* Interview workflow, one stage at a time: the only action
                     offered is the next legitimate step from where the
@@ -517,16 +542,12 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
                     className="gap-1.5 bg-role-recruitment text-role-recruitment-foreground hover:bg-role-recruitment/90 shadow-2xs"
                   >
                     <CalendarClockIcon className="size-3.5" />
-                    Schedule Interview
+                    {resume.candidate.interviewLinkSentAt ? "Resend booking link" : "Schedule Interview"}
                   </Button>
                 )}
 
                 {canManage && resume.candidate && candidateStatus === "interview_scheduled" && (
                   <>
-                    <Button size="sm" variant="outline" onClick={() => setSchedulerOpen(true)} className="gap-1.5">
-                      <CalendarClockIcon className="size-3.5" />
-                      Reschedule
-                    </Button>
                     <Button
                       size="sm"
                       onClick={handleMarkInterviewCompleted}

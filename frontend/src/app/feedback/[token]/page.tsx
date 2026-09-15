@@ -6,15 +6,23 @@ import { feedbackApi } from "@/features/recruitment/api"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
-import { CheckCircle2Icon, StarIcon, MessageSquareIcon, AlertCircleIcon } from "lucide-react"
+import { CheckCircle2Icon, StarIcon, MessageSquareIcon, AlertCircleIcon, CalendarClockIcon } from "lucide-react"
 import { cn } from "cn"
 
-const RATING_LABELS = ["Poor", "Fair", "Good", "Great", "Excellent"]
+const RATING_LABELS = ["Poor", "Fair", "Good", "Strong", "Outstanding"]
+
+function formatWhen(iso: string | null) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+}
 
 /**
- * PUBLIC page — the candidate has no account here. The token in the URL is the
- * only credential, so this page is deliberately standalone: no app shell, no
- * nav, nothing about their application, their status, or who interviewed them.
+ * PUBLIC page — the INTERVIEWER writes up the candidate they interviewed, with
+ * no login (per spec). The token in the URL is the only credential, so the page
+ * is standalone: no app shell, no nav, and nothing about the candidate beyond
+ * who they are and when the interview was.
  */
 export default function FeedbackPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params)
@@ -33,8 +41,8 @@ export default function FeedbackPage({ params }: { params: Promise<{ token: stri
     mutationFn: () => feedbackApi.submit(token, { rating, wouldRecommend, comments }),
   })
 
-  // Either the link is wrong or it was revoked — same message either way, so
-  // the page never confirms whether a given token exists.
+  // Wrong link or revoked — same message either way, so the page never
+  // confirms whether a given token exists.
   if (isError) {
     return (
       <Shell>
@@ -42,8 +50,7 @@ export default function FeedbackPage({ params }: { params: Promise<{ token: stri
           <AlertCircleIcon className="mx-auto size-10 text-muted-foreground/40" />
           <h1 className="text-lg font-semibold text-foreground">This feedback link isn&apos;t valid</h1>
           <p className="text-sm text-muted-foreground">
-            It may have expired or been mistyped. If you received it by email, try opening the link again directly from
-            that message.
+            It may have expired or been mistyped. Try opening the link again directly from the email you received.
           </p>
         </div>
       </Shell>
@@ -70,20 +77,20 @@ export default function FeedbackPage({ params }: { params: Promise<{ token: stri
       <Shell>
         <div className="space-y-4 text-center">
           <CheckCircle2Icon className="mx-auto size-10 text-emerald-500" />
-          <h1 className="text-lg font-semibold text-foreground">Thank you{data.candidateFirstName ? `, ${data.candidateFirstName}` : ""}</h1>
+          <h1 className="text-lg font-semibold text-foreground">Thank you</h1>
           <p className="text-sm text-muted-foreground">
-            Your feedback has been recorded. We appreciate you taking the time.
+            Your feedback on {data.candidateName} has been recorded.
           </p>
           {saved.rating != null && (
             <div className="rounded-lg border bg-muted/20 p-4 text-left text-sm space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">What you told us</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">What you submitted</p>
               <p className="text-foreground">
                 Overall: <strong>{saved.rating}/5</strong>
                 {RATING_LABELS[saved.rating - 1] ? ` — ${RATING_LABELS[saved.rating - 1]}` : ""}
               </p>
               {saved.wouldRecommend != null && (
                 <p className="text-foreground">
-                  Would recommend us to others: <strong>{saved.wouldRecommend ? "Yes" : "No"}</strong>
+                  Recommend moving forward: <strong>{saved.wouldRecommend ? "Yes" : "No"}</strong>
                 </p>
               )}
               {saved.comments && <p className="whitespace-pre-wrap text-muted-foreground">{saved.comments}</p>}
@@ -94,6 +101,8 @@ export default function FeedbackPage({ params }: { params: Promise<{ token: stri
     )
   }
 
+  const when = formatWhen(data.interviewAt)
+
   return (
     <Shell>
       <div className="space-y-6">
@@ -102,15 +111,22 @@ export default function FeedbackPage({ params }: { params: Promise<{ token: stri
             {data.companyName || "Interview feedback"}
           </p>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            How was your interview{data.candidateFirstName ? `, ${data.candidateFirstName}` : ""}?
+            How did {data.candidateName} do?
           </h1>
           <p className="text-sm text-muted-foreground">
-            This takes about a minute. Your answers help us improve the experience for everyone we speak to.
+            {data.interviewerName ? `${data.interviewerName}, this` : "This"} takes about a minute. Your assessment is
+            recorded against the candidate and is not shared with them.
           </p>
+          {when && (
+            <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+              <CalendarClockIcon className="size-3.5" />
+              Interviewed {when} (IST)
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">
-          <Label>Overall experience</Label>
+          <Label>Overall rating</Label>
           <div className="flex items-center gap-1.5">
             {[1, 2, 3, 4, 5].map((n) => (
               <button
@@ -134,7 +150,7 @@ export default function FeedbackPage({ params }: { params: Promise<{ token: stri
         </div>
 
         <div className="space-y-2">
-          <Label>Would you recommend interviewing here to others?</Label>
+          <Label>Would you recommend moving forward with this candidate?</Label>
           <div className="flex items-center gap-2">
             {[
               { label: "Yes", value: true },
@@ -156,17 +172,22 @@ export default function FeedbackPage({ params }: { params: Promise<{ token: stri
               </button>
             ))}
           </div>
+          {/* Says plainly that this is advisory — the spec forbids feedback
+              auto-selecting or auto-rejecting anyone. */}
+          <p className="text-xs text-muted-foreground">
+            This is recorded for the hiring team to review. It does not select or reject the candidate on its own.
+          </p>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="comments">Anything else you&apos;d like to share?</Label>
+          <Label htmlFor="comments">Comments</Label>
           <textarea
             id="comments"
             value={comments}
             onChange={(e) => setComments(e.target.value)}
             rows={5}
             maxLength={2000}
-            placeholder="What went well, and what could we have done better?"
+            placeholder="Strengths, gaps, anything the hiring team should know."
             className="w-full resize-y rounded-lg border bg-background p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           <p className="text-xs text-muted-foreground">Optional — {2000 - comments.length} characters left.</p>

@@ -1,13 +1,13 @@
 module Api
   module V1
-    # PUBLIC endpoint — the candidate is an outside recipient with no account,
-    # so there is no session, no tenant and no Pundit policy here. The
+    # PUBLIC endpoint — the interviewer fills this in without logging in (per
+    # spec), so there is no session, no tenant and no Pundit policy here. The
     # unguessable feedback_token is the entire credential, which is why:
     #   * lookup is by token only, never by candidate id;
     #   * a bad token returns the same 404 as an unknown one (no probing);
-    #   * nothing internal is ever serialized back (no interviewer, no scores,
-    #     no other candidates) — only what the candidate needs to see to
-    #     recognize their own form.
+    #   * the payload is the bare minimum needed to fill the form in — who was
+    #     interviewed and when. No email, no scores, no eligibility, no status,
+    #     no other candidates.
     class FeedbackController < BaseController
       allow_unauthenticated_access only: %i[show create]
       skip_before_action :set_current_tenant, only: %i[show create]
@@ -24,7 +24,7 @@ module Api
         candidate = find_by_token!(params[:token])
 
         if candidate.feedback_submitted?
-          return render json: { errors: [ { message: "This feedback form has already been submitted." } ] },
+          return render json: { errors: [ { message: "Feedback for this candidate has already been submitted." } ] },
                         status: :unprocessable_content
         end
 
@@ -36,8 +36,8 @@ module Api
             feedback_would_recommend: params[:would_recommend],
             feedback_comments: params[:comments].to_s.strip.presence,
             feedback_submitted_at: Time.current,
-            # Submitting IS the receipt — an admin shouldn't have to mark it
-            # by hand once the candidate has actually answered.
+            # Submitting IS the receipt — an admin shouldn't have to mark it by
+            # hand once the interviewer has actually answered.
             status: :feedback_received
           )
 
@@ -64,20 +64,25 @@ module Api
           candidate
         end
 
-        # Deliberately minimal. First name only (enough for the candidate to
-        # know the form is theirs), plus the company name so the page isn't
-        # anonymous. Never the interviewer, the interview time, their status,
-        # or anything about the hiring decision.
+        # Deliberately minimal: enough for the interviewer to know which
+        # interview they are writing up, and nothing more. No candidate email
+        # or phone, no ATS score, no eligibility breakdown, no status — none of
+        # that is needed to fill in a rating and a comment.
         def form_payload(candidate)
-          {
-            candidateFirstName: candidate.first_name.presence || candidate.full_name.to_s.split(/\s+/).first,
-            companyName: ActsAsTenant.without_tenant { candidate.company&.name },
-            submitted: candidate.feedback_submitted?,
-            submittedAt: candidate.feedback_submitted_at&.iso8601,
-            rating: candidate.feedback_rating,
-            wouldRecommend: candidate.feedback_would_recommend,
-            comments: candidate.feedback_comments
-          }
+          ActsAsTenant.without_tenant do
+            {
+              candidateName: candidate.full_name,
+              interviewerName: candidate.interviewer&.full_name,
+              # Shown in IST, the zone interviews are booked in.
+              interviewAt: candidate.interview_at&.in_time_zone("Asia/Kolkata")&.iso8601,
+              companyName: candidate.company&.name,
+              submitted: candidate.feedback_submitted?,
+              submittedAt: candidate.feedback_submitted_at&.iso8601,
+              rating: candidate.feedback_rating,
+              wouldRecommend: candidate.feedback_would_recommend,
+              comments: candidate.feedback_comments
+            }
+          end
         end
     end
   end

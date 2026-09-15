@@ -6,4 +6,12 @@ class ApplicationMailer < ActionMailer::Base
   # was sent from a non-existent address.
   default from: -> { ENV.fetch("MAIL_FROM", "no-reply@localhost") }
   layout "mailer"
+
+  private
+
+    # Where links in mail templates point. The app's own frontend, never this
+    # API host — a recipient clicking through must land on the UI.
+    def frontend_base_url
+      ENV.fetch("FRONTEND_ORIGINS", "http://localhost:3000").split(",").first.strip
+    end
 end

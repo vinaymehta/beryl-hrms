@@ -101,11 +101,10 @@ export const recruitmentApi = {
     setStatus: (id: string, status: CandidateStatus) =>
       apiClient.patch<CandidateDetail>(`/recruitment/candidates/${id}/status`, { status }),
 
-    // Schedules and reschedules alike — a candidate carries one interview, so
-    // sending this again just updates it (and re-sends the candidate's email
-    // with the new details). Date and time go over the wire separately because
-    // that's how the form collects them; the backend combines them.
-    scheduleInterview: (id: string, values: { interviewDate: string; interviewTime: string; interviewerId: string }) =>
+    // Assigns the interviewer and sends the candidate a single-use Calendly
+    // booking link. No date or time: the candidate picks the slot, and only
+    // Calendly confirming it moves them to Interview Scheduled.
+    scheduleInterview: (id: string, values: { interviewerId: string }) =>
       apiClient.patch<CandidateDetail>(`/recruitment/candidates/${id}/schedule_interview`, values),
 
     // Manual only — nothing sends a feedback request automatically.

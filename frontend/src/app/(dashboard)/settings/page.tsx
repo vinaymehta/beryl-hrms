@@ -41,6 +41,20 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Interview scheduling</CardTitle>
+          <CardDescription>
+            Connect Calendly so shortlisted candidates can book their own interview slots.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" nativeButton={false} render={<Link href="/settings/interviews" />}>
+            Manage interview scheduling
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Mail</CardTitle>
           <CardDescription>Connect a Zoho mailbox to read and search mail in the app.</CardDescription>
         </CardHeader>

@@ -43,16 +43,47 @@ class CandidateResume < ApplicationRecord
   # own criteria_match_percentage never changes (it records the AI/eligibility
   # verdict for that submission, not where the person has got to since).
   #
-  # Statuses are resolved inside the lambda rather than in a constant so this
+  # ...with one override on top of that partition: once a HUMAN has decided
+  # about the person, that decision wins over the resume's AI verdict, because
+  # the verdict is frozen at processing time and can never reflect it. Without
+  # this, moving someone out of Rejected appeared to do nothing — their resume
+  # still scored 75%, so the Rejected list kept showing them.
+  #
+  # The partition is preserved: `decided` statuses are matched in exactly one
+  # scope each, so no resume can fall into both buckets or into neither.
+  #
+  # Statuses are resolved inside the lambdas rather than in constants so this
   # doesn't force Candidate to autoload while this class is being defined.
   scope :eligibility_shortlisted, lambda {
-    interview_values = Candidate.statuses.values_at(*Candidate::INTERVIEW_WORKFLOW_STATUSES)
-    where(criteria_match_percentage: 100)
-      .left_joins(:candidate)
-      # A resume with no candidate attached is still un-actioned, so it stays.
-      .where("candidates.id IS NULL OR candidates.status NOT IN (?)", interview_values)
+    interview = Candidate.statuses.values_at(*Candidate::INTERVIEW_WORKFLOW_STATUSES)
+    shortlisted = Candidate.statuses[:shortlisted]
+    rejected = Candidate.statuses[:rejected]
+
+    left_joins(:candidate).where(
+      # Explicitly shortlisted by a human — shown regardless of the score.
+      "candidates.status = :shortlisted
+       -- or not yet decided about, and this resume passed all four criteria.
+       OR (candidate_resumes.criteria_match_percentage = 100
+           AND (candidates.id IS NULL OR candidates.status NOT IN (:decided)))",
+      shortlisted: shortlisted, decided: interview + [ shortlisted, rejected ]
+    )
   }
-  scope :eligibility_rejected, -> { where.not(criteria_match_percentage: [nil, 100]) }
+
+  scope :eligibility_rejected, lambda {
+    interview = Candidate.statuses.values_at(*Candidate::INTERVIEW_WORKFLOW_STATUSES)
+    shortlisted = Candidate.statuses[:shortlisted]
+    rejected = Candidate.statuses[:rejected]
+
+    left_joins(:candidate).where(
+      # Explicitly rejected by a human (or by a Calendly cancellation).
+      "candidates.status = :rejected
+       -- or not decided about, and this resume failed eligibility.
+       OR (candidate_resumes.criteria_match_percentage IS NOT NULL
+           AND candidate_resumes.criteria_match_percentage <> 100
+           AND (candidates.id IS NULL OR candidates.status NOT IN (:decided)))",
+      rejected: rejected, decided: interview + [ shortlisted, rejected ]
+    )
+  }
   scope :eligibility_needs_review, -> { where(criteria_match_percentage: nil) }
 
   def self.by_eligibility(status)

@@ -99,51 +99,57 @@ module Api
         end
 
         # PATCH /api/v1/recruitment/candidates/:id/schedule_interview
-        # Handles both the first schedule and every reschedule — the
-        # candidate carries one interview, so changing it is an update in
-        # place, and either way the candidate gets the current details.
+        # Starts the interview flow: assigns the interviewer and sends the
+        # candidate their own single-use Calendly booking link.
+        #
+        # Deliberately does NOT set a date, a time, or the Interview Scheduled
+        # status — the candidate picks the slot in Calendly, and only Calendly
+        # confirming the booking moves them on (see the webhook). Until then
+        # they stay Shortlisted, marked "Booking link sent".
         def schedule_interview
           authorize @candidate
 
-          # snake_case, not camelCase: the frontend sends interviewDate /
-          # interviewTime / interviewerId, and the JSON parser converts
-          # inbound body keys centrally (config/initializers/
-          # json_key_transform.rb). Reading the camelCase spelling here
-          # silently yields nil for every field.
-          interview_at = parse_interview_at(params[:interview_date], params[:interview_time])
-          if interview_at.nil?
-            return render json: { errors: [ { message: "Interview date and time are required." } ] },
+          # snake_case, not camelCase: JSON bodies are key-transformed centrally
+          # (config/initializers/json_key_transform.rb), so reading the
+          # camelCase spelling here silently yields nil.
+          interviewer = Employee.find_by(id: params[:interviewer_id])
+          if interviewer.nil?
+            return render json: { errors: [ { message: "Select an interviewer before sending a booking link." } ] },
                           status: :unprocessable_entity
           end
 
-          @candidate.assign_attributes(
-            interview_at: interview_at,
-            interviewer_id: params[:interviewer_id],
-            status: :interview_scheduled
-          )
-
-          # Presence of date/interviewer and the interviewer's tenancy are
-          # enforced on the model, so an invalid combination fails here
-          # rather than being half-saved.
-          unless @candidate.save
-            return render json: { errors: @candidate.errors.full_messages.map { |m| { message: m } } },
-                          status: :unprocessable_entity
+          result = ::Recruitment::InterviewScheduler.call(candidate: @candidate, interviewer: interviewer)
+          unless result.success?
+            return render json: { errors: [ { message: result.error } ] }, status: :unprocessable_entity
           end
 
-          deliver_candidate_mail(:interview_invitation)
-          render json: { data: candidate_detail(@candidate) }
+          render json: { data: candidate_detail(@candidate.reload) }
         end
 
         # PATCH /api/v1/recruitment/candidates/:id/request_feedback
-        # Sent manually by an admin, never automatically. Moves the candidate
-        # to "feedback not received" — the ask is out, nothing is back yet.
+        # Asks the INTERVIEWER to assess this candidate. Sent manually by an
+        # admin, never automatically. Moves the candidate to "feedback not
+        # received" — the ask is out, nothing is back yet.
         def request_feedback
           authorize @candidate
 
-          # A candidate who already answered shouldn't be dragged back to
-          # "not received" by a stray resend — their response still stands.
+          # Feedback that already exists shouldn't be dragged back to "not
+          # received" by a stray resend — the interviewer's answer still stands.
           if @candidate.feedback_submitted?
-            return render json: { errors: [ { message: "#{@candidate.name} has already submitted their feedback." } ] },
+            return render json: { errors: [ { message: "Feedback for #{@candidate.name} has already been submitted." } ] },
+                          status: :unprocessable_entity
+          end
+
+          # The form assesses the candidate, so there has to be someone who
+          # actually interviewed them to fill it in.
+          interviewer = @candidate.interviewer
+          if interviewer.nil?
+            return render json: { errors: [ { message: "#{@candidate.name} has no interviewer assigned, so there is nobody to ask for feedback." } ] },
+                          status: :unprocessable_entity
+          end
+
+          if interviewer_email(interviewer).blank?
+            return render json: { errors: [ { message: "#{interviewer.full_name} has no email address on file, so the feedback form can't be sent." } ] },
                           status: :unprocessable_entity
           end
 
@@ -151,7 +157,7 @@ module Api
           # token stored on the row can never disagree.
           @candidate.ensure_feedback_token!
           @candidate.update!(feedback_requested_at: Time.current, status: :feedback_not_received)
-          deliver_candidate_mail(:feedback_request)
+          deliver_interviewer_mail(:feedback_request)
           render json: { data: candidate_detail(@candidate) }
         end
 
@@ -191,17 +197,6 @@ module Api
           @candidate = policy_scope(Candidate).find(params[:id])
         end
 
-        # The UI collects date and time separately; they are stored as one
-        # instant. Returns nil if either half is missing or unparseable, so
-        # the caller can reject the request rather than persist a wrong time.
-        def parse_interview_at(date, time)
-          return nil if date.blank? || time.blank?
-
-          Time.zone.parse("#{date} #{time}")
-        rescue ArgumentError
-          nil
-        end
-
         # Mail to an outside recipient must never take down the request that
         # triggered it: a candidate with no email on file, or a transient SMTP
         # problem, should not roll back an interview that is already booked.
@@ -214,6 +209,21 @@ module Api
           CandidateMailer.public_send(mailer_action, @candidate).deliver_later
         rescue => e
           Rails.logger.error("[CandidateMailer] #{mailer_action} failed for candidate #{@candidate.id}: #{e.class}: #{e.message}")
+        end
+
+        # Own address only — never the linked login account. See the note in
+        # InterviewerMailer#interviewer_email.
+        def interviewer_email(interviewer)
+          interviewer&.personal_email.presence
+        end
+
+        # Sent from the company's connected Zoho mailbox, like every other
+        # recruitment email. A delivery problem must never roll back a state
+        # change that already succeeded.
+        def deliver_interviewer_mail(mailer_action)
+          RecruitmentMailJob.perform_later("InterviewerMailer", mailer_action.to_s, @candidate.id)
+        rescue => e
+          Rails.logger.error("[RecruitmentMail] #{mailer_action} failed for candidate #{@candidate.id}: #{e.class}: #{e.message}")
         end
 
         def candidate_params
@@ -243,6 +253,11 @@ module Api
             interviewerId: c.interviewer_id&.to_s,
             interviewerName: c.interviewer&.full_name,
             feedbackRequestedAt: c.feedback_requested_at&.iso8601,
+            # Booking state. The candidate stays Shortlisted until Calendly
+            # confirms, so interviewLinkSentAt — not the status — is what the
+            # UI reads to show "Booking link sent".
+            interviewLinkSentAt: c.interview_link_sent_at&.iso8601,
+            calendlySchedulingUrl: c.calendly_scheduling_url,
             # The candidate's own answers. feedback_token is deliberately NOT
             # exposed — it authenticates them on a public endpoint, so it never
             # leaves the mail it was sent in.

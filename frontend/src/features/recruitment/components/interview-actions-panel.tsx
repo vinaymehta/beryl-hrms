@@ -4,21 +4,17 @@ import { useState } from "react"
 import { useCandidateMutations } from "../hooks"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import {
   CalendarClockIcon,
   CheckCircle2Icon,
   ClockIcon,
   Loader2Icon,
-  MessageSquareIcon,
   MinusCircleIcon,
   StarIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
   UserCheckIcon,
-  ClipboardCheckIcon,
-  AlertCircleIcon,
 } from "lucide-react"
 import type { CandidateStatus, CandidateSummary } from "@/types/recruitment"
 import { cn } from "cn"
@@ -33,7 +29,7 @@ const RATING_LABELS = ["Poor", "Fair", "Good", "Great", "Excellent"]
 
 // Only the two stages a HUMAN actually decides. The feedback stages are not
 // here on purpose: they are driven by real events, not by an admin's opinion —
-// sending the form sets "Link Sent", and the candidate submitting it
+// sending the form sets "Link Sent", and the interviewer submitting it
 // sets "Feedback Received". Letting an admin set those by hand would let the
 // status claim feedback arrived when nothing was ever submitted.
 const STATUS_OPTIONS: { value: CandidateStatus; label: string; caption: string; className: string }[] = [
@@ -56,12 +52,12 @@ const STATUS_OPTIONS: { value: CandidateStatus; label: string; caption: string; 
 const AUTOMATIC_STAGES: Record<string, { label: string; caption: string; className: string }> = {
   feedback_not_received: {
     label: "Link Sent",
-    caption: "Set automatically when the feedback form was sent",
+    caption: "Set automatically when the form was sent to the interviewer",
     className: "border-orange-500/40 bg-orange-500/10 text-orange-600",
   },
   feedback_received: {
     label: "Feedback Received",
-    caption: "Set automatically when the candidate submitted the form",
+    caption: "Set automatically when the interviewer submitted the form",
     className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600",
   },
 }
@@ -82,7 +78,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
  * columns there are plain, non-interactive badges that only report state.
  */
 export function InterviewActionsPanel({ candidate, open, onOpenChange }: InterviewActionsPanelProps) {
-  const { setStatus, requestFeedback } = useCandidateMutations()
+  const { setStatus } = useCandidateMutations()
   const [pendingValue, setPendingValue] = useState<CandidateStatus | null>(null)
 
   if (!candidate) return null
@@ -101,19 +97,6 @@ export function InterviewActionsPanel({ candidate, open, onOpenChange }: Intervi
       toast.error(err instanceof Error ? err.message : "Failed to change the status")
     } finally {
       setPendingValue(null)
-    }
-  }
-
-  const handleSendForm = async () => {
-    try {
-      await requestFeedback.mutateAsync(candidate.id)
-      toast.success("Feedback form sent", {
-        description: candidate.email
-          ? `A personal form link was emailed to ${candidate.email}`
-          : "No email on file — the candidate was marked as awaiting feedback, but nothing was sent.",
-      })
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to send the feedback form")
     }
   }
 
@@ -209,59 +192,17 @@ export function InterviewActionsPanel({ candidate, open, onOpenChange }: Intervi
             )}
           </div>
 
-          {/* 2 — Sending the form */}
+          {/* 2 — What came back. Read-only, and there is deliberately no
+              "send form" action: the interviewer already received the form
+              link with their booking email and fills it in after the
+              interview. The admin's role here is to READ the result, not to
+              chase it. */}
           <div className="space-y-2">
-            <SectionLabel>Feedback form</SectionLabel>
-            {submitted ? (
-              // Resending would reset them to "awaiting", contradicting an
-              // answer they have already given.
-              <p className="flex items-start gap-2 rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
-                <ClipboardCheckIcon className="mt-0.5 size-3.5 shrink-0 text-emerald-500" />
-                {candidate.fullName} has already submitted their feedback, so the form can&apos;t be sent again.
-              </p>
-            ) : (
-              <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
-                {candidate.email ? (
-                  <p className="text-xs text-muted-foreground">
-                    Emails {candidate.fullName} a personal link to the feedback form and marks them as awaiting a
-                    response.
-                  </p>
-                ) : (
-                  // Without an address there is nothing to send, and marking
-                  // them "Link Sent" would claim a link went out when none
-                  // ever did. Blocked rather than silently half-done — add an
-                  // email on the candidate first.
-                  <p className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
-                    <AlertCircleIcon className="mt-0.5 size-3.5 shrink-0" />
-                    No email address on file for {candidate.fullName}, so the form can&apos;t be sent. Their resume
-                    didn&apos;t yield one — add an address to the candidate first.
-                  </p>
-                )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleSendForm}
-                  disabled={requestFeedback.isPending || !candidate.email}
-                  className="w-full gap-1.5"
-                >
-                  {requestFeedback.isPending ? (
-                    <Loader2Icon className="size-3.5 animate-spin" />
-                  ) : (
-                    <MessageSquareIcon className="size-3.5" />
-                  )}
-                  {requested ? "Resend feedback form" : "Send feedback form"}
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* 3 — What came back. Read-only: these are the candidate's words. */}
-          <div className="space-y-2">
-            <SectionLabel>Their response</SectionLabel>
+            <SectionLabel>Interviewer&apos;s feedback</SectionLabel>
             {submitted ? (
               <div className="space-y-4 rounded-lg border p-3">
                 <div className="space-y-1.5">
-                  <p className="text-xs text-muted-foreground">Overall experience</p>
+                  <p className="text-xs text-muted-foreground">Overall rating</p>
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-0.5">
                       {[1, 2, 3, 4, 5].map((n) => (
@@ -289,7 +230,7 @@ export function InterviewActionsPanel({ candidate, open, onOpenChange }: Intervi
 
                 {candidate.feedbackWouldRecommend != null && (
                   <div className="space-y-1.5">
-                    <p className="text-xs text-muted-foreground">Would recommend interviewing here</p>
+                    <p className="text-xs text-muted-foreground">Recommend moving forward</p>
                     <span
                       className={cn(
                         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
@@ -309,13 +250,13 @@ export function InterviewActionsPanel({ candidate, open, onOpenChange }: Intervi
                 )}
 
                 <div className="space-y-1.5">
-                  <p className="text-xs text-muted-foreground">In their words</p>
+                  <p className="text-xs text-muted-foreground">Comments</p>
                   {candidate.feedbackComments ? (
                     <p className="whitespace-pre-wrap rounded-lg bg-muted/40 p-3 text-sm text-foreground">
                       {candidate.feedbackComments}
                     </p>
                   ) : (
-                    <p className="text-sm text-muted-foreground">They left the comments box blank.</p>
+                    <p className="text-sm text-muted-foreground">No comments were left.</p>
                   )}
                 </div>
 
@@ -335,9 +276,9 @@ export function InterviewActionsPanel({ candidate, open, onOpenChange }: Intervi
                 {requested ? (
                   <>
                     <ClockIcon className="mx-auto size-7 text-orange-500/50" />
-                    <p className="text-sm font-medium text-foreground">Waiting on their response</p>
+                    <p className="text-sm font-medium text-foreground">Waiting on the interviewer</p>
                     <p className="text-xs text-muted-foreground">
-                      Sent{candidate.email ? ` to ${candidate.email}` : ""} on{" "}
+                      Sent{candidate.interviewerName ? ` to ${candidate.interviewerName}` : ""} on{" "}
                       {new Date(candidate.feedbackRequestedAt!).toLocaleDateString()}.
                     </p>
                   </>
@@ -345,7 +286,7 @@ export function InterviewActionsPanel({ candidate, open, onOpenChange }: Intervi
                   <>
                     <MinusCircleIcon className="mx-auto size-7 text-muted-foreground/40" />
                     <p className="text-sm font-medium text-foreground">No feedback form sent yet</p>
-                    <p className="text-xs text-muted-foreground">Send one above once the interview has been held.</p>
+                    <p className="text-xs text-muted-foreground">Send one to the interviewer once the interview has been held.</p>
                   </>
                 )}
               </div>

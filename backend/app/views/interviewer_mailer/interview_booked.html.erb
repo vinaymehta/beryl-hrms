@@ -1,0 +1,30 @@
+<p>Hi <%= @interviewer&.full_name %>,</p>
+
+<p>An interview has been booked with you.</p>
+
+<table cellpadding="6" style="border-collapse:collapse;font-size:14px;">
+  <tr><td style="color:#666;">Candidate</td><td><strong><%= @candidate.name %></strong></td></tr>
+  <tr><td style="color:#666;">Email</td><td><%= @candidate.email.presence || "not on file" %></td></tr>
+  <tr><td style="color:#666;">When</td><td><strong><%= @when_text %></strong></td></tr>
+  <% if @candidate.phone.present? %>
+    <tr><td style="color:#666;">Phone</td><td><%= @candidate.phone %></td></tr>
+  <% end %>
+</table>
+
+<% if @join_url.present? %>
+  <p><%= link_to "Join the interview", @join_url %></p>
+  <p style="color:#666;font-size:12px;">You&rsquo;ve also been added as a guest on the calendar invitation.</p>
+<% else %>
+  <p style="color:#666;font-size:13px;">You&rsquo;ve been added as a guest on the calendar invitation &mdash; the joining details are on that invite.</p>
+<% end %>
+
+<p><%= @resume_attached ? "Their resume is attached to this email." : "No resume file was available to attach." %></p>
+
+<hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
+
+<p style="font-weight:600;">After the interview</p>
+<p>Please fill in your feedback &mdash; it takes about a minute and needs no login.</p>
+<p><%= link_to "Give your feedback", @feedback_url %></p>
+<p style="color:#666;font-size:12px;">Keep this email: that link is how the hiring team receives your assessment.</p>
+
+<p style="color:#666;font-size:12px;">The candidate booked this slot themselves and cannot reschedule it. If they cancel, they are moved out of the interview stage automatically.</p>

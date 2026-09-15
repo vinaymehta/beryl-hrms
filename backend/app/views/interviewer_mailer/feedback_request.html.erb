@@ -1,0 +1,14 @@
+<p>Hi <%= @interviewer&.full_name %>,</p>
+
+<p>Please share your feedback on the candidate you interviewed.</p>
+
+<table cellpadding="6" style="border-collapse:collapse;font-size:14px;">
+  <tr><td style="color:#666;">Candidate</td><td><strong><%= @candidate.name %></strong></td></tr>
+  <tr><td style="color:#666;">Interview</td><td><%= @when_text %></td></tr>
+</table>
+
+<p><%= link_to "Give your feedback", @feedback_url %></p>
+
+<p>It takes about a minute — an overall rating, whether you&rsquo;d recommend moving forward, and any comments.</p>
+
+<p style="color:#666;font-size:12px;">This link is personal to you, so please don&rsquo;t forward it. No login is needed.</p>

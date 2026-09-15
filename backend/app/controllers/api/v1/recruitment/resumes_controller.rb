@@ -284,6 +284,9 @@ module Api
             candidateName: r.candidate&.full_name,
             candidateEmail: r.candidate&.email,
             candidateStatus: r.candidate&.status,
+            # A shortlisted candidate with a link out is being waited on, not
+            # un-actioned — the list marks them so the two are distinguishable.
+            candidateInterviewLinkSentAt: r.candidate&.interview_link_sent_at&.iso8601,
             candidateCity: r.candidate&.city,
             candidateQualification: r.candidate&.highest_qualification,
             candidateExperienceYears: r.candidate&.experience_years&.to_f,
@@ -319,7 +322,8 @@ module Api
               interviewerId: r.candidate.interviewer_id&.to_s,
               interviewerName: r.candidate.interviewer&.full_name,
               feedbackRequestedAt: r.candidate.feedback_requested_at&.iso8601,
-              feedbackSubmittedAt: r.candidate.feedback_submitted_at&.iso8601
+              feedbackSubmittedAt: r.candidate.feedback_submitted_at&.iso8601,
+              interviewLinkSentAt: r.candidate.interview_link_sent_at&.iso8601
             } : nil
           )
         end

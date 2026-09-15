@@ -198,7 +198,44 @@ module Zoho
       end
     end
 
-    def send_message(access_token:, account_id:, from_address:, to_address:, subject:, content:, cc_address: nil, bcc_address: nil)
+    # Zoho will not take a file inline on send: it has to be uploaded first,
+    # and the descriptor it returns referenced in the send payload. Returns
+    # that descriptor ({storeName, attachmentPath, attachmentName}) verbatim,
+    # because Zoho expects those exact keys echoed back.
+    def upload_attachment(access_token:, account_id:, filename:, data:, content_type: nil)
+      # Zoho's attachment endpoint takes multipart/form-data ONLY. Posting the
+      # raw bytes with the file's own Content-Type (application/pdf) is
+      # rejected with HTTP 415 UNSUPPORTED_MEDIA_TYPE.
+      #
+      # The body is assembled by hand because faraday-multipart isn't a
+      # dependency here, and adding one for a single call isn't worth it.
+      # Everything is forced to binary (.b) before concatenation — joining a
+      # UTF-8 preamble to raw PDF bytes otherwise raises Encoding::Compatible
+      # Error, or silently corrupts the file.
+      name = filename.to_s.presence || "attachment"
+      safe_name = name.gsub(/["\r\n]/, "")
+      boundary = "----ZohoAttachment#{SecureRandom.hex(16)}"
+
+      preamble = +"--#{boundary}\r\n"
+      preamble << %(Content-Disposition: form-data; name="attach"; filename="#{safe_name}"\r\n)
+      preamble << "Content-Type: #{content_type.presence || 'application/octet-stream'}\r\n\r\n"
+      multipart = preamble.b + data.to_s.b + "\r\n--#{boundary}--\r\n".b
+
+      res = authenticated_api_connection(access_token).post("accounts/#{account_id}/messages/attachments") do |req|
+        req.params["uploadType"] = "multipart"
+        req.params["fileName"] = safe_name
+        req.headers["Content-Type"] = "multipart/form-data; boundary=#{boundary}"
+        req.body = multipart
+      end
+
+      descriptor = Array(parse_response(res)["data"]).first
+      raise ApiError.new("Zoho did not return an uploaded attachment for #{filename.inspect}") if descriptor.blank?
+
+      descriptor.slice("storeName", "attachmentPath", "attachmentName")
+    end
+
+    # `attachments` takes descriptors from #upload_attachment.
+    def send_message(access_token:, account_id:, from_address:, to_address:, subject:, content:, cc_address: nil, bcc_address: nil, attachments: [])
       payload = {
         fromAddress: from_address,
         toAddress: to_address,
@@ -208,6 +245,7 @@ module Zoho
       }
       payload[:ccAddress] = cc_address if cc_address.present?
       payload[:bccAddress] = bcc_address if bcc_address.present?
+      payload[:attachments] = attachments if attachments.present?
 
       res = authenticated_api_connection(access_token).post("accounts/#{account_id}/messages") do |req|
         req.headers["Content-Type"] = "application/json"

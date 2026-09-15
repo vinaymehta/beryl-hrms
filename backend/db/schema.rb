@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_073000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_15_060000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -94,6 +94,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_073000) do
     t.index ["company_id", "auditable_type", "auditable_id"], name: "index_audit_logs_on_company_and_auditable"
     t.index ["company_id", "created_at"], name: "index_audit_logs_on_company_id_and_created_at"
     t.index ["company_id"], name: "index_audit_logs_on_company_id"
+  end
+
+  create_table "calendly_connections", force: :cascade do |t|
+    t.text "access_token"
+    t.string "calendly_user_uri"
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.string "default_event_type_uri"
+    t.string "email_address"
+    t.string "organization_uri"
+    t.text "refresh_token"
+    t.integer "status", default: 0, null: false
+    t.datetime "token_expires_at"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.string "webhook_subscription_uri"
+    t.index ["company_id", "status"], name: "index_calendly_connections_on_company_id_and_status"
+    t.index ["company_id"], name: "index_calendly_connections_on_company_id"
+    t.index ["user_id"], name: "index_calendly_connections_on_user_id"
   end
 
   create_table "candidate_certifications", force: :cascade do |t|
@@ -222,6 +241,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_073000) do
     t.decimal "academic_cgpa", precision: 4, scale: 2
     t.decimal "academic_percentage", precision: 5, scale: 2
     t.boolean "active_backlogs"
+    t.string "calendly_booking_token"
+    t.string "calendly_event_uri"
+    t.string "calendly_invitee_uri"
+    t.string "calendly_join_url"
+    t.string "calendly_scheduling_url"
     t.string "city"
     t.bigint "company_id", null: false
     t.string "country"
@@ -243,6 +267,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_073000) do
     t.string "highest_qualification"
     t.string "industry"
     t.datetime "interview_at"
+    t.datetime "interview_link_sent_at"
     t.bigint "interviewer_id"
     t.jsonb "languages", default: [], null: false
     t.string "last_name"
@@ -255,6 +280,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_073000) do
     t.integer "status", default: 0, null: false
     t.jsonb "tags", default: []
     t.datetime "updated_at", null: false
+    t.index ["calendly_booking_token"], name: "index_candidates_on_calendly_booking_token", unique: true
+    t.index ["calendly_invitee_uri"], name: "index_candidates_on_calendly_invitee_uri"
     t.index ["company_id", "city"], name: "index_candidates_on_company_id_and_city"
     t.index ["company_id", "duplicate_status"], name: "index_candidates_on_company_id_and_duplicate_status"
     t.index ["company_id", "email"], name: "index_candidates_on_company_id_and_email"
@@ -481,6 +508,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_073000) do
   add_foreign_key "attendance_records", "employees"
   add_foreign_key "audit_logs", "companies"
   add_foreign_key "audit_logs", "users", column: "actor_id"
+  add_foreign_key "calendly_connections", "companies"
+  add_foreign_key "calendly_connections", "users"
   add_foreign_key "candidate_certifications", "candidates"
   add_foreign_key "candidate_certifications", "companies"
   add_foreign_key "candidate_experiences", "candidates"

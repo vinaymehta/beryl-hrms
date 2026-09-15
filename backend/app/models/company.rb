@@ -7,6 +7,7 @@ class Company < ApplicationRecord
   has_many :designations, dependent: :destroy
   has_many :roles, dependent: :destroy
   has_many :zoho_connections, dependent: :destroy
+  has_many :calendly_connections, dependent: :destroy
   has_many :audit_logs, dependent: :nullify
   has_many :leave_requests, dependent: :destroy
   has_many :attendance_records, dependent: :destroy

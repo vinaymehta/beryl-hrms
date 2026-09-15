@@ -17,23 +17,14 @@ class CandidateMailer < ApplicationMailer
     mail(to: candidate.email, subject: "Your interview is scheduled")
   end
 
-  def feedback_request(candidate)
+  # Sent when an admin starts the interview flow. The candidate picks their own
+  # slot in Calendly, so this carries a link rather than a date — and, like the
+  # invitation above, says nothing about WHO will interview them.
+  def interview_booking_link(candidate)
     @candidate = candidate
-    @feedback_url = feedback_form_url(candidate)
+    @booking_url = candidate.calendly_scheduling_url
 
-    mail(to: candidate.email, subject: "We'd love your feedback on your interview")
+    mail(to: candidate.email, subject: "Book your interview slot")
   end
 
-  private
-
-  # The in-app form, addressed by the candidate's own unguessable token — that
-  # token is the only thing authenticating them on a public endpoint, so this
-  # link is a credential and must not be forwarded or logged.
-  def feedback_form_url(candidate)
-    "#{frontend_base_url}/feedback/#{candidate.ensure_feedback_token!}"
-  end
-
-  def frontend_base_url
-    ENV.fetch("FRONTEND_ORIGINS", "http://localhost:3000").split(",").first.strip
-  end
 end

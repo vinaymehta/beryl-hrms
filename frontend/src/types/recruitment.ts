@@ -91,6 +91,7 @@ export interface CandidateResumeSummary {
   candidateName?: string | null
   candidateEmail?: string | null
   candidateStatus?: string | null
+  candidateInterviewLinkSentAt?: string | null
   candidateCity?: string | null
   candidateQualification?: string | null
   candidateExperienceYears?: number | null
@@ -140,6 +141,7 @@ export interface CandidateResumeDetail extends CandidateResumeSummary {
     interviewerName: string | null
     feedbackRequestedAt: string | null
     feedbackSubmittedAt: string | null
+    interviewLinkSentAt: string | null
   } | null
 }
 
@@ -159,6 +161,11 @@ export interface CandidateSummary {
   interviewerId: string | null
   interviewerName: string | null
   feedbackRequestedAt: string | null
+  // Booking state. The candidate stays `shortlisted` until Calendly confirms a
+  // booking, so this timestamp — not the status — is what "Booking link sent"
+  // reads from.
+  interviewLinkSentAt: string | null
+  calendlySchedulingUrl: string | null
   // The candidate's own answers, submitted through the public form. Null
   // until they actually respond — never inferred from the request going out.
   feedbackSubmittedAt: string | null
@@ -294,10 +301,13 @@ export interface AiSearchResponse {
   candidates: CandidateSummary[]
 }
 
-// The public feedback form's view of a candidate — deliberately minimal, and
-// all the backend will return on an endpoint with no session behind it.
+// What the public feedback form shows the INTERVIEWER — deliberately minimal,
+// and all the backend will return on an endpoint with no session behind it.
 export interface FeedbackForm {
-  candidateFirstName: string | null
+  candidateName: string | null
+  interviewerName: string | null
+  /** Already converted to Asia/Kolkata by the API. */
+  interviewAt: string | null
   companyName: string | null
   submitted: boolean
   submittedAt: string | null

@@ -103,15 +103,8 @@ export function useCandidateMutations() {
   })
 
   const scheduleInterviewMutation = useMutation({
-    mutationFn: ({
-      id,
-      ...values
-    }: {
-      id: string
-      interviewDate: string
-      interviewTime: string
-      interviewerId: string
-    }) => recruitmentApi.candidates.scheduleInterview(id, values),
+    mutationFn: ({ id, ...values }: { id: string; interviewerId: string }) =>
+      recruitmentApi.candidates.scheduleInterview(id, values),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recruitment", "candidates"] })
       queryClient.invalidateQueries({ queryKey: ["recruitment", "dashboard"] })

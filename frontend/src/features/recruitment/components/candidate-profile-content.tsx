@@ -23,6 +23,7 @@ import {
   GraduationCapIcon,
   FileTextIcon,
   XCircleIcon,
+  StarIcon,
   ClockIcon,
   SparklesIcon,
   ExternalLinkIcon,
@@ -61,9 +62,19 @@ const statusColors: Record<string, string> = {
 export function CandidateProfileContent({ candidateId }: { candidateId: string }) {
   const router = useRouter()
   const { data: candidate, isLoading } = useCandidate(candidateId)
-  const { reject, deleteCandidate, confirmDuplicate, dismissDuplicate } = useCandidateMutations()
+  const { shortlist, reject, deleteCandidate, confirmDuplicate, dismissDuplicate } = useCandidateMutations()
   const canManage = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.candidatesManage])
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+
+  // Only reachable from a rejected candidate — see the button's comment.
+  const handleShortlist = async () => {
+    try {
+      await shortlist.mutateAsync(candidateId)
+      toast.success("Candidate moved back to Shortlisted")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to move back to Shortlisted")
+    }
+  }
 
   const handleReject = async () => {
     try {
@@ -160,12 +171,17 @@ export function CandidateProfileContent({ candidateId }: { candidateId: string }
 
           {/* Actions */}
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* No manual Shortlist: shortlisting is decided automatically by
-                Recruitment::EligibilityEvaluator when a resume is processed, so
-                a button here would either duplicate that or silently override
-                it — and for a candidate already in the interview workflow it
-                would drop them back out of it. Reject stays: the evaluator
-                never rejects on its own. */}
+            {/* Shortlist appears ONLY for a rejected candidate, as the
+                reverse of Reject. Not offered otherwise: shortlisting is
+                decided automatically by Recruitment::EligibilityEvaluator, and
+                for someone already in the interview workflow it would drop
+                them back out of it. */}
+            {canManage && candidate.status === "rejected" && (
+              <Button size="sm" onClick={handleShortlist} className="text-xs gap-1 shadow-2xs">
+                <StarIcon className="size-3.5" />
+                Move to Shortlisted
+              </Button>
+            )}
 
             {canManage && candidate.status !== "rejected" && (
               <Button

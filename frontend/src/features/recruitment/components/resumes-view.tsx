@@ -37,6 +37,7 @@ import {
   FilterIcon,
   EyeIcon,
   CalendarClockIcon,
+  SendIcon,
   type LucideIcon,
 } from "lucide-react"
 import { recruitmentApi } from "../api"
@@ -476,6 +477,16 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
                               candidate moves on. This badge is what shows how
                               far through the interview workflow they actually
                               are, without opening each one. */}
+                          {/* Shortlisted but already invited: waiting on the
+                              candidate to pick a slot, not waiting on us. */}
+                          {resume.candidateStatus === "shortlisted" && resume.candidateInterviewLinkSentAt && (
+                            <span
+                              title="Calendly booking link sent — waiting for the candidate to pick a slot"
+                              className="inline-flex items-center gap-0.5 rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-600"
+                            >
+                              <SendIcon className="size-2.5" /> Booking link sent
+                            </span>
+                          )}
                           {isInInterviewWorkflow(resume.candidateStatus) && (
                             <span
                               className={cn(
