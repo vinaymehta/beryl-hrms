@@ -19,6 +19,12 @@ class CandidateResumePolicy < ApplicationPolicy
     show?
   end
 
+  # Preview streams exactly the same bytes as download, only rendered in the
+  # browser instead of saved — same people may see it.
+  def preview?
+    download?
+  end
+
   def destroy?
     same_company? && permission?("recruitment.manage")
   end

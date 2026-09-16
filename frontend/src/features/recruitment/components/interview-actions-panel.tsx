@@ -2,20 +2,10 @@
 
 import { useState } from "react"
 import { useCandidateMutations } from "../hooks"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Dialog, DialogContent, DialogHeader } from "@/components/ui/dialog"
+import { InterviewCandidateHeader, InterviewFeedbackSummary } from "./interview-feedback"
 import { toast } from "sonner"
-import {
-  CalendarClockIcon,
-  CheckCircle2Icon,
-  ClockIcon,
-  Loader2Icon,
-  MinusCircleIcon,
-  StarIcon,
-  ThumbsDownIcon,
-  ThumbsUpIcon,
-  UserCheckIcon,
-} from "lucide-react"
+import { CheckCircle2Icon, Loader2Icon } from "lucide-react"
 import type { CandidateStatus, CandidateSummary } from "@/types/recruitment"
 import { cn } from "cn"
 
@@ -24,8 +14,6 @@ interface InterviewActionsPanelProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
-
-const RATING_LABELS = ["Poor", "Fair", "Good", "Great", "Excellent"]
 
 // Only the two stages a HUMAN actually decides. The feedback stages are not
 // here on purpose: they are driven by real events, not by an admin's opinion —
@@ -62,11 +50,6 @@ const AUTOMATIC_STAGES: Record<string, { label: string; caption: string; classNa
   },
 }
 
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/)
-  return (`${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase()) || "?"
-}
-
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</p>
 }
@@ -83,8 +66,6 @@ export function InterviewActionsPanel({ candidate, open, onOpenChange }: Intervi
 
   if (!candidate) return null
 
-  const submitted = Boolean(candidate.feedbackSubmittedAt)
-  const requested = Boolean(candidate.feedbackRequestedAt)
   const autoStage = AUTOMATIC_STAGES[candidate.status]
 
   const handlePick = async (value: CandidateStatus) => {
@@ -104,37 +85,7 @@ export function InterviewActionsPanel({ candidate, open, onOpenChange }: Intervi
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-full sm:max-w-lg max-h-[88vh] p-0 gap-0 flex flex-col overflow-hidden">
         <DialogHeader className="border-b p-5 pr-12 bg-muted/20 space-y-3 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <Avatar className="size-11 shrink-0">
-              <AvatarFallback className="bg-role-recruitment/12 text-sm font-semibold text-role-recruitment">
-                {initials(candidate.fullName)}
-              </AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              <DialogTitle className="truncate text-base font-bold text-foreground">
-                {candidate.fullName}
-              </DialogTitle>
-              <DialogDescription className="truncate text-xs">
-                {candidate.email || candidate.currentRole || "No contact on file"}
-              </DialogDescription>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5">
-              <CalendarClockIcon className="size-3.5" />
-              {candidate.interviewAt
-                ? new Date(candidate.interviewAt).toLocaleString(undefined, {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })
-                : "Not scheduled"}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <UserCheckIcon className="size-3.5" />
-              {candidate.interviewerName || "No interviewer"}
-            </span>
-          </div>
+          <InterviewCandidateHeader candidate={candidate} />
         </DialogHeader>
 
         <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-6">
@@ -199,98 +150,7 @@ export function InterviewActionsPanel({ candidate, open, onOpenChange }: Intervi
               chase it. */}
           <div className="space-y-2">
             <SectionLabel>Interviewer&apos;s feedback</SectionLabel>
-            {submitted ? (
-              <div className="space-y-4 rounded-lg border p-3">
-                <div className="space-y-1.5">
-                  <p className="text-xs text-muted-foreground">Overall rating</p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-0.5">
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <StarIcon
-                          key={n}
-                          className={cn(
-                            "size-4",
-                            candidate.feedbackRating != null && n <= candidate.feedbackRating
-                              ? "fill-amber-400 text-amber-400"
-                              : "text-muted-foreground/30"
-                          )}
-                        />
-                      ))}
-                    </div>
-                    {candidate.feedbackRating != null && (
-                      <span className="text-sm text-foreground">
-                        {candidate.feedbackRating}/5
-                        {RATING_LABELS[candidate.feedbackRating - 1]
-                          ? ` — ${RATING_LABELS[candidate.feedbackRating - 1]}`
-                          : ""}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {candidate.feedbackWouldRecommend != null && (
-                  <div className="space-y-1.5">
-                    <p className="text-xs text-muted-foreground">Recommend moving forward</p>
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
-                        candidate.feedbackWouldRecommend
-                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600"
-                          : "border-red-500/30 bg-red-500/10 text-red-600"
-                      )}
-                    >
-                      {candidate.feedbackWouldRecommend ? (
-                        <ThumbsUpIcon className="size-3.5" />
-                      ) : (
-                        <ThumbsDownIcon className="size-3.5" />
-                      )}
-                      {candidate.feedbackWouldRecommend ? "Yes" : "No"}
-                    </span>
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <p className="text-xs text-muted-foreground">Comments</p>
-                  {candidate.feedbackComments ? (
-                    <p className="whitespace-pre-wrap rounded-lg bg-muted/40 p-3 text-sm text-foreground">
-                      {candidate.feedbackComments}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No comments were left.</p>
-                  )}
-                </div>
-
-                <p className="text-[11px] text-muted-foreground">
-                  Submitted{" "}
-                  {new Date(candidate.feedbackSubmittedAt!).toLocaleString(undefined, {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })}
-                </p>
-              </div>
-            ) : (
-              // Asked-and-waiting and never-asked are genuinely different —
-              // collapsing them would report feedback as outstanding when
-              // nobody has requested it.
-              <div className="space-y-2 rounded-lg border border-dashed p-6 text-center">
-                {requested ? (
-                  <>
-                    <ClockIcon className="mx-auto size-7 text-orange-500/50" />
-                    <p className="text-sm font-medium text-foreground">Waiting on the interviewer</p>
-                    <p className="text-xs text-muted-foreground">
-                      Sent{candidate.interviewerName ? ` to ${candidate.interviewerName}` : ""} on{" "}
-                      {new Date(candidate.feedbackRequestedAt!).toLocaleDateString()}.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <MinusCircleIcon className="mx-auto size-7 text-muted-foreground/40" />
-                    <p className="text-sm font-medium text-foreground">No feedback form sent yet</p>
-                    <p className="text-xs text-muted-foreground">Send one to the interviewer once the interview has been held.</p>
-                  </>
-                )}
-              </div>
-            )}
+            <InterviewFeedbackSummary candidate={candidate} />
           </div>
         </div>
       </DialogContent>

@@ -118,6 +118,7 @@ Rails.application.routes.draw do
           member do
             post :reprocess
             get :download
+            get :preview
           end
           collection do
             post :import_from_zoho

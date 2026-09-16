@@ -154,8 +154,18 @@ export const recruitmentApi = {
     reprocess: (id: string) =>
       apiClient.post<CandidateResumeDetail>(`/recruitment/resumes/${id}/reprocess`),
 
+    // Saves the file — Content-Disposition: attachment on the backend.
     downloadUrl: (id: string) => {
       return `${API_BASE}/recruitment/resumes/${id}/download`
+    },
+
+    // Renders the file in the browser — the same bytes as downloadUrl, but
+    // served inline and with the Content-Type corrected from the filename.
+    // Pointing a preview at downloadUrl is what made Preview save the PDF
+    // instead of showing it; see ResumesController#preview for why the
+    // stored content type can't be trusted for this.
+    previewUrl: (id: string) => {
+      return `${API_BASE}/recruitment/resumes/${id}/preview`
     },
 
     importFromZoho: (params: {

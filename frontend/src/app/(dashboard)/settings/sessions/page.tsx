@@ -1,23 +1,9 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { SessionsList } from "@/features/auth/components/sessions-list"
+import { redirect } from "next/navigation"
 
-export const metadata = { title: "Sessions" }
-
+// Sessions are no longer a page of their own — they live in Account &
+// Security alongside the password, which is where the reference design puts
+// them and where people look for them. The route stays so existing links and
+// bookmarks still land somewhere correct.
 export default function SessionsPage() {
-  return (
-    <div className="grid max-w-2xl gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
-      <Card>
-        <CardHeader>
-          <CardTitle>Active sessions</CardTitle>
-          <CardDescription>
-            Everywhere you&apos;re currently signed in. Revoke any device you don&apos;t recognize.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SessionsList />
-        </CardContent>
-      </Card>
-    </div>
-  )
+  redirect("/settings")
 }

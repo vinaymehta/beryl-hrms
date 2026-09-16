@@ -28,11 +28,27 @@ Rails.application.configure do
   # reach, so photos silently failed to load.
   config.active_storage.resolve_model_to_route = :rails_storage_proxy
 
+  # TLS is the default and has to be opted OUT of, not into: a deployment that
+  # forgets to set this still gets the secure behaviour.
+  #
+  # FORCE_SSL=false is for a deployment that genuinely has no certificate yet —
+  # notably a bare IP address, which Let's Encrypt will not issue a certificate
+  # for at all. Leaving these two on in that situation does not merely fail to
+  # help, it takes the site down: assume_ssl makes Rails believe the request
+  # already arrived over TLS, so force_ssl marks every cookie Secure, and a
+  # browser discards Secure cookies delivered over plain HTTP — meaning nobody
+  # can log in, with nothing in the logs to say why.
+  #
+  # Set this back to true (or drop it) the moment a real certificate is in
+  # front. The cookies themselves key off request.ssl? rather than this flag,
+  # so they start protecting themselves as soon as TLS appears.
+  ssl_terminated = ENV.fetch("FORCE_SSL", "true").downcase != "false"
+
   # Assume all access to the app is happening through a SSL-terminating reverse proxy.
-  config.assume_ssl = true
+  config.assume_ssl = ssl_terminated
 
   # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
-  config.force_ssl = true
+  config.force_ssl = ssl_terminated
 
   # Skip http-to-https redirect for the default health check endpoint.
   # config.ssl_options = { redirect: { exclude: ->(request) { request.path == "/up" } } }

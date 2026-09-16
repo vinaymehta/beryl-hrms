@@ -1,69 +1,11 @@
-import Link from "next/link"
-import { SettingsIcon } from "lucide-react"
-
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { ChangePasswordForm } from "@/features/auth/components/change-password-form"
+import { SettingsDialog } from "@/features/settings/components/settings-dialog"
 
 export const metadata = { title: "Settings" }
 
+// Settings opens as a modal over the dashboard shell — the sidebar and topbar
+// stay visible behind it. Account & Security is the landing section rather
+// than a separate overview screen: an overview whose only content is links to
+// the nav sitting right beside it would be a view that says nothing.
 export default function SettingsPage() {
-  return (
-    <div className="grid max-w-2xl gap-6">
-      <div className="flex items-center gap-2.5">
-        <span className="flex size-9 items-center justify-center rounded-xl bg-role-admin/12 text-role-admin">
-          <SettingsIcon className="size-4.5" />
-        </span>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Password</CardTitle>
-          <CardDescription>Change the password you use to sign in.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ChangePasswordForm />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Sessions</CardTitle>
-          <CardDescription>See and revoke devices signed in to your account.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" nativeButton={false} render={<Link href="/settings/sessions" />}>
-            Manage sessions
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Interview scheduling</CardTitle>
-          <CardDescription>
-            Connect Calendly so shortlisted candidates can book their own interview slots.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" nativeButton={false} render={<Link href="/settings/interviews" />}>
-            Manage interview scheduling
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Mail</CardTitle>
-          <CardDescription>Connect a Zoho mailbox to read and search mail in the app.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" nativeButton={false} render={<Link href="/settings/mail" />}>
-            Manage mail connections
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  )
+  return <SettingsDialog initialSection="account" />
 }

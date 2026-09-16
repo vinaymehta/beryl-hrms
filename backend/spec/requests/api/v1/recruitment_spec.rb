@@ -18,6 +18,16 @@ RSpec.describe "Api::V1::Recruitment", type: :request do
 
   let(:company) { Company.find_by!(name: "Acme Recruitment Corp") }
 
+  # The download/preview pair only differ in how they serve the SAME bytes,
+  # so both are exercised against an identically built record.
+  def attached_resume(file_name:, content_type:)
+    ActsAsTenant.with_tenant(company) do
+      resume = create(:candidate_resume, company: company, file_name: file_name, content_type: content_type)
+      resume.file.attach(io: StringIO.new("resume contents"), filename: file_name, content_type: content_type)
+      resume
+    end
+  end
+
   describe "GET /api/v1/recruitment/dashboard/stats" do
     it "returns real SQL aggregation metrics for candidates and resumes" do
       ActsAsTenant.with_tenant(company) do
@@ -85,23 +95,82 @@ RSpec.describe "Api::V1::Recruitment", type: :request do
   end
 
   describe "GET /api/v1/recruitment/resumes/:id/download" do
-    it "redirects to a short-lived signed storage URL rather than streaming the file inline" do
-      resume = ActsAsTenant.with_tenant(company) do
-        r = create(:candidate_resume, company: company)
-        r.file.attach(io: StringIO.new("resume contents"), filename: "resume.pdf", content_type: "application/pdf")
-        r
-      end
+    # Streamed, not a redirect to a presigned storage URL: that URL is built
+    # from S3_ENDPOINT, which on a deployed box names storage as the SERVER
+    # sees it and the browser can't reach.
+    it "streams the file as an attachment rather than redirecting to storage" do
+      resume = attached_resume(file_name: "resume.pdf", content_type: "application/pdf")
 
       get "/api/v1/recruitment/resumes/#{resume.id}/download"
 
-      expect(response).to have_http_status(:found)
-      expect(response.headers["Location"]).to be_present
+      expect(response).to have_http_status(:ok)
+      expect(response.headers["Content-Disposition"]).to start_with("attachment")
+      expect(response.body).to eq("resume contents")
     end
 
     it "404s when no file is attached, without leaking a storage error" do
       resume = ActsAsTenant.with_tenant(company) { create(:candidate_resume, company: company) }
 
       get "/api/v1/recruitment/resumes/#{resume.id}/download"
+
+      expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  describe "GET /api/v1/recruitment/resumes/:id/preview" do
+    it "serves the file inline instead of as a download" do
+      resume = attached_resume(file_name: "resume.pdf", content_type: "application/pdf")
+
+      get "/api/v1/recruitment/resumes/#{resume.id}/preview"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.headers["Content-Disposition"]).to start_with("inline")
+      expect(response.media_type).to eq("application/pdf")
+    end
+
+    # The production bug: Zoho stores application/octet-stream for plenty of
+    # real PDFs, and with nosniff set the browser saves an octet-stream body
+    # however the disposition is spelled. The filename decides instead.
+    it "corrects a generic stored content type to application/pdf for a .pdf file" do
+      resume = attached_resume(file_name: "resume.pdf", content_type: "application/octet-stream")
+
+      get "/api/v1/recruitment/resumes/#{resume.id}/preview"
+
+      expect(response.media_type).to eq("application/pdf")
+      expect(response.headers["Content-Disposition"]).to start_with("inline")
+    end
+
+    # Never echo an arbitrary stored type back inline — an uploaded
+    # text/html "resume" would otherwise run as script on the API origin.
+    it "falls back to a download for a file type it will not render inline" do
+      resume = attached_resume(file_name: "resume.html", content_type: "text/html")
+
+      get "/api/v1/recruitment/resumes/#{resume.id}/preview"
+
+      expect(response.headers["Content-Disposition"]).to start_with("attachment")
+      expect(response.media_type).not_to eq("text/html")
+    end
+
+    # X-Frame-Options: DENY (security_headers.rb) blocks an <iframe> outright,
+    # same-origin included — the preview modal would show "refused to connect"
+    # however correct the content type is.
+    it "lets the app frame this response, and only this response" do
+      resume = attached_resume(file_name: "resume.pdf", content_type: "application/pdf")
+
+      get "/api/v1/recruitment/resumes/#{resume.id}/preview"
+
+      expect(response.headers["X-Frame-Options"]).to be_nil
+      expect(response.headers["Content-Security-Policy"]).to include("frame-ancestors 'self' http://localhost:3000")
+
+      get "/api/v1/recruitment/resumes/#{resume.id}/download"
+
+      expect(response.headers["X-Frame-Options"]).to eq("DENY")
+    end
+
+    it "404s when no file is attached" do
+      resume = ActsAsTenant.with_tenant(company) { create(:candidate_resume, company: company) }
+
+      get "/api/v1/recruitment/resumes/#{resume.id}/preview"
 
       expect(response).to have_http_status(:not_found)
     end

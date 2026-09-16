@@ -7,7 +7,12 @@ Rails.application.config.action_dispatch.default_headers.merge!(
   "X-XSS-Protection" => "0"
 )
 
-if Rails.env.production?
+# Only claim HTTPS-only when the deployment actually has TLS. Announcing a
+# two-year HSTS policy from a plain-HTTP site is at best ignored (browsers
+# disregard the header when it doesn't arrive over TLS) and at worst a trap: a
+# client that did honour it would refuse to reach the site at all. Same
+# FORCE_SSL switch config/environments/production.rb reads.
+if Rails.env.production? && ENV.fetch("FORCE_SSL", "true").downcase != "false"
   Rails.application.config.action_dispatch.default_headers["Strict-Transport-Security"] =
     "max-age=63072000; includeSubDomains"
 end

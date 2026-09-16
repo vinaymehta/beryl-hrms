@@ -7,7 +7,7 @@ module Api
       # the mail workspace itself relies on, instead of a thinner, duplicated
       # version of that handling.
       class ResumesController < Api::V1::Mail::BaseController
-        before_action :set_resume, only: %i[show reprocess download destroy]
+        before_action :set_resume, only: %i[show reprocess download preview destroy]
 
         # GET /api/v1/recruitment/resumes
         def index
@@ -123,29 +123,25 @@ module Api
           render json: { data: resume_detail(@resume) }
         end
 
-        # GET /api/v1/recruitment/resumes/:id/download — mints a short-expiry
-        # signed URL fresh on every request rather than streaming the blob
-        # through the Rails process, matching DocumentsController#download.
+        # GET /api/v1/recruitment/resumes/:id/download — saves the file.
+        # Its inline counterpart is #preview below; the two differ only in
+        # Content-Disposition and in how the Content-Type is resolved.
         def download
           authorize @resume
 
-          unless @resume.file.attached?
-            return render json: { errors: [{ message: "Resume file not found on storage" }] }, status: :not_found
-          end
+          send_resume_file(disposition: "attachment", audit_action: "candidate_resume.downloaded")
+        end
 
-          ::Audit::Record.call(action: "candidate_resume.downloaded", auditable: @resume, request: request)
+        # GET /api/v1/recruitment/resumes/:id/preview — the SAME bytes as
+        # #download, served to be rendered in the browser instead of saved.
+        # Split from #download because one Content-Disposition cannot serve
+        # both: "attachment" always saves, and "inline" on a file the browser
+        # can't render also ends up saving it (see #inline_content_type).
+        def preview
+          authorize @resume, :preview?
 
-          # Streamed through this action rather than redirecting to a
-          # presigned storage URL. That URL is built from S3_ENDPOINT, which
-          # points at storage as the SERVER sees it — on a deployed box that
-          # is an internal or loopback address, so the browser followed the
-          # redirect to a host it cannot reach and the PDF preview failed.
-          # Serving the bytes here keeps it on the already-reachable API
-          # origin and needs no extra proxy rules.
-          send_data @resume.file.download,
-                    filename: @resume.file_name.presence || "resume.pdf",
-                    type: @resume.content_type.presence || "application/pdf",
-                    disposition: "inline"
+          allow_app_framing!
+          send_resume_file(disposition: "inline", audit_action: "candidate_resume.previewed")
         end
 
         # POST /api/v1/recruitment/resumes/import_from_zoho
@@ -256,6 +252,85 @@ module Api
 
         def set_resume
           @resume = policy_scope(CandidateResume).find(params[:id])
+        end
+
+        # Streamed through this action rather than redirecting to a presigned
+        # storage URL. That URL is built from S3_ENDPOINT, which points at
+        # storage as the SERVER sees it — on a deployed box that is an
+        # internal or loopback address, so the browser followed the redirect
+        # to a host it cannot reach and the preview failed. Serving the bytes
+        # here keeps it on the already-reachable API origin and needs no extra
+        # proxy rules.
+        def send_resume_file(disposition:, audit_action:)
+          unless @resume.file.attached?
+            return render json: { errors: [{ message: "Resume file not found on storage" }] }, status: :not_found
+          end
+
+          ::Audit::Record.call(action: audit_action, auditable: @resume, request: request)
+
+          type = disposition == "inline" ? inline_content_type : @resume.content_type.presence || "application/pdf"
+
+          # A file we can't safely render is sent as a download even on the
+          # preview route, rather than inline with a type the browser would
+          # either refuse or — worse — execute.
+          disposition = "attachment" if type.nil?
+
+          send_data @resume.file.download,
+                    filename: @resume.file_name.presence || "resume.pdf",
+                    type: type || "application/octet-stream",
+                    disposition: disposition
+        end
+
+        # The preview is shown in an <iframe>, and every response in this app
+        # carries X-Frame-Options: DENY from
+        # config/initializers/security_headers.rb — which blocks framing
+        # outright, same-origin included, so the modal would render "refused to
+        # connect" even once the content type is right. Only THIS response
+        # opts out, and only for the app's own origins, via frame-ancestors
+        # (the modern replacement for X-Frame-Options; the older header has to
+        # be removed as well, since browsers that still honour DENY would
+        # otherwise keep blocking). FRONTEND_ORIGINS is the same list CORS and
+        # the CSRF origin check already trust.
+        def allow_app_framing!
+          origins = ENV.fetch("FRONTEND_ORIGINS", "http://localhost:3000").split(",").map(&:strip).reject(&:empty?)
+
+          response.headers.delete("X-Frame-Options")
+          response.headers["Content-Security-Policy"] = "frame-ancestors 'self' #{origins.join(' ')}".strip
+        end
+
+        # THE reason Preview downloaded instead of rendering in production.
+        #
+        # Zoho reports application/octet-stream for a large share of genuine
+        # PDF attachments, and that is what gets stored on import. Every
+        # browser saves an octet-stream body no matter what
+        # Content-Disposition says, and `X-Content-Type-Options: nosniff`
+        # (config/initializers/security_headers.rb) stops it from correcting
+        # the type by sniffing the bytes. Locally uploaded PDFs carry a real
+        # application/pdf from the file picker, which is why this only ever
+        # showed up on deployed data.
+        #
+        # So for the inline route the type is resolved from the filename
+        # first, and only from the stored type when that is itself one we are
+        # willing to render. Anything else returns nil — the caller then
+        # serves it as a download. The allowlist is the point: echoing an
+        # arbitrary stored content type back inline would let an uploaded
+        # text/html "resume" run as script on the API origin.
+        INLINE_TYPES_BY_EXTENSION = {
+          ".pdf" => "application/pdf",
+          ".png" => "image/png",
+          ".jpg" => "image/jpeg",
+          ".jpeg" => "image/jpeg",
+          ".gif" => "image/gif",
+          ".webp" => "image/webp",
+          ".txt" => "text/plain"
+        }.freeze
+
+        def inline_content_type
+          from_extension = INLINE_TYPES_BY_EXTENSION[File.extname(@resume.file_name.to_s).downcase]
+          return from_extension if from_extension
+
+          stored = @resume.content_type.presence
+          INLINE_TYPES_BY_EXTENSION.value?(stored) ? stored : nil
         end
 
         def parse_scan_date(value)

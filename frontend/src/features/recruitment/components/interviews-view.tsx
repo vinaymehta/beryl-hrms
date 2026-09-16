@@ -4,9 +4,17 @@ import { useState } from "react"
 import { useCandidates } from "../hooks"
 import { CandidateDetailModal } from "./candidate-detail-modal"
 import { InterviewActionsPanel } from "./interview-actions-panel"
+import { InterviewFeedbackDialog } from "./interview-feedback-dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
@@ -19,6 +27,8 @@ import {
   ChevronRightIcon,
   UserCheckIcon,
   SlidersHorizontalIcon,
+  FilterIcon,
+  ChevronDownIcon,
 } from "lucide-react"
 import { INTERVIEW_WORKFLOW_STATUSES, type CandidateStatus, type CandidateSummary } from "@/types/recruitment"
 import { cn } from "cn"
@@ -36,13 +46,37 @@ const STAGE_META: Record<string, { label: string; className: string }> = {
   feedback_not_received: { label: "Interview Completed", className: "bg-teal-500/10 text-teal-600 border-teal-500/30" },
 }
 
-const STAGE_PILLS: { label: string; value: CandidateStatus | "" }[] = [
-  { label: "All Interviews", value: "" },
+// The two views worth a permanent tab: everyone in the workflow, and the
+// people whose feedback has actually come back. Both are destinations you
+// switch between constantly, so they stay one click away rather than behind
+// the Filter.
+const STAGE_TABS: { label: string; value: CandidateStatus | ""; activeClassName: string }[] = [
+  { label: "All Interviews", value: "", activeClassName: "bg-primary/10 text-primary border-primary/30" },
+  {
+    label: "Feedback",
+    value: "feedback_received",
+    // Emerald, matching the "Received" badge in the Feedback column — not
+    // STAGE_META's teal, whose label reads "Interview Completed" and would
+    // say the wrong thing on a tab about feedback.
+    activeClassName: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
+  },
+]
+
+// The narrower cuts — the two stages of the interview itself. Not tabs: you
+// reach for these to answer a specific question, not to live in them. Link
+// Sent is deliberately not offered; it's still a real status the Feedback
+// column reports and the backend stores, just not something worth filtering
+// the list down to.
+const STAGE_FILTER_OPTIONS: { label: string; value: CandidateStatus }[] = [
   { label: "Scheduled", value: "interview_scheduled" },
   { label: "Completed", value: "interview_completed" },
-  { label: "Feedback Received", value: "feedback_received" },
-  { label: "Link Sent", value: "feedback_not_received" },
 ]
+
+// Only the Filter's own stages light it up — a tab selection is shown by the
+// tab, not by a count on a control that didn't set it.
+function isFilterStage(stage: CandidateStatus | "") {
+  return STAGE_FILTER_OPTIONS.some((o) => o.value === stage)
+}
 
 // Feedback is a separate axis from the interview itself. Three distinct
 // states, deliberately not collapsed: the form was never sent, the form was
@@ -80,19 +114,27 @@ function FeedbackCell({ status, submitted }: { status: CandidateStatus; submitte
 /**
  * Candidates past the Shortlisted stage — everyone with an interview booked,
  * through to their feedback. Opened from the "Interview Scheduled" Quick Stat.
- * Rows open the same candidate profile modal the other candidate lists use.
+ * Under the Feedback Received tab a row opens what the interviewer submitted,
+ * since that is the only reason to click someone there; everywhere else it
+ * opens their candidate profile as before. The Actions column stays the way
+ * to change the stage itself.
  */
 export function InterviewsView() {
   const [search, setSearch] = useState("")
   const [stage, setStage] = useState<CandidateStatus | "">("")
   const [page, setPage] = useState(1)
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null)
   // Status and Feedback are read-only badges; everything actionable lives
   // behind the Actions column, in one panel.
   const [actionsFor, setActionsFor] = useState<CandidateSummary | null>(null)
+  const [feedbackFor, setFeedbackFor] = useState<CandidateSummary | null>(null)
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null)
+
+  // The Feedback Received tab is the one place a row means "show me the
+  // feedback". On every other tab a row still opens the candidate profile.
+  const showsFeedback = stage === "feedback_received"
 
   const { data: response, isLoading } = useCandidates({
-    // One stage when a pill is picked, otherwise the whole workflow — so a
+    // One stage when the filter picks one, otherwise the whole workflow — so a
     // candidate stays on this list as they move from scheduled to completed
     // to feedback, instead of disappearing at each step.
     status: stage || INTERVIEW_WORKFLOW_STATUSES,
@@ -106,8 +148,8 @@ export function InterviewsView() {
   return (
     <div className="space-y-4">
       <div className="space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <div className="relative flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-48 flex-1">
             <SearchIcon className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
             <Input
               value={search}
@@ -119,30 +161,74 @@ export function InterviewsView() {
               className="pl-8 text-xs h-9"
             />
           </div>
+
+          {/* A real dropdown, not a popover wrapping a select: one click
+              opens the stages, a second picks one. Only this list works this
+              way — Resumes and Employees keep the FilterPopover, whose panels
+              hold several controls at once and so genuinely need one. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label="Filter interviews by stage"
+                  className={cn(
+                    "h-9 shrink-0 gap-1.5 rounded-full text-xs",
+                    isFilterStage(stage) && "border-role-recruitment text-role-recruitment bg-role-recruitment/5"
+                  )}
+                />
+              }
+            >
+              <FilterIcon className="size-3.5" />
+              {/* The chosen stage names itself on the button, so no separate
+                  count badge is needed to say something is filtered. */}
+              {STAGE_FILTER_OPTIONS.find((o) => o.value === stage)?.label ?? "Filter"}
+              <ChevronDownIcon className="size-3.5 opacity-60" />
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuRadioGroup
+                // Bound to `stage` itself, not to a filter-only subset: on the
+                // Feedback Received tab nothing here is checked, which is the
+                // truth — that tab's stage is not one of these two.
+                value={stage}
+                onValueChange={(v) => {
+                  setStage((v || "") as CandidateStatus | "")
+                  setPage(1)
+                }}
+              >
+                <DropdownMenuRadioItem value="" className="text-xs">
+                  Any stage
+                </DropdownMenuRadioItem>
+                {STAGE_FILTER_OPTIONS.map((o) => (
+                  <DropdownMenuRadioItem key={o.value} value={o.value} className="text-xs">
+                    {o.label}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b text-xs">
-          {STAGE_PILLS.map((p) => {
-            const isActive = stage === p.value
-            const activeColor = p.value
-              ? STAGE_META[p.value]?.className ?? "bg-primary/10 text-primary border-primary/30"
-              : "bg-primary/10 text-primary border-primary/30"
-            return (
-              <button
-                key={p.value}
-                onClick={() => {
-                  setStage(p.value)
-                  setPage(1)
-                }}
-                className={cn(
-                  "rounded-md border px-3 py-1.5 font-medium whitespace-nowrap transition-colors",
-                  isActive ? activeColor : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                )}
-              >
-                {p.label}
-              </button>
-            )
-          })}
+          {STAGE_TABS.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => {
+                setStage(t.value)
+                setPage(1)
+              }}
+              className={cn(
+                "rounded-md border px-3 py-1.5 font-medium whitespace-nowrap transition-colors",
+                stage === t.value
+                  ? t.activeClassName
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -180,8 +266,15 @@ export function InterviewsView() {
                 return (
                   <TableRow
                     key={candidate.id}
-                    onClick={() => setSelectedCandidateId(candidate.id)}
+                    onClick={() =>
+                      showsFeedback ? setFeedbackFor(candidate) : setSelectedCandidateId(candidate.id)
+                    }
                     className="cursor-pointer"
+                    title={
+                      showsFeedback
+                        ? "Open the feedback the interviewer submitted"
+                        : "Open this candidate's profile"
+                    }
                   >
                     <TableCell>
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -296,7 +389,15 @@ export function InterviewsView() {
         onOpenChange={(open) => !open && setActionsFor(null)}
       />
 
-      {/* Same profile modal the other candidate lists open. */}
+      {/* Feedback Received tab only — the interviewer's answers, not the
+          candidate's resume. */}
+      <InterviewFeedbackDialog
+        candidate={feedbackFor}
+        open={!!feedbackFor}
+        onOpenChange={(open) => !open && setFeedbackFor(null)}
+      />
+
+      {/* Every other tab: the same profile modal the other candidate lists open. */}
       <CandidateDetailModal
         candidateId={selectedCandidateId}
         open={!!selectedCandidateId}

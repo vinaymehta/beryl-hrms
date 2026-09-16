@@ -48,7 +48,15 @@ module Authentication
           value: session.id,
           httponly: true,
           same_site: :lax,
-          secure: Rails.env.production?
+          # Follows the actual connection, not the environment name. A
+          # production deployment that has no certificate yet (a bare IP,
+          # which Let's Encrypt cannot issue for at all) serves plain HTTP,
+          # and browsers silently DISCARD a Secure cookie sent over it — so
+          # keying this off Rails.env.production? made logging in impossible
+          # there, with no error anywhere to explain why. Reading the request
+          # instead also means it tightens itself up the moment TLS is put in
+          # front, with nothing to remember to change.
+          secure: request.ssl?
         }
         rotate_csrf_token
       end

@@ -70,7 +70,9 @@ module CsrfProtection
         value: SecureRandom.hex(32),
         httponly: false,
         same_site: :lax,
-        secure: Rails.env.production?
+        # Same rule as the session cookie — see the note there. If this one is
+        # dropped, every POST/PATCH/DELETE fails the origin check instead.
+        secure: request.ssl?
       }
     end
 end

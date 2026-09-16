@@ -44,7 +44,7 @@ export function ResumePreviewModal({ resumeId, fileName, contentType, open, onOp
           // background shows on the sides instead of the viewer's backdrop.
           <div className="flex-1 overflow-hidden bg-white p-4">
             <iframe
-              src={`${recruitmentApi.resumes.downloadUrl(resumeId)}#toolbar=0&navpanes=0&view=FitH`}
+              src={`${recruitmentApi.resumes.previewUrl(resumeId)}#toolbar=0&navpanes=0&view=FitH`}
               title="Original resume PDF"
               className="mx-auto h-full w-full max-w-3xl border-0 bg-white"
             />
