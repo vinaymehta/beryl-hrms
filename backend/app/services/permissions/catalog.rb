@@ -13,7 +13,7 @@ module Permissions
       designations.view designations.create designations.update designations.delete
       attendance.view attendance.manage
       leave.view leave.create leave.approve
-      documents.view documents.create documents.delete
+      documents.view documents.create documents.delete documents.manage_own
       payroll.view payroll.manage
       expenses.view expenses.create expenses.approve
       mail.view mail.search

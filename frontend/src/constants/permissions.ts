@@ -32,6 +32,8 @@ export const PERMISSIONS = {
   documentsView: "documents.view",
   documentsCreate: "documents.create",
   documentsDelete: "documents.delete",
+  // Upload confined to the holder's own employee record — see DocumentPolicy.
+  documentsManageOwn: "documents.manage_own",
   recruitmentView: "recruitment.view",
   recruitmentManage: "recruitment.manage",
   candidatesView: "candidates.view",
@@ -78,3 +80,16 @@ export const ROLE_BADGE_CLASSES: Record<RoleSlug | "default", string> = {
 export function roleBadgeClasses(slug: string): string {
   return ROLE_BADGE_CLASSES[slug as RoleSlug] ?? ROLE_BADGE_CLASSES.default
 }
+
+/**
+ * "Looks after other people", as opposed to just their own record.
+ *
+ * Mirrors EmployeePolicy::Scope::MANAGES_PEOPLE on the backend, which is what
+ * actually decides whether the employee list returns the whole company or a
+ * single row. Keep the two in step — this side only decides what to show.
+ */
+export const PEOPLE_MANAGEMENT_PERMISSIONS: PermissionKey[] = [
+  PERMISSIONS.employeesCreate,
+  PERMISSIONS.employeesUpdate,
+  PERMISSIONS.employeesDelete,
+]

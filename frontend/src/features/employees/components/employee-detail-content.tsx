@@ -28,6 +28,7 @@ import { EmployeeStatusBadge } from "@/features/employees/components/employee-st
 import { EmployeeForm } from "@/features/employees/components/employee-form"
 import { useEmployee } from "@/features/employees/hooks/use-employees"
 import { useUpdateEmployee, useDeactivateEmployee, useReactivateEmployee } from "@/features/employees/hooks/use-employee-mutations"
+import { EmployeeDocumentsSection } from "@/features/documents/components/employee-documents-section"
 
 function initials(first: string, last: string) {
   return `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase()
@@ -136,6 +137,12 @@ export function EmployeeDetailContent({ employeeId }: { employeeId: string }) {
             <InfoRow label="Phone" value={employee.emergencyContactPhone} />
           </CardContent>
         </Card>
+
+        {/* Renders nothing unless this viewer may actually see this
+            employee's documents — see EmployeeDocumentsSection. The backend
+            scopes the list independently; the checks there only decide what
+            to show. */}
+        <EmployeeDocumentsSection employeeId={employeeId} />
       </div>
 
       {/* Sticky bottom action bar — matches the Edit/Add Employee sheets'

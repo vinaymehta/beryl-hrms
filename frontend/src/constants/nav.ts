@@ -13,19 +13,23 @@ import {
   SettingsIcon,
 } from "lucide-react"
 
-import { PERMISSIONS, type PermissionKey } from "@/constants/permissions"
+import { PEOPLE_MANAGEMENT_PERMISSIONS, PERMISSIONS, type PermissionKey } from "@/constants/permissions"
 import { HIDDEN_FEATURES } from "@/constants/feature-flags"
 
 export interface NavItem {
   label: string
   href: string
   icon: LucideIcon
-  /** Omit for items every authenticated user can see (Dashboard, Settings). */
-  permission?: PermissionKey
+  /** Omit for items every authenticated user can see (Settings). An array means "any of these". */
+  permission?: PermissionKey | PermissionKey[]
 }
 
 const ALL_NAV_ITEMS: (NavItem & { hidden?: boolean })[] = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboardIcon },
+  // The dashboard reports company-wide numbers (headcount, departments), so
+  // it is for whoever looks after the company's people. Someone who only
+  // manages their own record is sent to that record instead — see
+  // app/(dashboard)/page.tsx.
+  { label: "Dashboard", href: "/", icon: LayoutDashboardIcon, permission: PEOPLE_MANAGEMENT_PERMISSIONS },
   { label: "Employees", href: "/employees", icon: UsersIcon, permission: PERMISSIONS.employeesView },
   { label: "Departments", href: "/departments", icon: Building2Icon, permission: PERMISSIONS.departmentsView },
   { label: "Attendance", href: "/attendance", icon: ClockIcon, permission: PERMISSIONS.attendanceView, hidden: HIDDEN_FEATURES.attendance },

@@ -56,7 +56,10 @@ Rails.application.routes.draw do
       patch "attendance/check_out", to: "attendance#check_out"
 
       resources :documents, only: %i[ index create destroy ] do
-        member { get :download }
+        member do
+          get :download
+          get :preview
+        end
       end
 
       namespace :mail do

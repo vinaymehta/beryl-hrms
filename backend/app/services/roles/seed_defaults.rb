@@ -25,11 +25,15 @@ module Roles
         payroll.view payroll.manage
         expenses.view expenses.create expenses.approve
       ],
+      # documents.view is scoped to the employee's own records by
+      # DocumentPolicy::Scope, and documents.manage_own can only ever target
+      # their own employee record — an employee never sees, uploads to, or
+      # deletes anyone else's documents.
       "employee" => %w[
         employees.view
         attendance.view
         leave.view leave.create
-        documents.view
+        documents.view documents.manage_own
         mail.view mail.search
       ]
     }.freeze

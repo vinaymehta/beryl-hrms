@@ -384,7 +384,7 @@ module Zoho
 
       filename = "attachment"
       if res.headers["content-disposition"] =~ /filename\s*=\s*"?([^";]+)"?/i
-        filename = $1.strip
+        filename = decode_filename($1.strip)
       end
 
       {
@@ -405,6 +405,28 @@ module Zoho
     end
 
     private
+
+      # Zoho percent-encodes the filename inside the Content-Disposition
+      # header, so a resume arrives as
+      # "Saman_Kumar_Jha%20resume%20%281%29.pdf" and was stored — and shown,
+      # and re-downloaded — exactly like that.
+      #
+      # decode_uri_component, not CGI.unescape/decode_www_form_component: those
+      # also turn "+" into a space, which is form-encoding behaviour and wrong
+      # for a filename, where "+" is an ordinary character ("C++ notes.pdf").
+      #
+      # basename because a decoded %2F would otherwise introduce a path
+      # separator into a name that goes on to be used as one.
+      #
+      # A name containing a stray "%" that isn't a valid escape ("50%off.pdf")
+      # raises rather than decoding, so it is kept as-is: an odd-looking name
+      # is better than losing the attachment.
+      def decode_filename(raw)
+        decoded = URI.decode_uri_component(raw)
+        File.basename(decoded).presence || raw
+      rescue ArgumentError
+        raw
+      end
       def accounts_connection
         @accounts_connection ||= build_connection(@accounts_base_url)
       end

@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
+import { usePermission } from "@/features/auth/hooks/use-permission"
 import { cn } from "cn"
 import { SETTINGS_SECTIONS, settingsSection, type SettingsSectionId } from "./settings-sections"
 import { AccountSecuritySettings } from "./account-security-settings"
@@ -89,6 +90,8 @@ export function SettingsDialog({ initialSection }: { initialSection: SettingsSec
                 onSelect={() => selectSection(s.id)}
               />
             ))}
+            {/* A section the viewer has no business in renders nothing at all
+                — see SettingsNavItem. */}
           </nav>
 
           <div className="min-w-0 flex-1 overflow-y-auto p-5 sm:p-6">
@@ -135,6 +138,11 @@ function SettingsNavItem({
   onSelect: () => void
 }) {
   const Icon = section.icon
+  // usePermission returns true for an empty list, which is what an
+  // unrestricted section (Account & Security) wants.
+  const allowed = usePermission(section.permission ?? [])
+
+  if (section.permission && !allowed) return null
 
   return (
     <button

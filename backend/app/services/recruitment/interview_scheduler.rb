@@ -56,6 +56,10 @@ module Recruitment
         calendly_event_uri: nil,
         calendly_join_url: nil,
         interview_at: nil,
+        # Ditto for "we already told the interviewer": the booking that was
+        # announced no longer exists, so whatever the candidate books next is
+        # a new booking the interviewer still has to hear about.
+        interviewer_notified_invitee_uri: nil,
         # Issuing a new link voids any previous booking, so the candidate is
         # back to awaiting one — which in this design IS Shortlisted (only a
         # confirmed Calendly booking sets Interview Scheduled). Without this,

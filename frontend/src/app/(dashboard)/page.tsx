@@ -1,17 +1,37 @@
 "use client"
 
+import { useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { UsersIcon, Building2Icon, TrendingUpIcon, ArrowUpRightIcon } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { RoleBadge } from "@/components/layout/role-badge"
 import { useCurrentUser } from "@/features/auth/hooks/use-current-user"
+import { usePermission } from "@/features/auth/hooks/use-permission"
+import { PEOPLE_MANAGEMENT_PERMISSIONS } from "@/constants/permissions"
 import { useDashboardSummary } from "@/features/dashboard/hooks/use-dashboard-summary"
 
 export default function DashboardPage() {
+  const router = useRouter()
   const { user, isLoading } = useCurrentUser()
-  const { data: summary, isLoading: isSummaryLoading } = useDashboardSummary()
+  const managesPeople = usePermission(PEOPLE_MANAGEMENT_PERMISSIONS)
+
+  // This page reports on the company, so it belongs to whoever runs it.
+  // Someone who only looks after their own record is sent straight there —
+  // their details and their documents are the whole of what they can do, and
+  // landing on a headcount they have no part in is just a wrong front door.
+  //
+  // A login with no employee record of its own (an admin account, say) has
+  // nowhere else to go, so it stays here.
+  const redirectToOwnRecord = !isLoading && !!user && !managesPeople && !!user.employeeId
+
+  useEffect(() => {
+    if (redirectToOwnRecord) router.replace(`/employees/${user!.employeeId}`)
+  }, [redirectToOwnRecord, router, user])
+
+  const { data: summary, isLoading: isSummaryLoading } = useDashboardSummary({ enabled: !redirectToOwnRecord })
 
   // One highlighted "hero" metric (solid brand fill) + a lighter info-panel
   // metric — deliberately not identical white rectangles (see
@@ -26,6 +46,10 @@ export default function DashboardPage() {
     icon: Building2Icon,
     href: "/departments",
   }
+
+  // Nothing of the company's numbers should paint, however briefly, on the
+  // way out.
+  if (redirectToOwnRecord) return null
 
   return (
     <div className="grid gap-6">

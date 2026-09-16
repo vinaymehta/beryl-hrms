@@ -80,10 +80,25 @@ module Recruitment
         :canceled
       end
 
+      # Once per BOOKING, not once per candidate.
+      #
+      # Calendly retries a webhook it doesn't get a clean response to, and once
+      # calendly_invitee_uri is recorded, find_candidate matches a replayed
+      # invitee.created by that URI too — so an unguarded send delivers the
+      # whole packet, resume attachment included, again for a booking the
+      # interviewer has already been told about. Recording which invitee the
+      # notification went out for makes a replay a no-op while still notifying
+      # for a genuinely different booking (a reschedule gets a new invitee URI).
       def notify_interviewer(candidate)
         return if candidate.interviewer.nil?
+        return if candidate.interviewer_notified_invitee_uri.present? &&
+                  candidate.interviewer_notified_invitee_uri == candidate.calendly_invitee_uri
 
         RecruitmentMailJob.perform_later("InterviewerMailer", "interview_booked", candidate.id)
+        # Marked on enqueue rather than on delivery: the job has its own retry
+        # policy, so re-sending here on a later webhook replay would duplicate
+        # a mail that is still in flight rather than rescue a lost one.
+        candidate.update_column(:interviewer_notified_invitee_uri, candidate.calendly_invitee_uri)
       rescue => e
         # A booking that is already confirmed in Calendly must not be rolled
         # back because we failed to send an internal notification.

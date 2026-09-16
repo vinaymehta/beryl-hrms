@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_15_060000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_16_140000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -269,6 +269,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_060000) do
     t.datetime "interview_at"
     t.datetime "interview_link_sent_at"
     t.bigint "interviewer_id"
+    t.string "interviewer_notified_invitee_uri"
     t.jsonb "languages", default: [], null: false
     t.string "last_name"
     t.text "notes"
@@ -330,11 +331,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_060000) do
   create_table "documents", force: :cascade do |t|
     t.bigint "company_id", null: false
     t.datetime "created_at", null: false
+    t.string "custom_category"
     t.string "document_type"
     t.bigint "employee_id"
     t.string "title"
     t.datetime "updated_at", null: false
     t.bigint "uploaded_by_id", null: false
+    t.index ["company_id", "document_type"], name: "index_documents_on_company_id_and_document_type"
     t.index ["company_id", "employee_id"], name: "index_documents_on_company_id_and_employee_id"
     t.index ["company_id"], name: "index_documents_on_company_id"
     t.index ["employee_id"], name: "index_documents_on_employee_id"
