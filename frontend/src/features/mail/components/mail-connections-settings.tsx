@@ -96,10 +96,6 @@ export function MailConnectionsSettings() {
           <PlugIcon /> Connect to mailbox
         </Button>
       </div>
-
-      <p className="text-xs text-muted-foreground">
-        How much mail history you see is chosen on the Mail page itself, with its date filter.
-      </p>
     </div>
   )
 }

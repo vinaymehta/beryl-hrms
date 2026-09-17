@@ -13,20 +13,16 @@ import {
   Loader2Icon,
   MapPinIcon,
   BriefcaseIcon,
-  GraduationCapIcon,
-  LayersIcon,
-  StarIcon,
-  EyeIcon,
   ArrowRightIcon,
   CheckCircle2Icon,
 } from "lucide-react"
-import type { AiSearchResponse, CandidateSummary } from "@/types/recruitment"
+import type { AiSearchResponse } from "@/types/recruitment"
 
-interface AiSearchViewProps {
-  onOpenCandidate?: (candidateId: string) => void
-}
-
-export function AiSearchView({ onOpenCandidate }: AiSearchViewProps) {
+// No props: rows open the shared candidate modal from this component's own
+// state (selectedCandidateId, below). There was an onOpenCandidate callback
+// here that nothing passed and nothing invoked — a caller supplying one would
+// have been silently ignored.
+export function AiSearchView() {
   const [query, setQuery] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<AiSearchResponse | null>(null)
@@ -54,8 +50,8 @@ export function AiSearchView({ onOpenCandidate }: AiSearchViewProps) {
       } else {
         toast.success(`Found ${res.candidates.length} candidate(s)`)
       }
-    } catch (err: any) {
-      toast.error(err?.message || "AI search failed")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "AI search failed")
     } finally {
       setLoading(false)
     }
@@ -76,7 +72,7 @@ export function AiSearchView({ onOpenCandidate }: AiSearchViewProps) {
             </span>
           </h2>
           <p className="max-w-md text-sm text-muted-foreground">
-            Describe the candidate you're looking for in plain English — AI Discovery searches your
+            Describe the candidate you&apos;re looking for in plain English — AI Discovery searches your
             entire talent pool instantly.
           </p>
         </div>

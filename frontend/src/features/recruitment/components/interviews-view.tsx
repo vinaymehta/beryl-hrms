@@ -199,7 +199,7 @@ export function InterviewsView() {
                 }}
               >
                 <DropdownMenuRadioItem value="" className="text-xs">
-                  Any stage
+                  All
                 </DropdownMenuRadioItem>
                 {STAGE_FILTER_OPTIONS.map((o) => (
                   <DropdownMenuRadioItem key={o.value} value={o.value} className="text-xs">
