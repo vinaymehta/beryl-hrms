@@ -2,6 +2,10 @@ export interface Role {
   id: string
   name: string
   slug: string
+  /** Added by RoleSerializer for the roles picker; absent on older payloads. */
+  description?: string | null
+  /** True for the four roles every company is seeded with. */
+  systemDefault?: boolean
 }
 
 export interface AuthUser {

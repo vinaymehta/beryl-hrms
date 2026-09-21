@@ -9,6 +9,7 @@ module Permissions
   module Catalog
     LIST = %w[
       employees.view employees.create employees.update employees.delete
+      employees.manage_roles employees.manage_reporting_managers
       departments.view departments.create departments.update departments.delete
       designations.view designations.create designations.update designations.delete
       attendance.view attendance.manage

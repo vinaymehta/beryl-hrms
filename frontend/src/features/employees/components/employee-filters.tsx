@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input"
 import { FilterPopover } from "@/components/ui/filter-popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useDepartments } from "@/features/employees/hooks/use-employees"
-import type { EmployeeListParams, EmployeeStatus } from "@/types/employees"
+import { EMPLOYEE_LEVELS } from "@/features/employees/constants"
+import type { EmployeeListParams, EmployeeStatus, EmployeeLevel } from "@/types/employees"
 
 const STATUS_OPTIONS: { value: EmployeeStatus; label: string }[] = [
   { value: "active", label: "Active" },
@@ -23,14 +24,19 @@ export function EmployeeFilters({
 }) {
   const { data: departments } = useDepartments()
 
-  const activeFilterCount = (params.departmentId ? 1 : 0) + (params.status ? 1 : 0)
+  const activeFilterCount =
+    (params.departmentId ? 1 : 0) + (params.status ? 1 : 0) + (params.currentLevel ? 1 : 0)
 
   function resetFilters() {
-    onChange({ ...params, departmentId: undefined, status: undefined, page: 1 })
+    onChange({ ...params, departmentId: undefined, status: undefined, currentLevel: undefined, page: 1 })
   }
 
   const departmentItems = [{ value: "all", label: "All departments" }, ...(departments?.map((d) => ({ value: d.id, label: d.name })) ?? [])]
   const statusItems = [{ value: "all", label: "All statuses" }, ...STATUS_OPTIONS]
+  const levelItems = [
+    { value: "all", label: "All levels" },
+    ...EMPLOYEE_LEVELS.map((level) => ({ value: level.value as string, label: level.label })),
+  ]
 
   return (
     // Search + one compact Filter button, the same row Recruitment uses. The
@@ -65,6 +71,23 @@ export function EmployeeFilters({
           <SelectContent>
             {departmentItems.map((d) => (
               <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          items={levelItems}
+          value={params.currentLevel ?? "all"}
+          onValueChange={(v) =>
+            onChange({ ...params, currentLevel: !v || v === "all" ? undefined : (v as EmployeeLevel), page: 1 })
+          }
+        >
+          <SelectTrigger aria-label="Filter by level" className="h-8 w-40 text-xs">
+            <SelectValue placeholder="Level" />
+          </SelectTrigger>
+          <SelectContent>
+            {levelItems.map((level) => (
+              <SelectItem key={level.value} value={level.value}>{level.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>

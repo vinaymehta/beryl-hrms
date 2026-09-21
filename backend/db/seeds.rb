@@ -37,11 +37,13 @@ else
     accountant = company.designations.create!(title: "Accountant", department: finance)
 
     demo_users = [
-      { role: "admin", email: "admin@acme.test", first: "Ava", last: "Nolan", dept: nil, desig: nil, code: "ACM-001" },
-      { role: "hr", email: "hr@acme.test", first: "Priya", last: "Menon", dept: people_ops, desig: hr_manager, code: "ACM-002" },
-      { role: "account", email: "accounts@acme.test", first: "Marcus", last: "Lee", dept: finance, desig: accountant, code: "ACM-003" },
-      { role: "employee", email: "employee@acme.test", first: "Sofia", last: "Reyes", dept: engineering, desig: swe, code: "ACM-004" }
+      { role: "admin", email: "admin@acme.test", first: "Ava", last: "Nolan", dept: nil, desig: nil, code: "ACM-001", level: :manager },
+      { role: "hr", email: "hr@acme.test", first: "Priya", last: "Menon", dept: people_ops, desig: hr_manager, code: "ACM-002", level: :lead },
+      { role: "account", email: "accounts@acme.test", first: "Marcus", last: "Lee", dept: finance, desig: accountant, code: "ACM-003", level: :senior },
+      { role: "employee", email: "employee@acme.test", first: "Sofia", last: "Reyes", dept: engineering, desig: swe, code: "ACM-004", level: :junior }
     ]
+
+    employees_by_code = {}
 
     demo_users.each do |u|
       user = company.users.create!(
@@ -53,13 +55,14 @@ else
         email_verified_at: Time.current
       )
       user.user_roles.create!(role: company.roles.find_by!(slug: u[:role]), company: company)
-      company.employees.create!(
+      employees_by_code[u[:code]] = company.employees.create!(
         user: user,
         employee_code: u[:code],
         first_name: u[:first],
         last_name: u[:last],
         department: u[:dept],
         designation: u[:desig],
+        current_level: u[:level],
         date_of_joining: rand(30..900).days.ago.to_date,
         status: :active
       )
@@ -68,15 +71,35 @@ else
     # A couple of employees with no login access at all, to show the model
     # (User and Employee are deliberately separate — not every employee
     # needs a system account).
-    company.employees.create!(
+    employees_by_code["ACM-005"] = company.employees.create!(
       employee_code: "ACM-005", first_name: "Daniel", last_name: "Osei",
       department: engineering, designation: eng_manager,
+      current_level: :manager,
       date_of_joining: 400.days.ago.to_date, status: :active
     )
-    company.employees.create!(
+    employees_by_code["ACM-006"] = company.employees.create!(
       employee_code: "ACM-006", first_name: "Yuki", last_name: "Tanaka",
       department: people_ops, designation: hr_manager,
+      current_level: :senior,
       date_of_joining: 60.days.ago.to_date, status: :active
+    )
+
+    # Reporting manager hierarchies:
+    # Employee → Primary Manager → (optional) Secondary Manager → Final Manager.
+    # ACM-004 gets all three slots (the cross-project case the Secondary slot
+    # exists for); the other two get the ordinary Primary + Final pair.
+    employees_by_code["ACM-004"].assign_managers!(
+      "primary" => employees_by_code["ACM-005"].id,   # their Engineering Manager
+      "secondary" => employees_by_code["ACM-006"].id, # shared/cross-project
+      "final" => employees_by_code["ACM-001"].id      # the Admin, standing in for a CEO
+    )
+    employees_by_code["ACM-005"].assign_managers!(
+      "primary" => employees_by_code["ACM-002"].id,
+      "final" => employees_by_code["ACM-001"].id
+    )
+    employees_by_code["ACM-006"].assign_managers!(
+      "primary" => employees_by_code["ACM-002"].id,
+      "final" => employees_by_code["ACM-001"].id
     )
   end
 

@@ -5,7 +5,7 @@ import { toast } from "sonner"
 
 import { employeesApi, departmentsApi, designationsApi } from "@/features/employees/api"
 import { ApiError } from "@/types/api"
-import type { EmployeeFormValues, DepartmentFormValues, DesignationFormValues } from "@/features/employees/schemas"
+import type { EmployeePayload, DepartmentFormValues, DesignationFormValues } from "@/features/employees/schemas"
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback
@@ -14,7 +14,7 @@ function errorMessage(error: unknown, fallback: string) {
 export function useCreateEmployee() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (values: EmployeeFormValues) => employeesApi.create(values),
+    mutationFn: (values: EmployeePayload) => employeesApi.create(values),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["employees"] })
       toast.success("Employee added.")
@@ -26,7 +26,7 @@ export function useCreateEmployee() {
 export function useUpdateEmployee(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (values: Partial<EmployeeFormValues>) => employeesApi.update(id, values),
+    mutationFn: (values: Partial<EmployeePayload>) => employeesApi.update(id, values),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["employees"] })
       toast.success("Employee updated.")

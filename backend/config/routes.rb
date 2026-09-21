@@ -45,6 +45,8 @@ Rails.application.routes.draw do
       resources :employees, only: %i[ index show create update ] do
         member { patch :deactivate }
       end
+      # Read-only list, for the Employee form's role picker — see RolePolicy.
+      resources :roles, only: %i[ index ]
       resources :departments, only: %i[ index show create update destroy ]
       resources :designations, only: %i[ index show create update destroy ]
 

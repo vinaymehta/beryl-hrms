@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_16_140000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_21_160100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -344,6 +344,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_16_140000) do
     t.index ["uploaded_by_id"], name: "index_documents_on_uploaded_by_id"
   end
 
+  create_table "employee_managers", force: :cascade do |t|
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "employee_id", null: false
+    t.bigint "manager_id", null: false
+    t.integer "manager_level", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "manager_id"], name: "index_employee_managers_on_company_and_manager"
+    t.index ["company_id"], name: "index_employee_managers_on_company_id"
+    t.index ["employee_id", "manager_level"], name: "index_employee_managers_uniqueness", unique: true
+    t.index ["employee_id"], name: "index_employee_managers_on_employee_id"
+    t.index ["manager_id"], name: "index_employee_managers_on_manager_id"
+  end
+
   create_table "employees", force: :cascade do |t|
     t.string "address_line1"
     t.string "address_line2"
@@ -351,6 +365,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_16_140000) do
     t.bigint "company_id", null: false
     t.string "country"
     t.datetime "created_at", null: false
+    t.integer "current_level"
     t.date "date_of_birth"
     t.date "date_of_joining"
     t.bigint "department_id"
@@ -368,6 +383,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_16_140000) do
     t.integer "status", default: 0, null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id"
+    t.index ["company_id", "current_level"], name: "index_employees_on_company_id_and_current_level"
     t.index ["company_id", "department_id"], name: "index_employees_on_company_id_and_department_id"
     t.index ["company_id", "employee_code"], name: "index_employees_on_company_id_and_employee_code", unique: true
     t.index ["company_id", "status"], name: "index_employees_on_company_id_and_status"
@@ -535,6 +551,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_16_140000) do
   add_foreign_key "documents", "companies"
   add_foreign_key "documents", "employees"
   add_foreign_key "documents", "users", column: "uploaded_by_id"
+  add_foreign_key "employee_managers", "companies"
+  add_foreign_key "employee_managers", "employees"
+  add_foreign_key "employee_managers", "employees", column: "manager_id"
   add_foreign_key "employees", "companies"
   add_foreign_key "employees", "departments"
   add_foreign_key "employees", "designations"

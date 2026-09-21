@@ -8,6 +8,15 @@ export const PERMISSIONS = {
   employeesCreate: "employees.create",
   employeesUpdate: "employees.update",
   employeesDelete: "employees.delete",
+  // Give an employee a login and decide which Roles it carries. Seeded onto
+  // the Admin and HR roles; editable from Settings like any other key, so the
+  // UI must never substitute a role-slug check for it.
+  employeesManageRoles: "employees.manage_roles",
+  // Assign/change an employee's Primary / Secondary / Final manager.
+  // Employees hold neither this nor employeesManageRoles, so they can read
+  // their manager hierarchy and change nothing about it. Being somebody's
+  // manager grants neither key — a manager assignment is not a system role.
+  employeesManageReportingManagers: "employees.manage_reporting_managers",
   departmentsView: "departments.view",
   departmentsCreate: "departments.create",
   departmentsUpdate: "departments.update",

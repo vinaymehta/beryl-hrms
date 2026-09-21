@@ -13,6 +13,14 @@ const STATUS_LABELS: Record<EmployeeStatus, string> = {
   offboarded: "Offboarded",
 }
 
-export function EmployeeStatusBadge({ status }: { status: EmployeeStatus }) {
-  return <Badge className={STATUS_CLASSES[status]}>{STATUS_LABELS[status]}</Badge>
+export function EmployeeStatusBadge({
+  status,
+  className,
+}: {
+  status: EmployeeStatus
+  /** Replaces the status colours — for the profile header, where green on the
+      role-blue gradient all but disappears. */
+  className?: string
+}) {
+  return <Badge className={className ?? STATUS_CLASSES[status]}>{STATUS_LABELS[status]}</Badge>
 }

@@ -1,9 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { PlusIcon, UsersIcon } from "lucide-react"
+import { PlusIcon, UsersIcon, UserCheckIcon, Building2Icon, KeyRoundIcon } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Sheet,
   SheetContent,
@@ -19,24 +21,75 @@ import { useEmployees } from "@/features/employees/hooks/use-employees"
 import { useCreateEmployee } from "@/features/employees/hooks/use-employee-mutations"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
-import type { EmployeeListParams } from "@/types/employees"
+import type { Employee, EmployeeListParams } from "@/types/employees"
+
+/** One headline number. Deliberately compact — this is a data tool, not a dashboard. */
+function StatTile({
+  icon: Icon,
+  label,
+  value,
+  isLoading,
+}: {
+  icon: LucideIcon
+  label: string
+  value: number | string
+  isLoading: boolean
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-2xs">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-role-hr/10 text-role-hr">
+        <Icon className="size-4" />
+      </span>
+      <div className="min-w-0">
+        {isLoading ? (
+          <Skeleton className="h-6 w-10" />
+        ) : (
+          <p className="text-xl leading-tight font-semibold tabular-nums">{value}</p>
+        )}
+        <p className="truncate text-xs text-muted-foreground">{label}</p>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Counted from the CURRENT page of results, and labelled as such — the list
+ * endpoint paginates, so claiming these were company-wide totals would be a
+ * lie on any company past 25 people. Only `totalCount` comes from the server.
+ */
+function pageStats(rows: Employee[]) {
+  return {
+    active: rows.filter((row) => row.status === "active").length,
+    departments: new Set(rows.map((row) => row.department?.id).filter(Boolean)).size,
+    withAccess: rows.filter((row) => row.user !== null).length,
+  }
+}
 
 export default function EmployeesPage() {
   const [params, setParams] = useState<EmployeeListParams>({ page: 1 })
   const [addOpen, setAddOpen] = useState(false)
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null)
-  const { data, isLoading } = useEmployees(params)
+  const { data, isLoading, isError, refetch } = useEmployees(params)
   const createEmployee = useCreateEmployee()
   const canCreate = usePermission(PERMISSIONS.employeesCreate)
 
+  const rows = data?.data ?? []
+  const stats = pageStats(rows)
+  const hasFilters = Boolean(params.q || params.departmentId || params.status || params.currentLevel)
+
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <span className="flex size-9 items-center justify-center rounded-xl bg-role-hr/12 text-role-hr">
             <UsersIcon className="size-4.5" />
           </span>
-          <h1 className="text-2xl font-semibold tracking-tight">Employees</h1>
+          <div>
+            <h1 className="text-2xl leading-tight font-semibold tracking-tight">Employees</h1>
+            <p className="text-xs text-muted-foreground">
+              Profiles, job titles, reporting managers and system access.
+            </p>
+          </div>
         </div>
         {canCreate && (
           <Button onClick={() => setAddOpen(true)}>
@@ -45,12 +98,38 @@ export default function EmployeesPage() {
         )}
       </div>
 
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatTile
+          icon={UsersIcon}
+          label="Employees in total"
+          value={data?.meta.totalCount ?? 0}
+          isLoading={isLoading}
+        />
+        <StatTile icon={UserCheckIcon} label="Active on this page" value={stats.active} isLoading={isLoading} />
+        <StatTile
+          icon={Building2Icon}
+          label="Departments on this page"
+          value={stats.departments}
+          isLoading={isLoading}
+        />
+        <StatTile
+          icon={KeyRoundIcon}
+          label="With a login on this page"
+          value={stats.withAccess}
+          isLoading={isLoading}
+        />
+      </div>
+
       <EmployeeFilters params={params} onChange={setParams} />
 
       <EmployeeTable
-        employees={data?.data ?? []}
+        employees={rows}
         isLoading={isLoading}
+        isError={isError}
+        hasFilters={hasFilters}
+        onRetry={() => refetch()}
         onSelectEmployee={setSelectedEmployeeId}
+        onAddEmployee={canCreate ? () => setAddOpen(true) : undefined}
       />
 
       {data && data.meta.totalPages > 1 && (
@@ -87,12 +166,16 @@ export default function EmployeesPage() {
                 <PlusIcon className="size-5" />
               </span>
               <div>
-                <SheetTitle className="text-lg">Add Employee</SheetTitle>
-                <SheetDescription>Create a new employee profile for your organization.</SheetDescription>
+                <SheetTitle className="text-lg">Add employee</SheetTitle>
+                <SheetDescription>
+                  Create the profile, set their reporting managers, and optionally invite them to sign in.
+                </SheetDescription>
               </div>
             </div>
           </SheetHeader>
-          <div className="flex-1 overflow-y-auto p-4">
+          {/* Muted backdrop so the white section cards read as distinct panels
+              rather than merging into one long sheet. */}
+          <div className="flex-1 overflow-y-auto bg-muted/30 p-4">
             <EmployeeForm
               isPending={createEmployee.isPending}
               onSubmit={(values) =>
@@ -111,7 +194,7 @@ export default function EmployeesPage() {
               className="gap-1.5 bg-role-hr text-role-hr-foreground hover:bg-role-hr/90 shadow-2xs"
             >
               <PlusIcon className="size-4" />
-              {createEmployee.isPending ? "Adding…" : "Add Employee"}
+              {createEmployee.isPending ? "Adding…" : "Add employee"}
             </Button>
           </div>
         </SheetContent>

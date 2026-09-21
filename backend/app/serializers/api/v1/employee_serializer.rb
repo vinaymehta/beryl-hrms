@@ -5,12 +5,59 @@ module Api
                  :date_of_birth, :gender, :phone, :personal_email,
                  :address_line1, :address_line2, :city, :state, :postal_code, :country,
                  :emergency_contact_name, :emergency_contact_phone,
-                 :user_id, :department_id, :designation_id
+                 :user_id, :department_id, :designation_id,
+                 # Career level (Intern → Manager). Null for employees whose
+                 # level hasn't been recorded; NOT the same thing as the RBAC
+                 # roles below — see Employee#current_level.
+                 :current_level
 
       attribute :full_name, &:full_name
 
       one :department, resource: Api::V1::DepartmentSerializer
       one :designation, resource: Api::V1::DesignationSerializer
+
+      # Employee → Primary Manager → (optional) Secondary Manager → Final
+      # Manager.
+      #
+      # Three named slots rather than a list, because the position IS the
+      # meaning: a consumer must never have to guess which of an array of
+      # people is the final manager. Everyone who can see the employee can read
+      # this, including the employee themselves; changing it needs
+      # employees.manage_reporting_managers.
+      attribute :manager_hierarchy do |employee|
+        employee.manager_hierarchy.transform_values do |manager|
+          manager && Api::V1::EmployeeSummarySerializer.new(manager).as_json
+        end
+      end
+
+      # Primary and Final are both required; Secondary is optional. Surfaced so
+      # the UI can flag an unfinished hierarchy without re-deriving the rule —
+      # see Employee#manager_hierarchy_complete?.
+      attribute :manager_hierarchy_complete, &:manager_hierarchy_complete?
+
+      # The linked login account, if there is one: not every employee has a
+      # User (see db/seeds.rb). Roles come from the existing
+      # User → UserRole → Role chain, never from a column on Employee, and
+      # never from a manager assignment.
+      attribute :user do |employee|
+        next nil if employee.user.nil?
+
+        # Keys written camelCase by hand: `transform_keys :lower_camel`
+        # rewrites the attribute names Alba itself generates, not the keys of
+        # a plain Hash handed back from a block.
+        {
+          id: employee.user.id,
+          email: employee.user.email_address,
+          status: employee.user.status,
+          emailVerifiedAt: employee.user.email_verified_at
+        }
+      end
+
+      attribute :roles do |employee|
+        next [] if employee.user.nil?
+
+        Api::V1::RoleSerializer.new(employee.user.roles.to_a).as_json
+      end
 
       # Active Storage's own signed/expiring blob route (not a raw S3/public
       # URL) — a lighter touch than the fully Pundit-gated download flow

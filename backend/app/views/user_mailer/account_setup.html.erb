@@ -1,0 +1,7 @@
+<p>Hi <%= @user.first_name %>,</p>
+
+<p>An account has been created for you<%= " at #{@company_name}" if @company_name.present? %>. Click the link below to choose your password and sign in for the first time.</p>
+
+<p><%= link_to "Set your password", @url %></p>
+
+<p>This link expires in 15 minutes. If it has already expired by the time you open this, use "Forgot password" on the sign-in page to send yourself a fresh one.</p>

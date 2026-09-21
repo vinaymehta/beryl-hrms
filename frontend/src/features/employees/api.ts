@@ -1,6 +1,7 @@
 import { apiClient } from "@/lib/api-client"
 import type { Employee, EmployeeListParams, Department, Designation } from "@/types/employees"
-import type { EmployeeFormValues, DepartmentFormValues, DesignationFormValues } from "@/features/employees/schemas"
+import type { Role } from "@/types/auth"
+import type { EmployeePayload, DepartmentFormValues, DesignationFormValues } from "@/features/employees/schemas"
 
 // GUESS: exact backend query-param names / response shape for employees,
 // departments, designations not confirmed against a live backend (built in
@@ -19,14 +20,23 @@ export const employeesApi = {
       `/employees${toQuery(params as Record<string, string | number | undefined>)}`
     ),
   get: (id: string) => apiClient.get<Employee>(`/employees/${id}`),
-  create: (values: EmployeeFormValues) => apiClient.post<Employee>("/employees", values),
-  update: (id: string, values: Partial<EmployeeFormValues>) => apiClient.patch<Employee>(`/employees/${id}`, values),
+  create: (values: EmployeePayload) => apiClient.post<Employee>("/employees", values),
+  update: (id: string, values: Partial<EmployeePayload>) => apiClient.patch<Employee>(`/employees/${id}`, values),
   // Hits the dedicated /deactivate endpoint (not the plain update route) so
   // it goes through its own permission check (employees.delete) and its own
   // audit trail entry, in both directions — status: "active" reactivates.
   deactivate: (id: string, status: "active" | "inactive" = "inactive") =>
     apiClient.patch<Employee>(`/employees/${id}/deactivate`, { status }),
   reactivate: (id: string) => apiClient.patch<Employee>(`/employees/${id}`, { status: "active" }),
+}
+
+/**
+ * The company's own roles, for the Employee form's role picker. Read-only by
+ * design (backend RolesController) — creating and editing roles is Settings'
+ * job, so this never offers a mutation.
+ */
+export const rolesApi = {
+  list: () => apiClient.get<Role[]>("/roles"),
 }
 
 export const departmentsApi = {

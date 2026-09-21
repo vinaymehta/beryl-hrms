@@ -9,6 +9,7 @@ module Roles
       "admin" => :all,
       "hr" => %w[
         employees.view employees.create employees.update employees.delete
+        employees.manage_roles employees.manage_reporting_managers
         departments.view departments.create departments.update departments.delete
         designations.view designations.create designations.update designations.delete
         attendance.view attendance.manage
@@ -38,6 +39,11 @@ module Roles
       ]
     }.freeze
 
+    # `slug.titleize` rendered the HR role as "Hr". Harmless while role names
+    # were never shown, but the Employee form's role picker puts them straight
+    # in front of an HR admin — so display names are spelled out here.
+    DISPLAY_NAMES = { "hr" => "HR" }.freeze
+
     def self.call(company)
       new(company).call
     end
@@ -49,7 +55,7 @@ module Roles
     def call
       ActsAsTenant.with_tenant(@company) do
         DEFAULT_ROLE_PERMISSIONS.each do |slug, keys|
-          role = @company.roles.create!(name: slug.titleize, slug: slug, system_default: true)
+          role = @company.roles.create!(name: DISPLAY_NAMES.fetch(slug) { slug.titleize }, slug: slug, system_default: true)
           role.permissions = (keys == :all ? Permission.all : Permission.where(key: keys))
         end
       end

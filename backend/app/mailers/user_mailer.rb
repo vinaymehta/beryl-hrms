@@ -9,6 +9,20 @@ class UserMailer < ApplicationMailer
     mail(to: user.email_address, subject: "Reset your password")
   end
 
+  # The invitation an Admin/HR-created employee account receives. Deliberately
+  # the SAME password_reset_token primitive (and the same frontend
+  # /reset-password page) the forgot-password flow uses rather than a second
+  # invitation token of its own — the account is created with no usable
+  # password, so "choose your password" and "reset your password" are the same
+  # operation with different copy.
+  def account_setup(user)
+    @user = user
+    @company_name = user.company&.name
+    @url = "#{frontend_base_url}/reset-password?token=#{user.password_reset_token}"
+    log_link_for_dev("Account setup", @url)
+    mail(to: user.email_address, subject: "Set up your #{@company_name.presence || 'workspace'} account")
+  end
+
   def email_verification(user)
     @user = user
     @url = "#{frontend_base_url}/verify-email?token=#{user.generate_token_for(:email_verification)}"
