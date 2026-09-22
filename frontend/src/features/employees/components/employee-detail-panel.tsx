@@ -20,7 +20,7 @@ export function EmployeeDetailPanel({ employeeId, open, onOpenChange }: Employee
       <SheetContent side="right" className="w-full overflow-y-auto sm:w-[45vw] sm:min-w-180 sm:max-w-275">
         {/* pt-12 clears the Sheet's absolutely-positioned close button, which
             would otherwise sit on top of the gradient header card. */}
-        <div className="p-4 pt-12">{employeeId && <EmployeeDetailContent employeeId={employeeId} />}</div>
+        <div className="p-4 pt-12">{employeeId && <EmployeeDetailContent employeeId={employeeId} showBackButton={false} />}</div>
       </SheetContent>
     </Sheet>
   )

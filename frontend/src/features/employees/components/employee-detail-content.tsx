@@ -1,7 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import {
+  ArrowLeftIcon,
   PencilIcon,
   UserMinusIcon,
   UserCheckIcon,
@@ -48,7 +50,7 @@ import { useEmployee } from "@/features/employees/hooks/use-employees"
 import { useUpdateEmployee, useDeactivateEmployee, useReactivateEmployee } from "@/features/employees/hooks/use-employee-mutations"
 import { EmployeeDocumentsSection } from "@/features/documents/components/employee-documents-section"
 import { usePermission } from "@/features/auth/hooks/use-permission"
-import { PERMISSIONS, roleBadgeClasses } from "@/constants/permissions"
+import { PERMISSIONS, PEOPLE_MANAGEMENT_PERMISSIONS, roleBadgeClasses } from "@/constants/permissions"
 
 function initials(first: string, last: string) {
   return `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase()
@@ -111,12 +113,35 @@ function EmptyHint({ children }: { children: React.ReactNode }) {
   )
 }
 
+export interface EmployeeDetailContentProps {
+  employeeId: string
+  onBack?: () => void
+  showBackButton?: boolean
+  backLabel?: string
+}
+
 /**
  * The employee profile body — shared by the standalone /employees/[id]
- * route and the right-side detail panel opened from the employee list, so
- * both render identically and stay in sync automatically.
+ * route and any embedded employee detail views.
  */
-export function EmployeeDetailContent({ employeeId }: { employeeId: string }) {
+export function EmployeeDetailContent({
+  employeeId,
+  onBack,
+  showBackButton,
+  backLabel = "Back to employees",
+}: EmployeeDetailContentProps) {
+  const router = useRouter()
+  const managesPeople = usePermission(PEOPLE_MANAGEMENT_PERMISSIONS)
+  const showBack = showBackButton !== undefined ? showBackButton : Boolean(managesPeople)
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack()
+      return
+    }
+    router.push("/employees")
+  }
+
   const { data: employee, isLoading, isError, refetch } = useEmployee(employeeId)
   const updateEmployee = useUpdateEmployee(employeeId)
   const deactivateEmployee = useDeactivateEmployee()
@@ -129,6 +154,11 @@ export function EmployeeDetailContent({ employeeId }: { employeeId: string }) {
   if (isLoading) {
     return (
       <div className="grid gap-4">
+        {showBack && (
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-8 w-36 rounded-lg" />
+          </div>
+        )}
         <Skeleton className="h-32 w-full rounded-2xl" />
         <div className="grid gap-4 sm:grid-cols-2">
           <Skeleton className="h-48 w-full rounded-2xl" />
@@ -140,15 +170,30 @@ export function EmployeeDetailContent({ employeeId }: { employeeId: string }) {
 
   if (isError || !employee) {
     return (
-      <div className="grid gap-3 rounded-xl border border-dashed p-10 text-center">
-        <p className="text-sm font-semibold text-foreground">Couldn&apos;t load this employee</p>
-        <p className="text-xs text-muted-foreground">
-          The record may have been removed, or the request didn&apos;t reach the server.
-        </p>
-        <div>
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            Try again
-          </Button>
+      <div className="grid gap-4">
+        {showBack && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs font-medium shadow-2xs hover:bg-muted/80"
+              onClick={handleBack}
+            >
+              <ArrowLeftIcon className="size-4" />
+              {backLabel}
+            </Button>
+          </div>
+        )}
+        <div className="grid gap-3 rounded-xl border border-dashed p-10 text-center">
+          <p className="text-sm font-semibold text-foreground">Couldn&apos;t load this employee</p>
+          <p className="text-xs text-muted-foreground">
+            The record may have been removed, or the request didn&apos;t reach the server.
+          </p>
+          <div>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Try again
+            </Button>
+          </div>
         </div>
       </div>
     )
@@ -156,6 +201,20 @@ export function EmployeeDetailContent({ employeeId }: { employeeId: string }) {
 
   return (
     <div className="grid gap-4">
+      {showBack && (
+        <div className="flex items-center justify-between">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs font-medium shadow-2xs hover:bg-muted/80"
+            onClick={handleBack}
+          >
+            <ArrowLeftIcon className="size-4" />
+            {backLabel}
+          </Button>
+        </div>
+      )}
+
       <Card className="overflow-hidden border-none bg-gradient-to-br from-role-hr to-role-hr/70 text-white">
         <CardContent className="flex flex-wrap items-center gap-4 p-5">
           <Avatar className="size-16 border-2 border-white/30">

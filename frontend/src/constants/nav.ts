@@ -36,7 +36,7 @@ const ALL_NAV_ITEMS: (NavItem & { hidden?: boolean })[] = [
   // manages their own record is sent to that record instead — see
   // app/(dashboard)/page.tsx.
   { label: "Dashboard", href: "/", icon: LayoutDashboardIcon, permission: PEOPLE_MANAGEMENT_PERMISSIONS },
-  { label: "Employees", href: "/employees", icon: UsersIcon, permission: PERMISSIONS.employeesView },
+  { label: "Employees", href: "/employees", icon: UsersIcon, permission: PEOPLE_MANAGEMENT_PERMISSIONS },
   { label: "Departments", href: "/departments", icon: Building2Icon, permission: PERMISSIONS.departmentsView },
   { label: "Attendance", href: "/attendance", icon: ClockIcon, permission: PERMISSIONS.attendanceView, hidden: HIDDEN_FEATURES.attendance },
   { label: "Leave", href: "/leave", icon: CalendarDaysIcon, permission: PERMISSIONS.leaveView, hidden: HIDDEN_FEATURES.leave },

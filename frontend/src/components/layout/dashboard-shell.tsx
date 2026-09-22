@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Topbar } from "@/components/layout/topbar"
+import { SidebarProvider } from "@/components/layout/sidebar-context"
 import { useCurrentUser } from "@/features/auth/hooks/use-current-user"
 
 export function DashboardShell({ children }: { children: ReactNode }) {
@@ -57,12 +58,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   if (!isAuthenticated) return null
 
   return (
-    <div className="flex min-h-svh">
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+    <SidebarProvider>
+      <div className="flex min-h-svh">
+        <Sidebar />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Topbar />
+          <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </SidebarProvider>
   )
 }

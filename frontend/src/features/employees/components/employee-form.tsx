@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { cn } from "cn"
 
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
@@ -181,6 +182,162 @@ function FieldHint({ children }: { children: React.ReactNode }) {
       <InfoIcon className="mt-px size-3.5 shrink-0" />
       <span>{children}</span>
     </p>
+  )
+}
+
+function ManagerSlotField({
+  id,
+  label,
+  options,
+  value,
+  onChange,
+  onSearchChange,
+  isLoading,
+  error,
+}: {
+  id: string
+  label: string
+  options: MultiSelectOption[]
+  value: string
+  onChange: (val: string) => void
+  onSearchChange: (search: string) => void
+  isLoading: boolean
+  error?: string
+}) {
+  const [isEditing, setIsEditing] = useState(false)
+  const assigned = useMemo(() => options.find((o) => o.value === value), [options, value])
+
+  if (!value) {
+    if (!isEditing) {
+      return (
+        <div className="flex items-center justify-between rounded-lg border border-dashed p-2.5">
+          <span className="text-xs text-muted-foreground">Not assigned</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs font-medium"
+            onClick={() => setIsEditing(true)}
+          >
+            Assign
+          </Button>
+        </div>
+      )
+    }
+
+    return (
+      <div className="grid gap-1.5">
+        <SearchSelect
+          id={id}
+          aria-label={label}
+          options={options}
+          value={null}
+          onChange={(next) => {
+            onChange(next ?? "")
+            setIsEditing(false)
+          }}
+          onSearchChange={onSearchChange}
+          isLoading={isLoading}
+          invalid={Boolean(error)}
+          clearable={true}
+          placeholder={`Select a ${label.toLowerCase()}`}
+          searchPlaceholder="Search active employees…"
+          emptyMessage="No active employees match that search."
+        />
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs text-muted-foreground"
+            onClick={() => setIsEditing(false)}
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (isEditing) {
+    return (
+      <div className="grid gap-1.5">
+        <SearchSelect
+          id={id}
+          aria-label={label}
+          options={options}
+          value={value}
+          onChange={(next) => {
+            onChange(next ?? "")
+            setIsEditing(false)
+          }}
+          onSearchChange={onSearchChange}
+          isLoading={isLoading}
+          invalid={Boolean(error)}
+          clearable={true}
+          placeholder={`Select a ${label.toLowerCase()}`}
+          searchPlaceholder="Search active employees…"
+          emptyMessage="No active employees match that search."
+        />
+        <div className="flex items-center justify-between">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs text-muted-foreground"
+            onClick={() => setIsEditing(false)}
+          >
+            Done
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => {
+              onChange("")
+              setIsEditing(false)
+            }}
+          >
+            Remove
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border p-2.5">
+      <div className="flex min-w-0 items-center gap-2.5">
+        {assigned?.adornment}
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{assigned?.label ?? "Assigned manager"}</p>
+          {assigned?.description && (
+            <p className="truncate text-xs text-muted-foreground">{assigned.description}</p>
+          )}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs font-medium"
+          onClick={() => setIsEditing(true)}
+        >
+          Change
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs font-medium text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+          onClick={() => onChange("")}
+        >
+          Remove
+        </Button>
+      </div>
+    </div>
   )
 }
 
@@ -588,19 +745,15 @@ export function EmployeeForm({
                         required={level.required}
                         hint={level.hint}
                       >
-                        <SearchSelect
+                        <ManagerSlotField
                           id={`employee-${level.value}-manager`}
-                          aria-label={level.label}
+                          label={level.label}
                           options={managerOptions}
-                          value={form.watch(fieldName) || null}
-                          onChange={(next) => form.setValue(fieldName, next ?? "", { shouldValidate: true })}
+                          value={form.watch(fieldName) || ""}
+                          onChange={(next) => form.setValue(fieldName, next, { shouldValidate: true })}
                           onSearchChange={setManagerSearch}
                           isLoading={managersLoading}
-                          invalid={Boolean(error)}
-                          clearable={!level.required}
-                          placeholder={`Select a ${level.label.toLowerCase()}`}
-                          searchPlaceholder="Search active employees…"
-                          emptyMessage="No active employees match that search."
+                          error={error?.message ? String(error.message) : undefined}
                         />
                         {error?.message && (
                           <p className="text-xs text-destructive">{String(error.message)}</p>

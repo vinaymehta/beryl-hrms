@@ -711,7 +711,7 @@ RSpec.describe "Api::V1::Appraisals", type: :request do
            params: { file: Rack::Test::UploadedFile.new(file.path, "text/plain", original_filename: "notes.txt") }
 
       expect(response).to have_http_status(:unprocessable_content)
-      expect(response.parsed_body["errors"].first["message"]).to match(/\.xlsx or \.csv/i)
+      expect(response.parsed_body["errors"].first["message"]).to match(/\.xlsx.*\.csv/i)
     end
 
     it "is closed to anyone but the employee themselves" do

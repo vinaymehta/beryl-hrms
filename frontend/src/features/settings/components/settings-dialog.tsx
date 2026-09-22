@@ -1,16 +1,8 @@
 "use client"
 
 import { Suspense, useState } from "react"
-import { useRouter } from "next/navigation"
 import { SettingsIcon } from "lucide-react"
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { cn } from "cn"
@@ -26,20 +18,22 @@ const SECTION_CONTENT: Record<SettingsSectionId, React.ComponentType> = {
 }
 
 /**
- * Settings, as a modal over the workspace you were already in — the sidebar
- * and topbar stay visible behind it, so opening Settings never feels like
- * leaving what you were doing.
+ * Settings, rendered as a full page in the dashboard shell.
  *
- * Sections are switched as state inside this dialog rather than by navigating
+ * Sections are switched as state inside this component rather than by navigating
  * between the /settings routes. Navigating would unmount and remount the
- * dialog on every click, replaying its open animation; the URL is kept in step
- * with history.replaceState instead, so a refresh or a shared link still lands
- * on the right section and the OAuth callback routes keep working untouched.
+ * page on every click; the URL is kept in step with history.replaceState instead,
+ * so a refresh or a shared link still lands on the right section and the OAuth
+ * callback routes keep working untouched.
  */
-export function SettingsDialog({ initialSection }: { initialSection: SettingsSectionId }) {
-  const router = useRouter()
-  const [open, setOpen] = useState(true)
-  const [section, setSection] = useState<SettingsSectionId>(initialSection)
+export function SettingsView({ initialSection }: { initialSection: SettingsSectionId }) {
+  const targetSection = settingsSection(initialSection)
+  const isAllowedInitial = usePermission(targetSection?.permission ?? [])
+
+  // If the initial section is not permitted for this user (e.g. an employee landing
+  // on /settings/interviews or /settings/mail), fall back to account settings.
+  const verifiedInitial = isAllowedInitial ? initialSection : "account"
+  const [section, setSection] = useState<SettingsSectionId>(verifiedInitial)
 
   const active = settingsSection(section)
   const Content = SECTION_CONTENT[section]
@@ -51,82 +45,69 @@ export function SettingsDialog({ initialSection }: { initialSection: SettingsSec
     window.history.replaceState(null, "", settingsSection(id).href)
   }
 
-  function handleOpenChange(next: boolean) {
-    setOpen(next)
-    // There is no page behind this dialog on /settings — it IS the route — so
-    // closing returns to the dashboard rather than revealing an empty shell.
-    if (!next) router.push("/")
-  }
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex h-[88vh] w-full max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-2xl bg-card p-0 sm:max-w-5xl">
-        <DialogHeader className="shrink-0 space-y-0 border-b px-6 py-5 pr-14">
-          <div className="flex items-center gap-3">
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-role-admin/12 text-role-admin">
-              <SettingsIcon className="size-5" />
-            </span>
-            <div className="min-w-0">
-              <DialogTitle className="text-xl font-semibold tracking-tight">Settings</DialogTitle>
-              <DialogDescription className="text-sm">
-                Manage your account, integrations and platform preferences.
-              </DialogDescription>
-            </div>
-          </div>
-        </DialogHeader>
+    <div className="grid gap-6">
+      <div className="flex items-center gap-3">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-role-admin/12 text-role-admin">
+          <SettingsIcon className="size-5" />
+        </span>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage your account, integrations and platform preferences.
+          </p>
+        </div>
+      </div>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-          {/* Horizontal strip on narrow screens, a proper column beside the
-              content once there's room for one. */}
-          <nav
-            aria-label="Settings sections"
-            className="flex shrink-0 gap-1 overflow-x-auto border-b p-3 lg:w-64 lg:flex-col lg:overflow-x-visible lg:overflow-y-auto lg:border-b-0 lg:border-r"
-          >
-            {SETTINGS_SECTIONS.map((s) => (
-              <SettingsNavItem
-                key={s.id}
-                section={s}
-                active={s.id === section}
-                onSelect={() => selectSection(s.id)}
-              />
-            ))}
-            {/* A section the viewer has no business in renders nothing at all
-                — see SettingsNavItem. */}
-          </nav>
+      <div className="flex min-h-[600px] flex-col overflow-hidden rounded-2xl border bg-card shadow-2xs lg:flex-row">
+        {/* Horizontal strip on narrow screens, a proper column beside the
+            content once there's room for one. */}
+        <nav
+          aria-label="Settings sections"
+          className="flex shrink-0 gap-1 overflow-x-auto border-b p-3 lg:w-64 lg:flex-col lg:overflow-x-visible lg:overflow-y-auto lg:border-b-0 lg:border-r"
+        >
+          {SETTINGS_SECTIONS.map((s) => (
+            <SettingsNavItem
+              key={s.id}
+              section={s}
+              active={s.id === section}
+              onSelect={() => selectSection(s.id)}
+            />
+          ))}
+          {/* A section the viewer has no business in renders nothing at all
+              — see SettingsNavItem. */}
+        </nav>
 
-          <div className="min-w-0 flex-1 overflow-y-auto p-5 sm:p-6">
-            <div className="space-y-5">
-              {/* No "Back to Settings" control here: the nav beside this pane
-                  is always visible, so a back button would be a second
-                  control doing exactly what the Account & Security item
-                  already does. */}
-              <div className="flex items-center gap-3">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-role-admin/12 text-role-admin">
-                  <active.icon className="size-5" />
-                </span>
-                <div className="min-w-0">
-                  <h2 className="text-lg font-semibold tracking-tight text-foreground">
-                    {active.label}
-                  </h2>
-                  <p className="text-sm text-muted-foreground">{active.description}</p>
-                </div>
+        <div className="min-w-0 flex-1 overflow-y-auto p-5 sm:p-6">
+          <div className="space-y-5">
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-role-admin/12 text-role-admin">
+                <active.icon className="size-5" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                  {active.label}
+                </h2>
+                <p className="text-sm text-muted-foreground">{active.description}</p>
               </div>
-
-              {/* Required, not decorative: the Calendly and Mail sections
-                  read the OAuth ?connected/?error params with
-                  useSearchParams, and a static route that does so from a
-                  Client Component fails the production build without a
-                  Suspense boundary above the call. */}
-              <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
-                <Content />
-              </Suspense>
             </div>
+
+            {/* Required, not decorative: the Calendly and Mail sections
+                read the OAuth ?connected/?error params with
+                useSearchParams, and a static route that does so from a
+                Client Component fails the production build without a
+                Suspense boundary above the call. */}
+            <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+              <Content />
+            </Suspense>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   )
 }
+
+export const SettingsDialog = SettingsView
 
 function SettingsNavItem({
   section,

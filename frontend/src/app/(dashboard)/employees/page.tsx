@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { PlusIcon, UsersIcon, UserCheckIcon, Building2Icon, KeyRoundIcon } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -14,13 +15,13 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet"
 import { EmployeeTable } from "@/features/employees/components/employee-table"
-import { EmployeeDetailPanel } from "@/features/employees/components/employee-detail-panel"
 import { EmployeeFilters } from "@/features/employees/components/employee-filters"
 import { EmployeeForm } from "@/features/employees/components/employee-form"
 import { useEmployees } from "@/features/employees/hooks/use-employees"
 import { useCreateEmployee } from "@/features/employees/hooks/use-employee-mutations"
+import { useCurrentUser } from "@/features/auth/hooks/use-current-user"
 import { usePermission } from "@/features/auth/hooks/use-permission"
-import { PERMISSIONS } from "@/constants/permissions"
+import { PERMISSIONS, PEOPLE_MANAGEMENT_PERMISSIONS } from "@/constants/permissions"
 import type { Employee, EmployeeListParams } from "@/types/employees"
 
 /** One headline number. Deliberately compact — this is a data tool, not a dashboard. */
@@ -66,12 +67,23 @@ function pageStats(rows: Employee[]) {
 }
 
 export default function EmployeesPage() {
+  const router = useRouter()
+  const { user, isLoading: isUserLoading } = useCurrentUser()
+  const managesPeople = usePermission(PEOPLE_MANAGEMENT_PERMISSIONS)
+
+  const redirectToOwnRecord = !isUserLoading && !!user && !managesPeople && !!user.employeeId
+
+  useEffect(() => {
+    if (redirectToOwnRecord) router.replace(`/employees/${user!.employeeId}`)
+  }, [redirectToOwnRecord, router, user])
+
   const [params, setParams] = useState<EmployeeListParams>({ page: 1 })
   const [addOpen, setAddOpen] = useState(false)
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null)
   const { data, isLoading, isError, refetch } = useEmployees(params)
   const createEmployee = useCreateEmployee()
   const canCreate = usePermission(PERMISSIONS.employeesCreate)
+
+  if (redirectToOwnRecord || (!isUserLoading && !managesPeople)) return null
 
   const rows = data?.data ?? []
   const stats = pageStats(rows)
@@ -128,7 +140,7 @@ export default function EmployeesPage() {
         isError={isError}
         hasFilters={hasFilters}
         onRetry={() => refetch()}
-        onSelectEmployee={setSelectedEmployeeId}
+        onSelectEmployee={(employeeId) => router.push(`/employees/${employeeId}`)}
         onAddEmployee={canCreate ? () => setAddOpen(true) : undefined}
       />
 
@@ -199,12 +211,6 @@ export default function EmployeesPage() {
           </div>
         </SheetContent>
       </Sheet>
-
-      <EmployeeDetailPanel
-        employeeId={selectedEmployeeId}
-        open={!!selectedEmployeeId}
-        onOpenChange={(open) => !open && setSelectedEmployeeId(null)}
-      />
     </div>
   )
 }

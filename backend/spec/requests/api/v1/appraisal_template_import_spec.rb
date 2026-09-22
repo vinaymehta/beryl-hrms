@@ -137,7 +137,7 @@ RSpec.describe "Api::V1::AppraisalTemplates import", type: :request do
       upload("hello", filename: "notes.txt", type: "text/plain")
 
       expect(response).to have_http_status(:unprocessable_content)
-      expect(response.parsed_body["errors"].first["message"]).to match(/\.xlsx or \.csv/i)
+      expect(response.parsed_body["errors"].first["message"]).to match(/\.xlsx.*\.csv/i)
     end
 
     it "refuses a sheet with no Category or Question column" do
@@ -145,6 +145,43 @@ RSpec.describe "Api::V1::AppraisalTemplates import", type: :request do
 
       expect(response).to have_http_status(:unprocessable_content)
       expect(response.parsed_body["errors"].first["message"]).to match(/Category.*Question/i)
+    end
+
+    it "parses .xlsm corporate appraisal workbook fixture successfully" do
+      fixture_path = Rails.root.join("spec/fixtures/files/Beryl_Systems_Engineering_Appraisal_2026.xlsm")
+      post "/api/v1/appraisal_templates/import_preview",
+           params: {
+             file: Rack::Test::UploadedFile.new(
+               fixture_path,
+               "application/vnd.ms-excel.sheet.macroEnabled.12",
+               original_filename: "Beryl_Systems_Engineering_Appraisal_2026.xlsm"
+             )
+           }
+
+      expect(response).to have_http_status(:ok)
+      expect(body["categories"].size).to eq(7)
+      expect(body["questionCount"]).to eq(7)
+      expect(body["totalWeight"]).to eq(100.0)
+      expect(body["weightsValid"]).to be(true)
+      expect(body["errors"]).to be_empty
+    end
+
+    it "produces a useful validation error for corrupt or unreadable spreadsheets" do
+      file = Tempfile.new([ "corrupt", ".xlsm" ])
+      file.write("not an actual zip or excel file")
+      file.rewind
+
+      post "/api/v1/appraisal_templates/import_preview",
+           params: {
+             file: Rack::Test::UploadedFile.new(
+               file.path,
+               "application/vnd.ms-excel.sheet.macroEnabled.12",
+               original_filename: "corrupt.xlsm"
+             )
+           }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body["errors"].first["message"]).to match(/couldn't be read as a spreadsheet/i)
     end
 
     it "is closed to someone who can't manage templates" do

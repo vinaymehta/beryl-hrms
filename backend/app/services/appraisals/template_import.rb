@@ -35,6 +35,16 @@ module Appraisals
       "future_readiness" => "future_readiness"
     }.freeze
 
+    DEFAULT_AREA_LENSES = {
+      "technical skills & code quality" => "past",
+      "delivery & productivity" => "past",
+      "ownership & accountability" => "past",
+      "ai & modern engineering skills" => "future_readiness",
+      "learning & skill growth" => "current_capability",
+      "communication & teamwork" => "current_capability",
+      "business & client impact" => "past"
+    }.freeze
+
     TRUTHY = %w[y yes true 1 required].freeze
 
     def self.call(...) = new(...).call
@@ -67,14 +77,16 @@ module Appraisals
 
         extension = File.extname(@file.original_filename.to_s).downcase
         unless PERMITTED_EXTENSIONS.include?(extension)
-          raise Error, "Upload an .xlsx or .csv file (got #{extension.presence || 'no extension'})"
+          raise Error, "Upload an .xlsx, .xlsm, or .csv file (got #{extension.presence || 'no extension'})"
         end
         raise Error, "That file is larger than #{MAX_BYTES / 1.megabyte}MB" if @file.size.to_i > MAX_BYTES
       end
 
       def spreadsheet
+        ext = File.extname(@file.original_filename.to_s).delete(".")
+        ext = "xlsx" if ext.downcase == "xlsm"
         @spreadsheet ||= Roo::Spreadsheet.open(
-          @file.tempfile.path, extension: File.extname(@file.original_filename).delete(".")
+          @file.tempfile.path, extension: ext
         )
       rescue StandardError => e
         raise Error, "That file couldn't be read as a spreadsheet (#{e.class})"
@@ -83,11 +95,11 @@ module Appraisals
       def column_index(header)
         normalised = header.map { |cell| cell.to_s.strip.downcase }
         {
-          category: normalised.index { |h| h.start_with?("category") },
-          lens: normalised.index { |h| h.start_with?("lens") },
+          category: normalised.index { |h| h.start_with?("category") || h.include?("performance area") },
+          lens: normalised.index { |h| h.start_with?("lens") || h.include?("perspective") },
           weight: normalised.index { |h| h.include?("weight") },
-          prompt: normalised.index { |h| h.start_with?("question") || h.include?("prompt") },
-          guidance: normalised.index { |h| h.include?("guidance") || h.include?("description") },
+          prompt: normalised.index { |h| h.start_with?("question") || h.include?("prompt") || h.include?("what is evaluated") },
+          guidance: normalised.index { |h| h.include?("guidance") || h.include?("description") || h.include?("focus") },
           self_rating: normalised.index { |h| h.include?("self") },
           manager_rating: normalised.index { |h| h.include?("manager") },
           requires_comment: normalised.index { |h| h.include?("evidence") },
@@ -97,23 +109,39 @@ module Appraisals
 
       def parse
         sheet = spreadsheet.sheet(0)
-        index = column_index(sheet.row(1))
+        header_row = 1
+        index = nil
 
-        if index[:category].nil? || index[:prompt].nil?
+        (1..[sheet.last_row, 25].min).each do |number|
+          cells = sheet.row(number)
+          next if cells.blank?
+
+          idx = column_index(cells)
+          if idx[:category].present? && idx[:prompt].present?
+            header_row = number
+            index = idx
+            break
+          end
+        end
+
+        if index.nil? || index[:category].nil? || index[:prompt].nil?
           raise Error, "The sheet needs at least a 'Category' and a 'Question' column"
         end
 
         grouped = {}
 
-        (2..sheet.last_row).each do |number|
+        ((header_row + 1)..sheet.last_row).each do |number|
           cells = sheet.row(number)
+          next if cells.blank?
+          break if cells.compact.any? { |c| c.to_s.strip.downcase.start_with?("total", "performance perspective") }
+
           name = cells[index[:category]].to_s.strip
           prompt = cells[index[:prompt]].to_s.strip
           # The unit of import is a QUESTION, so a row without one carries
           # nothing — blank spacer rows and the notes line at the foot of the
           # downloaded format both land here and are skipped rather than
           # becoming a category with a sentence for a name.
-          next if prompt.blank?
+          next if prompt.blank? || name.blank?
 
           category = (grouped[name.downcase] ||= new_category(name, cells, index, number))
           record_conflicts(category, cells, index, number)
@@ -135,16 +163,24 @@ module Appraisals
         errors = []
         errors << "Row #{row_number}: category name is blank" if name.blank?
 
-        lens = normalise_lens(read(cells, index[:lens]))
-        errors << "Row #{row_number}: '#{read(cells, index[:lens])}' is not a known lens" if lens.nil?
+        raw_lens = read(cells, index[:lens])
+        lens = normalise_lens(raw_lens)
+        lens ||= DEFAULT_AREA_LENSES[name.downcase]
+        if raw_lens.present? && lens.nil?
+          errors << "Row #{row_number}: '#{raw_lens}' is not a known lens"
+        end
+        lens ||= "past"
 
-        weight = read(cells, index[:weight]).to_s.delete("%").strip
-        errors << "Row #{row_number}: weight is missing" if weight.blank?
+        raw_weight = read(cells, index[:weight]).to_s.delete("%").strip
+        errors << "Row #{row_number}: weight is missing" if raw_weight.blank?
+
+        weight = raw_weight.presence&.to_d&.to_f || 0.0
+        weight = (weight * 100).round(2) if weight <= 1.0 && weight > 0
 
         {
           name: name,
-          lens: lens || "past",
-          weight: weight.presence&.to_d&.to_f || 0.0,
+          lens: lens,
+          weight: weight,
           questions: [],
           errors: errors
         }
@@ -153,14 +189,19 @@ module Appraisals
       # A category's lens and weight are per-category, but live on every row. If
       # two rows disagree, say so instead of silently taking the first.
       def record_conflicts(category, cells, index, row_number)
-        lens = normalise_lens(read(cells, index[:lens]))
+        raw_lens = read(cells, index[:lens])
+        lens = normalise_lens(raw_lens)
         if lens.present? && lens != category[:lens]
           category[:errors] << "Row #{row_number}: lens '#{lens}' disagrees with '#{category[:lens]}' set earlier for #{category[:name]}"
         end
 
-        weight = read(cells, index[:weight]).to_s.delete("%").strip
-        if weight.present? && weight.to_d.to_f != category[:weight]
-          category[:errors] << "Row #{row_number}: weight #{weight} disagrees with #{category[:weight]} set earlier for #{category[:name]}"
+        raw_weight = read(cells, index[:weight]).to_s.delete("%").strip
+        if raw_weight.present?
+          weight = raw_weight.to_d.to_f
+          weight = (weight * 100).round(2) if weight <= 1.0 && weight > 0
+          if weight != category[:weight]
+            category[:errors] << "Row #{row_number}: weight #{raw_weight} disagrees with #{category[:weight]} set earlier for #{category[:name]}"
+          end
         end
       end
 

@@ -216,6 +216,44 @@ RSpec.describe "Api::V1::Employees", type: :request do
       expect(response.parsed_body["data"]["managerHierarchy"]["primary"]).to be_present
     end
 
+    it "removes secondary reviewer and deletes the employee_manager relationship" do
+      primary = in_tenant { create(:employee, company: company) }
+      secondary = in_tenant { create(:employee, company: company) }
+      final = in_tenant { create(:employee, company: company) }
+      employee = in_tenant { create(:employee, company: company) }
+      in_tenant { employee.assign_managers!("primary" => primary.id, "secondary" => secondary.id, "final" => final.id) }
+
+      expect(in_tenant { employee.secondary_manager }).to eq(secondary)
+
+      patch "/api/v1/employees/#{employee.id}",
+            params: { secondaryManagerId: nil }.to_json, headers: json_headers
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["data"]["managerHierarchy"]["secondary"]).to be_nil
+      expect(in_tenant { employee.reload.secondary_manager }).to be_nil
+      expect(in_tenant { employee.manager_assignments.where(manager_level: :secondary) }).to be_empty
+    end
+
+    it "removes final reviewer and marks hierarchy incomplete without corrupting data" do
+      primary = in_tenant { create(:employee, company: company) }
+      final = in_tenant { create(:employee, company: company) }
+      employee = in_tenant { create(:employee, company: company) }
+      in_tenant { employee.assign_managers!("primary" => primary.id, "final" => final.id) }
+
+      expect(in_tenant { employee.manager_hierarchy_complete? }).to be(true)
+
+      patch "/api/v1/employees/#{employee.id}",
+            params: { finalManagerId: nil }.to_json, headers: json_headers
+
+      expect(response).to have_http_status(:ok)
+      data = response.parsed_body["data"]
+      expect(data["managerHierarchy"]["final"]).to be_nil
+      expect(data["managerHierarchyComplete"]).to be(false)
+      expect(in_tenant { employee.reload.final_manager }).to be_nil
+      expect(in_tenant { employee.reload.manager_hierarchy_complete? }).to be(false)
+      expect(in_tenant { employee.primary_manager }).to eq(primary)
+    end
+
     it "refuses a secondary manager with no primary" do
       secondary = in_tenant { create(:employee, company: company) }
       employee = in_tenant { create(:employee, company: company) }
@@ -533,6 +571,21 @@ RSpec.describe "Api::V1::Employees", type: :request do
       get "/api/v1/roles"
 
       expect(response).to have_http_status(:forbidden)
+    end
+  end
+
+  describe "Employee role directory scoping" do
+    it "restricts employee role to viewing only their own record in index" do
+      in_tenant { create_list(:employee, 3, company: company) }
+      sign_in_as(email: "directory_staff@acme.test", role_slug: "employee")
+      own = employee_for("directory_staff@acme.test")
+
+      get "/api/v1/employees"
+
+      expect(response).to have_http_status(:ok)
+      records = response.parsed_body["data"]
+      expect(records.size).to eq(1)
+      expect(records.first["id"]).to eq(own.id)
     end
   end
 end

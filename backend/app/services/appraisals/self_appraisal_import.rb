@@ -54,7 +54,7 @@ module Appraisals
 
         extension = File.extname(@file.original_filename.to_s).downcase
         unless PERMITTED_EXTENSIONS.include?(extension)
-          raise Error, "Upload an .xlsx or .csv file (got #{extension.presence || 'no extension'})"
+          raise Error, "Upload an .xlsx, .xlsm, or .csv file (got #{extension.presence || 'no extension'})"
         end
         raise Error, "That file is larger than #{MAX_BYTES / 1.megabyte}MB" if @file.size.to_i > MAX_BYTES
       end
@@ -99,7 +99,9 @@ module Appraisals
       end
 
       def spreadsheet
-        @spreadsheet ||= Roo::Spreadsheet.open(@file.tempfile.path, extension: File.extname(@file.original_filename).delete("."))
+        ext = File.extname(@file.original_filename.to_s).delete(".")
+        ext = "xlsx" if ext.downcase == "xlsm"
+        @spreadsheet ||= Roo::Spreadsheet.open(@file.tempfile.path, extension: ext)
       rescue StandardError => e
         raise Error, "That file couldn't be read as a spreadsheet (#{e.class})"
       end
