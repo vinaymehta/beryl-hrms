@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   CalendarClockIcon, ClipboardListIcon, InboxIcon, UserIcon, TrendingUpIcon, LayersIcon, ScaleIcon,
   type LucideIcon,
@@ -116,10 +117,21 @@ export function AppraisalsWorkspace() {
         ? "mine"
         : (tabs[0]?.id ?? "mine")
 
+  // The tab lives in the URL so leaving for a full page — creating a template,
+  // say — and coming back lands where you were rather than on the default.
+  const router = useRouter()
+  const requestedTab = useSearchParams().get("tab") as TabId | null
   const [activeTab, setActiveTab] = useState<TabId | null>(null)
-  const currentTab = activeTab ?? defaultTab
+  const fromUrl = tabs.some((tab) => tab.id === requestedTab) ? requestedTab : null
+  const currentTab = activeTab ?? fromUrl ?? defaultTab
+
   const [openAppraisalId, setOpenAppraisalId] = useState<string | null>(null)
   const [cycleFilter, setCycleFilter] = useState<string | undefined>(undefined)
+
+  function selectTab(tab: TabId) {
+    setActiveTab(tab)
+    router.replace(`/appraisals?tab=${tab}`, { scroll: false })
+  }
 
   const listScope = currentTab === "mine" ? "mine" : currentTab === "pending" ? "pending" : undefined
   const { data, isLoading, isError, refetch } = useAppraisals(
@@ -156,7 +168,7 @@ export function AppraisalsWorkspace() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => selectTab(tab.id)}
                 className={cn(
                   "flex items-center gap-1.5 rounded-t-lg border-b-2 px-3 py-2 text-sm transition-colors",
                   active
@@ -189,7 +201,7 @@ export function AppraisalsWorkspace() {
         <AppraisalCyclesView
           onOpenCycle={(cycleId) => {
             setCycleFilter(cycleId)
-            setActiveTab("all")
+            selectTab("all")
           }}
         />
       ) : isLoading ? (

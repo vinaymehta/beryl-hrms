@@ -52,7 +52,7 @@ docker compose up -d postgres redis minio minio-init
 cd backend
 bundle install
 bin/rails db:create db:migrate db:seed
-bin/rails s -p 3001
+bin/rails s -p 4000
 
 # Frontend (separate terminal)
 cd frontend
@@ -61,8 +61,8 @@ npm install
 npm run dev
 ```
 
-Frontend: http://localhost:3000 · Backend: http://localhost:3001 ·
-MinIO console: http://localhost:9001 · Sidekiq dashboard: http://localhost:3001/sidekiq
+Frontend: http://localhost:3000 · Backend: http://localhost:4000 ·
+MinIO console: http://localhost:9001 · Sidekiq dashboard: http://localhost:4000/sidekiq
 (Admin-only)
 
 Run the full containerized stack instead (closer to production, no hot reload):
@@ -97,7 +97,7 @@ npx playwright test
   format, permission catalog
 - [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md) — color tokens, typography,
   component conventions
-- Live OpenAPI docs (once the backend is running): `http://localhost:3001/api-docs`
+- Live OpenAPI docs (once the backend is running): `http://localhost:4000/api-docs`
 
 ## Environment variables
 

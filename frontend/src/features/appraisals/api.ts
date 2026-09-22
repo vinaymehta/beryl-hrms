@@ -8,6 +8,7 @@ import type {
   AppraisalListParams,
   AppNotification,
   ImportPreview,
+  TemplateImportPreview,
   Calibration,
 } from "@/types/appraisals"
 
@@ -26,6 +27,18 @@ export const appraisalTemplatesApi = {
   newVersion: (id: string, name?: string) =>
     apiClient.post<AppraisalTemplate>(`/appraisal_templates/${id}/new_version`, { name }),
   activate: (id: string) => apiClient.patch<AppraisalTemplate>(`/appraisal_templates/${id}/activate`, {}),
+  /**
+   * Upload → Validate → Parse → Preview. Writes nothing: the parsed categories
+   * come back into the builder, where they are reviewed and then created
+   * through `create` like any hand-built template.
+   */
+  importPreview: (file: File) => {
+    const form = new FormData()
+    form.append("file", file)
+    return apiClient.postForm<TemplateImportPreview>("/appraisal_templates/import_preview", form)
+  },
+  /** The blank workbook, streamed — so it bypasses the JSON client. */
+  importFormatUrl: () => `${API_BASE}/appraisal_templates/import_format`,
   archive: (id: string) => apiClient.delete<void>(`/appraisal_templates/${id}`),
 }
 
@@ -47,6 +60,11 @@ export const appraisalsApi = {
     apiClient.get<AppraisalSummary[]>(`/appraisals${toQuery(params as Record<string, string | undefined>)}`),
   get: (id: string) => apiClient.get<AppraisalDetail>(`/appraisals/${id}`),
   submitSelf: (id: string, values: unknown) => apiClient.post<AppraisalDetail>(`/appraisals/${id}/submit_self`, values),
+  /**
+   * Work in progress, saved as the employee moves through the steps. Mutable
+   * and unversioned, unlike `submitSelf` which mints the immutable V1.
+   */
+  saveDraft: (id: string, values: unknown) => apiClient.patch<AppraisalDetail>(`/appraisals/${id}/save_draft`, values),
   submitReview: (id: string, values: unknown) =>
     apiClient.post<AppraisalDetail>(`/appraisals/${id}/submit_review`, values),
   advance: (id: string, to: string, notes?: string) =>

@@ -32,7 +32,14 @@ module CsrfProtection
     end
 
     def verify_csrf_token
-      return unless Rails.application.config.action_controller.allow_forgery_protection
+      # Explicitly `== false`, NOT a truthiness check. This is an
+      # ActionController::API app, and Rails only defaults
+      # allow_forgery_protection to true for ActionController::Base — in API
+      # mode it is left nil in every environment, so a truthy check silently
+      # disabled this entire concern (token AND origin) everywhere, production
+      # included. Protection is now on unless an environment turns it off, which
+      # only config/environments/test.rb does.
+      return if Rails.application.config.action_controller.allow_forgery_protection == false
       return if SAFE_METHODS.include?(request.request_method)
       return if valid_csrf_token? && valid_request_origin?
 
@@ -61,7 +68,7 @@ module CsrfProtection
     end
 
     def allowed_origins
-      @allowed_origins ||= ENV.fetch("FRONTEND_ORIGINS", "http://localhost:3000").split(",").map(&:strip)
+      @allowed_origins ||= FrontendOrigins.all
     end
 
     # Rotate on login so a pre-auth anonymous token never stays valid post-auth.

@@ -102,7 +102,7 @@ module Api
           # never attacker-influenced — allow_other_host is safe here since
           # nothing in the redirect target comes from request params.
           def redirect_to_frontend(**query)
-            base = ENV.fetch("FRONTEND_ORIGINS", "http://localhost:3000").split(",").first.strip
+            base = FrontendOrigins.primary
             redirect_to "#{base}/settings/mail?#{query.to_query}", allow_other_host: true
           end
       end

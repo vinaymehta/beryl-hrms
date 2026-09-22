@@ -34,6 +34,15 @@ export function useAppraisalTemplates(status?: string, enabled = true) {
   })
 }
 
+/** One template, used by the builder when it opens as a new version of it. */
+export function useAppraisalTemplate(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ["appraisal-templates", "detail", id],
+    queryFn: () => appraisalTemplatesApi.get(id as string),
+    enabled: Boolean(id),
+  })
+}
+
 export function useAppraisals(params: AppraisalListParams = {}, enabled = true) {
   return useQuery({
     queryKey: ["appraisals", params],

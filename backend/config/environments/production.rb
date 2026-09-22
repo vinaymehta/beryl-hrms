@@ -79,9 +79,12 @@ Rails.application.configure do
   # Links generated in mailer templates (password reset, the candidate feedback
   # form) must point at the deployed FRONTEND, not at this API host and not at
   # the "example.com" scaffold placeholder this used to carry.
-  frontend_uri = URI.parse(ENV.fetch("FRONTEND_ORIGINS", "http://localhost:3000").split(",").first.to_s.strip)
+  # Resolved through FrontendOrigins, which REFUSES to fall back to localhost in
+  # production — a password-reset link pointing at the recipient's own machine
+  # is worse than a boot failure that names exactly what is missing.
+  frontend_uri = FrontendOrigins.primary_uri
   config.action_mailer.default_url_options = {
-    host: frontend_uri.host || "localhost",
+    host: frontend_uri.host,
     port: frontend_uri.port,
     protocol: frontend_uri.scheme || "http"
   }.compact

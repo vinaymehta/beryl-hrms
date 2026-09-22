@@ -32,7 +32,7 @@ class UserMailer < ApplicationMailer
 
   private
     def frontend_base_url
-      ENV.fetch("FRONTEND_ORIGINS", "http://localhost:3000").split(",").first.strip
+      FrontendOrigins.primary
     end
 
     # TEMPORARY dev convenience so links are visible directly on whichever

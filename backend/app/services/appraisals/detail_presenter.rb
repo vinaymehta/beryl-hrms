@@ -35,12 +35,25 @@ module Appraisals
         "scoreOverrides" => Api::V1::AppraisalScoreOverrideSerializer.new(@appraisal.score_overrides.to_a).as_json,
         "compensation" => compensation_payload,
         "designationOptions" => designation_options,
+        "selfAppraisalDraft" => self_appraisal_draft,
         "managers" => managers_payload,
         "viewer" => viewer_payload
       )
     end
 
     private
+      # The employee's own unsubmitted work, and nobody else's business — not
+      # HR's and not a manager's. It is neither a revision nor a submission, so
+      # the only person it is sent to is the one who typed it.
+      def self_appraisal_draft
+        return nil unless @policy.save_self_draft?
+
+        draft = @appraisal.self_appraisal_draft
+        return nil if draft.blank?
+
+        draft.merge("savedAt" => @appraisal.self_appraisal_draft_saved_at)
+      end
+
       def frozen_template
         @appraisal.appraisal_cycle.appraisal_template
       end

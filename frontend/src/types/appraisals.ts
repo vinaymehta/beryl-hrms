@@ -1,4 +1,5 @@
 import type { EmployeeSummary } from "@/types/employees"
+import type { NarrativeKey } from "@/features/appraisals/constants"
 
 /** The scope's workflow, in order. Mirrors the backend enum Appraisal#status. */
 export type AppraisalStatus =
@@ -217,6 +218,20 @@ export interface AppraisalViewer {
   visibleRevisionStages: AppraisalStage[]
 }
 
+/**
+ * The employee's work in progress. Deliberately NOT an AppraisalRevision: a
+ * revision is immutable and numbered, and a step-by-step form saving as it goes
+ * would otherwise mint a new V-number every few seconds. Sent to the subject
+ * alone — nobody reviews a draft.
+ */
+export interface SelfAppraisalDraft {
+  answers: { questionId: string; rating: number | null; comment: string | null }[]
+  narrative: Partial<Record<NarrativeKey, string>>
+  /** Which wizard step they had reached, so they resume where they stopped. */
+  step: number | null
+  savedAt: string | null
+}
+
 export interface AppraisalDetail extends AppraisalSummary {
   cycle: AppraisalCycle
   /** The cycle's FROZEN template — never the newest version. */
@@ -234,6 +249,8 @@ export interface AppraisalDetail extends AppraisalSummary {
     final: EmployeeSummary | null
   }
   viewer: AppraisalViewer
+  /** Null for everyone but the employee, and once they have submitted. */
+  selfAppraisalDraft: SelfAppraisalDraft | null
 }
 
 export interface AppraisalListParams {
@@ -267,6 +284,38 @@ export interface ImportPreview {
   validCount: number
   invalidCount: number
   totalQuestions: number
+}
+
+/**
+ * A template parsed out of a spreadsheet. Nothing is saved by the upload — this
+ * is what the admin reviews, edits in the builder and then creates normally, so
+ * an imported template goes through exactly the same rules as a typed one.
+ */
+export interface TemplateImportQuestion {
+  prompt: string
+  description: string | null
+  selfRating: boolean
+  managerRating: boolean
+  requiresComment: boolean
+  required: boolean
+}
+
+export interface TemplateImportCategory {
+  name: string
+  lens: AppraisalLens
+  weight: number
+  position: number
+  questions: TemplateImportQuestion[]
+  errors: string[]
+}
+
+export interface TemplateImportPreview {
+  categories: TemplateImportCategory[]
+  totalWeight: number
+  /** Whether the weights total exactly 100 — the same rule activation enforces. */
+  weightsValid: boolean
+  questionCount: number
+  errors: string[]
 }
 
 /** One row of the §16 calibration dashboard. */

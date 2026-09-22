@@ -71,6 +71,11 @@ Rails.application.routes.draw do
           post :new_version
           patch :activate
         end
+        collection do
+          # Parse-and-preview only; nothing is saved until the admin confirms.
+          post :import_preview
+          get :import_format
+        end
       end
 
       resources :appraisal_cycles, only: %i[ index show create update destroy ] do
@@ -83,8 +88,11 @@ Rails.application.routes.draw do
 
       resources :appraisals, only: %i[ index show ] do
         member do
-          # The employee's own V1 — draft or submit, same immutable write.
+          # The employee's own V1 — creates the immutable revision.
           post :submit_self
+          # Work in progress. Mutable and unversioned, so a step-by-step
+          # self-appraisal can save as it goes without minting V-numbers.
+          patch :save_draft
           # A reviewer's independent version at the stage they own.
           post :submit_review
           patch :advance

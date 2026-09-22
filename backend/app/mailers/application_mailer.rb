@@ -12,6 +12,6 @@ class ApplicationMailer < ActionMailer::Base
     # Where links in mail templates point. The app's own frontend, never this
     # API host — a recipient clicking through must land on the UI.
     def frontend_base_url
-      ENV.fetch("FRONTEND_ORIGINS", "http://localhost:3000").split(",").first.strip
+      FrontendOrigins.primary
     end
 end

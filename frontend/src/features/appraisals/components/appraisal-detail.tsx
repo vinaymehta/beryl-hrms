@@ -12,10 +12,11 @@ import { RevisionHistory } from "@/features/appraisals/components/revision-histo
 import { AppraisalComments } from "@/features/appraisals/components/appraisal-comments"
 import { AppraisalActions } from "@/features/appraisals/components/appraisal-actions"
 import { RevisionForm } from "@/features/appraisals/components/revision-form"
+import { SelfAppraisalWizard } from "@/features/appraisals/components/self-appraisal-wizard"
 import { CompensationPanel } from "@/features/appraisals/components/compensation-panel"
 import { FeedbackRequestsPanel } from "@/features/appraisals/components/feedback-requests-panel"
 import { useAppraisal } from "@/features/appraisals/hooks/use-appraisals"
-import { useSubmitSelfAppraisal, useSubmitReview } from "@/features/appraisals/hooks/use-appraisal-mutations"
+import { useSubmitReview } from "@/features/appraisals/hooks/use-appraisal-mutations"
 import { appraisalStageMeta } from "@/features/appraisals/constants"
 import type { AppraisalDetail as AppraisalDetailType } from "@/types/appraisals"
 import type { LucideIcon } from "lucide-react"
@@ -86,7 +87,6 @@ function ManagerChain({ appraisal }: { appraisal: AppraisalDetailType }) {
 
 export function AppraisalDetail({ appraisalId, onBack }: { appraisalId: string; onBack?: () => void }) {
   const { data: appraisal, isLoading, isError, refetch } = useAppraisal(appraisalId)
-  const submitSelf = useSubmitSelfAppraisal(appraisalId)
   const submitReview = useSubmitReview(appraisalId)
 
   if (isLoading) {
@@ -170,21 +170,14 @@ export function AppraisalDetail({ appraisalId, onBack }: { appraisalId: string; 
         </CardContent>
       </Card>
 
-      {/* The write surface, shown only to whoever's move it actually is. */}
+      {/* The write surface, shown only to whoever's move it actually is.
+          The employee gets a step-by-step wizard that saves as they go; a
+          reviewer gets the single-page form, because they work with the
+          self-appraisal open beside them and splitting that across steps would
+          only break the comparison. */}
       {viewer.canSubmitSelf && (
         <Section icon={PencilLineIcon} title="Your self-appraisal">
-          <RevisionForm
-            appraisal={appraisal}
-            allowImport
-            submitLabel="Submit self-appraisal"
-            isPending={submitSelf.isPending}
-            onSaveDraft={(payload) =>
-              submitSelf.mutate({ submit: false, ...payload.narrative, answers: payload.answers })
-            }
-            onSubmit={(payload) =>
-              submitSelf.mutate({ submit: true, ...payload.narrative, answers: payload.answers })
-            }
-          />
+          <SelfAppraisalWizard appraisal={appraisal} />
         </Section>
       )}
 

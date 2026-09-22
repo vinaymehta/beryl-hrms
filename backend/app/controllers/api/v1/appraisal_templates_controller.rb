@@ -1,6 +1,7 @@
 module Api
   module V1
     class AppraisalTemplatesController < Api::V1::BaseController
+      rescue_from ::Appraisals::TemplateImport::Error, with: :render_unprocessable
       def index
         authorize AppraisalTemplate
         templates = policy_scope(AppraisalTemplate)
@@ -44,6 +45,27 @@ module Api
         copy.save!
         ::Audit::Record.call(action: "appraisal_template.versioned", auditable: copy, request: request)
         render_data(Api::V1::AppraisalTemplateSerializer.new(copy.reload).as_json, status: :created)
+      end
+
+      # Upload → Validate → Parse → PREVIEW. Persists nothing: the parsed
+      # categories go back to the builder for the admin to review and confirm,
+      # and #create writes them — so every template rule applies unchanged.
+      def import_preview
+        authorize AppraisalTemplate, :create?
+        preview = ::Appraisals::TemplateImport.call(file: params[:file])
+        # Plain Hash from a service, so it never passes through Alba's key
+        # transform — camelised here instead.
+        render_data(preview.deep_transform_keys { |key| key.to_s.camelize(:lower) })
+      end
+
+      # A blank workbook carrying the exact headers the importer reads, so an
+      # admin doesn't have to guess the format from documentation.
+      def import_format
+        authorize AppraisalTemplate, :create?
+        send_data ::Appraisals::TemplateWorkbook.call,
+                  filename: "appraisal-template-format.xlsx",
+                  type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                  disposition: "attachment"
       end
 
       def activate

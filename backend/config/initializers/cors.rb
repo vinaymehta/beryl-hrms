@@ -4,7 +4,7 @@
 # deployment assumption that makes SameSite=Lax cookies work here.
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   allow do
-    origins ENV.fetch("FRONTEND_ORIGINS", "http://localhost:3000").split(",").map(&:strip)
+    origins(*FrontendOrigins.all)
 
     resource "/api/*",
       headers: :any,

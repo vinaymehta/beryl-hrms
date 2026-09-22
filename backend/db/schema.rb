@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_22_110000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_22_130000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -295,6 +295,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_110000) do
     t.datetime "released_at"
     t.bigint "released_by_id"
     t.bigint "secondary_manager_id"
+    t.jsonb "self_appraisal_draft", default: {}, null: false
+    t.datetime "self_appraisal_draft_saved_at"
     t.integer "status", default: 0, null: false
     t.datetime "updated_at", null: false
     t.index ["appraisal_cycle_id", "employee_id"], name: "index_appraisals_uniqueness", unique: true

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { PlusIcon, CopyIcon, CheckCircle2Icon, LayersIcon, LockIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,6 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { LensBadge } from "@/features/appraisals/components/appraisal-badges"
-import { TemplateBuilder } from "@/features/appraisals/components/template-builder"
 import { useAppraisalTemplates } from "@/features/appraisals/hooks/use-appraisals"
 import { useActivateTemplate } from "@/features/appraisals/hooks/use-appraisal-mutations"
 import { usePermission } from "@/features/auth/hooks/use-permission"
@@ -22,21 +21,20 @@ const STATUS_CLASSES: Record<string, string> = {
 }
 
 export function TemplatesView() {
-  const [builderOpen, setBuilderOpen] = useState(false)
-  const [source, setSource] = useState<AppraisalTemplate | undefined>(undefined)
+  const router = useRouter()
   const canManage = usePermission(PERMISSIONS.appraisalTemplatesManage)
 
   const { data: templates, isLoading } = useAppraisalTemplates()
   const activate = useActivateTemplate()
 
+  // A full page rather than a drawer — a template is a long nested document,
+  // and `?source=` makes "new version of X" a linkable, reloadable URL.
   function openNew() {
-    setSource(undefined)
-    setBuilderOpen(true)
+    router.push("/appraisals/templates/new")
   }
 
   function openNewVersion(template: AppraisalTemplate) {
-    setSource(template)
-    setBuilderOpen(true)
+    router.push(`/appraisals/templates/new?source=${template.id}`)
   }
 
   if (isLoading) {
@@ -137,8 +135,6 @@ export function TemplatesView() {
           ))}
         </div>
       )}
-
-      <TemplateBuilder open={builderOpen} onOpenChange={setBuilderOpen} source={source} />
     </div>
   )
 }

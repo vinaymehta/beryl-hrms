@@ -124,7 +124,7 @@ module Api
         # only for the app's own origins, via frame-ancestors. FRONTEND_ORIGINS
         # is the same list CORS and the CSRF origin check already trust.
         def allow_app_framing!
-          origins = ENV.fetch("FRONTEND_ORIGINS", "http://localhost:3000").split(",").map(&:strip).reject(&:empty?)
+          origins = FrontendOrigins.all
 
           response.headers.delete("X-Frame-Options")
           response.headers["Content-Security-Policy"] = "frame-ancestors 'self' #{origins.join(' ')}".strip

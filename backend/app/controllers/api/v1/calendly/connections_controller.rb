@@ -187,7 +187,7 @@ module Api
           # Destination is always our own configured frontend origin — nothing
           # in the target comes from request params.
           def redirect_to_frontend(**query)
-            base = ENV.fetch("FRONTEND_ORIGINS", "http://localhost:3000").split(",").first.strip
+            base = FrontendOrigins.primary
             redirect_to "#{base}/settings/interviews?#{query.to_query}", allow_other_host: true
           end
       end

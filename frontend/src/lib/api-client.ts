@@ -52,7 +52,16 @@ async function request<T>(
   }
 
   if (MUTATING_METHODS.has(method)) {
-    const token = readCookie(CSRF_COOKIE_NAME)
+    let token = readCookie(CSRF_COOKIE_NAME)
+    // The backend mints the CSRF cookie on ANY request, but a visitor who lands
+    // straight on /login and submits has made no API call yet — so there is no
+    // cookie to echo and the write is rejected. One cheap GET establishes it.
+    // /auth/me is the right probe: it answers 401 when signed out and still
+    // sets the cookie (ensure_csrf_cookie runs before authentication).
+    if (!token) {
+      await fetch(`${API_BASE}/auth/me`, { method: "GET", credentials: "include" }).catch(() => {})
+      token = readCookie(CSRF_COOKIE_NAME)
+    }
     if (token) headers.set(CSRF_HEADER_NAME, token)
   }
 

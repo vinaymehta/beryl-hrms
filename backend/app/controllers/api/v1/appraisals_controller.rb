@@ -36,9 +36,14 @@ module Api
         render_data(::Appraisals::DetailPresenter.call(appraisal: appraisal, user: Current.user))
       end
 
-      # The employee's own V1. A draft and a submission are the same write — the
-      # difference is whether the workflow advances afterwards, because a
-      # revision is immutable either way.
+      # The employee's own V1.
+      #
+      # This always CREATES the revision. Passing submit=false used to create one
+      # too and merely skip the workflow move, which meant a draft was a numbered
+      # immutable version — untenable now the form saves at every step, and
+      # already wrong: the manager's read-only reference is the first
+      # self_appraisal revision, so a stale draft was what they reviewed against.
+      # Work in progress goes to #save_draft instead.
       def submit_self
         appraisal = find_appraisal
         authorize appraisal, :submit_self?
@@ -48,14 +53,35 @@ module Api
             appraisal: appraisal, stage: :self_appraisal, author_user: Current.user,
             answers: answer_params, narrative: narrative_params
           )
+          # The draft has served its purpose; leaving it would reopen the
+          # half-finished text next time the employee looks at the appraisal.
+          appraisal.update!(self_appraisal_draft: {}, self_appraisal_draft_saved_at: nil)
 
-          if ActiveModel::Type::Boolean.new.cast(params[:submit])
-            ::Appraisals::Workflow.new(appraisal: appraisal, to: :employee_submitted, actor: Current.user).call
-            ::Appraisals::Workflow.new(appraisal: appraisal, to: :primary_review, actor: Current.user).call
-          end
+          ::Appraisals::Workflow.new(appraisal: appraisal, to: :employee_submitted, actor: Current.user).call
+          ::Appraisals::Workflow.new(appraisal: appraisal, to: :primary_review, actor: Current.user).call
         end
 
         ::Audit::Record.call(action: "appraisal.self_submitted", auditable: appraisal, request: request)
+        render_detail(appraisal)
+      end
+
+      # Work in progress: mutable, unversioned, overwritten on every save, and
+      # visible to nobody but its author (DetailPresenter sends it to the
+      # subject alone). Nothing here has been submitted, so the workflow does
+      # not move and no reviewer ever sees it.
+      def save_draft
+        appraisal = find_appraisal
+        authorize appraisal, :save_self_draft?
+
+        appraisal.update!(
+          self_appraisal_draft: {
+            "answers" => answer_params.map { |answer| answer.transform_keys(&:to_s) },
+            "narrative" => narrative_params.transform_keys(&:to_s),
+            "step" => params[:step].presence&.to_i
+          },
+          self_appraisal_draft_saved_at: Time.current
+        )
+
         render_detail(appraisal)
       end
 
