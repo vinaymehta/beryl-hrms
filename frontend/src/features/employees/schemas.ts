@@ -12,6 +12,8 @@ export const employeeFormSchema = z.object({
   /** The job title. Designation IS the job title — there is no second field. */
   designationId: z.string().optional(),
   currentLevel: z.enum(EMPLOYEE_LEVEL_VALUES).optional().or(z.literal("")),
+  employmentType: z.string().optional(),
+  workLocation: z.string().optional(),
   // Employee → Primary Manager → (optional) Secondary Manager → Final Manager.
   // One field per typed slot, each an employee id or "" for unassigned. Not
   // required at the zod level even though a complete hierarchy carries Primary
@@ -19,6 +21,10 @@ export const employeeFormSchema = z.object({
   primaryManagerId: z.string(),
   secondaryManagerId: z.string(),
   finalManagerId: z.string(),
+  // §4's two further relationships. Outside the review chain, so neither is
+  // subject to the "needs a primary first" rule below.
+  departmentHeadId: z.string(),
+  projectManagerIds: z.array(z.string()),
   /**
    * Drives the login account. Leaving it blank is valid and means "no system
    * access" — not every employee needs one. The backend never sets or returns
@@ -91,7 +97,14 @@ export type DesignationFormValues = z.infer<typeof designationFormSchema>
 export interface EmployeePayload
   extends Omit<
     EmployeeFormValues,
-    "currentLevel" | "primaryManagerId" | "secondaryManagerId" | "finalManagerId" | "roleIds" | "workEmail"
+    | "currentLevel"
+    | "primaryManagerId"
+    | "secondaryManagerId"
+    | "finalManagerId"
+    | "departmentHeadId"
+    | "projectManagerIds"
+    | "roleIds"
+    | "workEmail"
   > {
   currentLevel?: EmployeeLevel | null
   // null clears the slot, a string sets it, and OMITTING the key leaves it
@@ -100,6 +113,8 @@ export interface EmployeePayload
   primaryManagerId?: string | null
   secondaryManagerId?: string | null
   finalManagerId?: string | null
+  departmentHeadId?: string | null
+  projectManagerIds?: string[]
   roleIds?: string[]
   workEmail?: string
 }

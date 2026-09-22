@@ -3,9 +3,9 @@
 import { TriangleAlertIcon } from "lucide-react"
 
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { MANAGER_LEVELS } from "@/features/employees/constants"
+import { MANAGER_LEVELS, ADDITIONAL_MANAGER_RELATIONSHIPS } from "@/features/employees/constants"
 import { API_ORIGIN } from "@/lib/api-client"
+import { Badge } from "@/components/ui/badge"
 import type { Employee, EmployeeSummary } from "@/types/employees"
 
 function initialsOf(name: string) {
@@ -113,8 +113,62 @@ export function ManagerHierarchyCard({ employee }: { employee: Employee }) {
         ))}
       </ol>
 
+      {/* §4's two further relationships, rendered as their OWN group rather
+          than as more rungs of the numbered chain — a Department Head is not a
+          step in the review line, and is never the Final Reviewer by default. */}
+      <div className="grid gap-2.5 border-t pt-3">
+        <p className="text-xs font-semibold text-muted-foreground">
+          Additional relationships — outside the review chain
+        </p>
+
+        {ADDITIONAL_MANAGER_RELATIONSHIPS.map((relationship) => {
+          const people: EmployeeSummary[] = relationship.multiple
+            ? employee.managerHierarchy.projectManagers
+            : ([ employee.managerHierarchy.departmentHead ].filter(Boolean) as EmployeeSummary[])
+
+          return (
+            <div key={relationship.value} className="grid gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">{relationship.label}</span>
+                {relationship.multiple && people.length > 0 && (
+                  <Badge variant="outline" className="h-5 px-1.5 text-[10px] tabular-nums">
+                    {people.length}
+                  </Badge>
+                )}
+              </div>
+
+              {people.length === 0 ? (
+                <p className="rounded-lg border border-dashed p-2.5 text-center text-xs text-muted-foreground">
+                  Not assigned
+                </p>
+              ) : (
+                people.map((person) => (
+                  <div key={person.id} className="flex items-center gap-2.5 rounded-lg border p-2.5">
+                    <Avatar size="sm">
+                      {person.profilePhotoUrl && (
+                        <AvatarImage src={photoUrl(person.profilePhotoUrl)} alt={person.fullName} />
+                      )}
+                      <AvatarFallback className="bg-role-hr/12 text-[10px] text-role-hr">
+                        {initialsOf(person.fullName)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{person.fullName}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {[ person.designationTitle, person.departmentName ].filter(Boolean).join(" · ") ||
+                          person.employeeCode}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )
+        })}
+      </div>
+
       <Badge variant="outline" className="h-auto w-fit py-1 text-[11px] font-normal whitespace-normal">
-Manager assignments — not system roles
+        Manager assignments — not system roles
       </Badge>
     </div>
   )

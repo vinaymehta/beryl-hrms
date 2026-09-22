@@ -79,6 +79,16 @@ RSpec.configure do |config|
 
   config.include FactoryBot::Syntax::Methods
 
+  # Rack::Attack throttles by IP, and every request spec comes from 127.0.0.1,
+  # so its counter is shared by the WHOLE suite: a spec file that legitimately
+  # makes a few hundred requests would push later, unrelated files past the
+  # 300/5min limit and fail them with 429s — nondeterministically, since it
+  # depends on file order. Resetting between examples keeps Rack::Attack wired
+  # up while making each example independent.
+  # (config/initializers/rack_attack.rb keeps a MemoryStore in test so this
+  # never touches the dev server's Redis.)
+  config.before { Rack::Attack.cache.store.clear if Rack::Attack.cache.store.respond_to?(:clear) }
+
   # ActiveSupport::CurrentAttributes normally resets on real request/job
   # boundaries — model/policy specs that set Current.session directly have
   # no such boundary, so reset explicitly to avoid leaking into the next example.

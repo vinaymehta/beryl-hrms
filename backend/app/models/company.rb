@@ -23,6 +23,11 @@ class Company < ApplicationRecord
   has_many :jobs, dependent: :destroy
   has_many :ai_processing_logs, dependent: :destroy
 
+  has_many :appraisal_templates, dependent: :destroy
+  has_many :appraisal_cycles, dependent: :destroy
+  has_many :appraisals, dependent: :destroy
+  has_many :notifications, dependent: :destroy
+
   before_validation :generate_slug, on: :create
 
   validates :name, presence: true

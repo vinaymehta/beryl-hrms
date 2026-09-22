@@ -44,7 +44,72 @@ Rails.application.routes.draw do
 
       resources :employees, only: %i[ index show create update ] do
         member { patch :deactivate }
+
+        # Phase 1 profile history + Phase 5 continuous performance. All nested
+        # under the employee they describe, and all served by the shared
+        # EmployeeSubresource concern.
+        resources :employment_events, only: %i[ index ],
+                  controller: "employee_employment_events"
+        resources :compensation_records, only: %i[ index create update destroy ],
+                  controller: "employee_compensation_records"
+        resources :assets, only: %i[ index create update destroy ],
+                  controller: "employee_assets"
+        resources :goals, only: %i[ index create update destroy ],
+                  controller: "employee_goals"
+        resources :skills, only: %i[ index create update destroy ],
+                  controller: "employee_skills" do
+          member { patch :validate_skill }
+        end
+        resources :trainings, only: %i[ index create update destroy ],
+                  controller: "employee_trainings"
+        resources :improvement_plans, only: %i[ index create update destroy ],
+                  controller: "performance_improvement_plans"
       end
+      # --- Performance Appraisal ------------------------------------------
+      resources :appraisal_templates, only: %i[ index show create update destroy ] do
+        member do
+          post :new_version
+          patch :activate
+        end
+      end
+
+      resources :appraisal_cycles, only: %i[ index show create update destroy ] do
+        member do
+          post :start
+          patch :close
+          get :calibration
+        end
+      end
+
+      resources :appraisals, only: %i[ index show ] do
+        member do
+          # The employee's own V1 — draft or submit, same immutable write.
+          post :submit_self
+          # A reviewer's independent version at the stage they own.
+          post :submit_review
+          patch :advance
+          patch :return_for_correction
+          patch :override_score
+          patch :release
+          patch :acknowledge
+          patch :compensation
+          post :add_comment
+          # Parse-and-preview only; nothing is saved until the employee submits.
+          post :import_preview
+          get :export
+        end
+
+        # Optional 360° feedback (§21).
+        resources :feedback_requests, only: %i[ index create destroy ],
+                  controller: "appraisal_feedback_requests" do
+          member { patch :respond_to_request }
+        end
+      end
+
+      resources :notifications, only: %i[ index update ] do
+        collection { patch :mark_all_read }
+      end
+
       # Read-only list, for the Employee form's role picker — see RolePolicy.
       resources :roles, only: %i[ index ]
       resources :departments, only: %i[ index show create update destroy ]

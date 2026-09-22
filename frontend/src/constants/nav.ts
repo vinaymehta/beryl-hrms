@@ -10,10 +10,16 @@ import {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   MailIcon,
   BriefcaseIcon,
+  TrendingUpIcon,
   SettingsIcon,
 } from "lucide-react"
 
-import { PEOPLE_MANAGEMENT_PERMISSIONS, PERMISSIONS, type PermissionKey } from "@/constants/permissions"
+import {
+  PEOPLE_MANAGEMENT_PERMISSIONS,
+  APPRAISAL_ACCESS_PERMISSIONS,
+  PERMISSIONS,
+  type PermissionKey,
+} from "@/constants/permissions"
 import { HIDDEN_FEATURES } from "@/constants/feature-flags"
 
 export interface NavItem {
@@ -48,6 +54,10 @@ const ALL_NAV_ITEMS: (NavItem & { hidden?: boolean })[] = [
   // TO RE-ENABLE: uncomment the line below and restore the render in
   // app/(dashboard)/mail/page.tsx.
   // { label: "Mail", href: "/mail", icon: MailIcon, permission: PERMISSIONS.mailView },
+  // Its own top-level workspace, deliberately NOT nested under Employees: an
+  // appraisal cycle is a company-wide process, and an ordinary employee reaches
+  // their own appraisal here rather than through the people directory.
+  { label: "Appraisal", href: "/appraisals", icon: TrendingUpIcon, permission: APPRAISAL_ACCESS_PERMISSIONS },
   { label: "Recruitment", href: "/recruitment", icon: BriefcaseIcon, permission: PERMISSIONS.recruitmentView },
   { label: "Settings", href: "/settings", icon: SettingsIcon },
 ]

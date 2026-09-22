@@ -15,6 +15,13 @@ module Roles
         attendance.view attendance.manage
         leave.view leave.create leave.approve
         documents.view documents.create documents.delete
+        employee_history.view assets.manage
+        goals.manage skills.manage training.manage pip.manage
+        appraisal_feedback.manage
+        appraisal_templates.view appraisal_templates.manage
+        appraisal_cycles.view appraisal_cycles.manage
+        appraisals.view_all appraisals.submit_self appraisals.review appraisals.release
+        notifications.view
         recruitment.view recruitment.manage
         candidates.view candidates.manage
         resumes.view resumes.process
@@ -23,6 +30,9 @@ module Roles
       ],
       "account" => %w[
         employees.view
+        compensation.manage
+        appraisals.submit_self appraisals.review
+        notifications.view
         payroll.view payroll.manage
         expenses.view expenses.create expenses.approve
       ],
@@ -36,6 +46,8 @@ module Roles
         leave.view leave.create
         documents.view documents.manage_own
         mail.view mail.search
+        appraisals.submit_self appraisals.review
+        notifications.view
       ]
     }.freeze
 

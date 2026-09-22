@@ -8,6 +8,7 @@ class User < ApplicationRecord
   has_many :user_roles, dependent: :destroy
   has_many :roles, through: :user_roles
   has_one :employee_record, class_name: "Employee", foreign_key: :user_id, inverse_of: :user, dependent: :nullify
+  has_many :notifications, dependent: :destroy
 
   enum :status, { invited: 0, active: 1, disabled: 2 }, default: :invited
 

@@ -58,7 +58,10 @@ export interface EmployeeAccount {
  * role they always held (usually just Employee) — these values never appear in
  * `Role`, and nothing keys authorization off them.
  */
-export type ManagerLevel = "primary" | "secondary" | "final"
+export type ManagerLevel = "primary" | "secondary" | "final" | "project_manager" | "department_head"
+
+/** The three slots the appraisal workflow reads. The other two sit outside it. */
+export type ReviewChainLevel = "primary" | "secondary" | "final"
 
 /**
  * Named slots rather than an array, because the position IS the meaning —
@@ -68,6 +71,10 @@ export interface ManagerHierarchy {
   primary: EmployeeSummary | null
   secondary: EmployeeSummary | null
   final: EmployeeSummary | null
+  /** §4's own slot — never inferred from `final`. */
+  departmentHead: EmployeeSummary | null
+  /** §4's one plural slot. */
+  projectManagers: EmployeeSummary[]
 }
 
 export interface Employee {
@@ -77,6 +84,8 @@ export interface Employee {
   lastName: string
   status: EmployeeStatus
   currentLevel: EmployeeLevel | null
+  employmentType: string | null
+  workLocation: string | null
   dateOfJoining: string | null
   department: Department | null
   designation: Designation | null

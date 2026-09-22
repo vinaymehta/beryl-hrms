@@ -18,3 +18,9 @@ zoho_auto_scan:
   # skips that connection.
   cron: "*/2 * * * *"
   class: "ZohoAutoScanJob"
+
+appraisal_reminders:
+  # Daily, early. The only appraisal notifications that depend on the calendar
+  # rather than on somebody acting — see AppraisalRemindersJob.
+  cron: "0 7 * * *"
+  class: "AppraisalRemindersJob"

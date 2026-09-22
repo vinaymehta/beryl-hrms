@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/dialog"
 import { EmployeeStatusBadge } from "@/features/employees/components/employee-status-badge"
 import { ManagerHierarchyCard } from "@/features/employees/components/manager-hierarchy-card"
+import { EmployeeRecordTabs } from "@/features/employees/components/employee-record-tabs"
 import { EmployeeLevelBadge } from "@/features/employees/components/employee-level-badge"
 import { EmployeeForm } from "@/features/employees/components/employee-form"
 import { useEmployee } from "@/features/employees/hooks/use-employees"
@@ -195,7 +196,11 @@ export function EmployeeDetailContent({ employeeId }: { employeeId: string }) {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <EmployeeRecordTabs
+        employeeId={employeeId}
+        documents={<EmployeeDocumentsSection employeeId={employeeId} />}
+        overview={
+          <div className="grid gap-4 sm:grid-cols-2">
         <SectionCard icon={BriefcaseIcon} title="Employment">
           <div className="grid grid-cols-2 gap-4">
             <InfoRow label="Employee ID" value={employee.employeeCode} />
@@ -284,12 +289,9 @@ export function EmployeeDetailContent({ employeeId }: { employeeId: string }) {
           </div>
         </SectionCard>
 
-        {/* Renders nothing unless this viewer may actually see this
-            employee's documents — see EmployeeDocumentsSection. The backend
-            scopes the list independently; the checks there only decide what
-            to show. */}
-        <EmployeeDocumentsSection employeeId={employeeId} />
-      </div>
+          </div>
+        }
+      />
 
       {/* Sticky bottom action bar — matches the Edit/Add Employee sheets'
           footer convention instead of living in the header, where it used

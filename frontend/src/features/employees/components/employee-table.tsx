@@ -30,6 +30,8 @@ function photoUrl(path: string | null) {
  * else, and the full hierarchy is one click away in the detail panel.
  */
 function ManagerChainCell({ employee }: { employee: Employee }) {
+  // The REVIEW CHAIN only — project managers and the department head are
+  // separate relationships and belong on the profile, not in this column.
   const { primary, secondary, final } = employee.managerHierarchy
   const chain = [ primary, secondary, final ].filter(Boolean)
 

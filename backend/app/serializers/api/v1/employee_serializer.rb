@@ -16,17 +16,29 @@ module Api
       one :department, resource: Api::V1::DepartmentSerializer
       one :designation, resource: Api::V1::DesignationSerializer
 
-      # Employee → Primary Manager → (optional) Secondary Manager → Final
-      # Manager.
+      # §4's five relationships. Named slots rather than one list, because the
+      # position IS the meaning: a consumer must never have to guess which
+      # entry is the final reviewer — and `department_head` is its own slot,
+      # never inferred from `final`.
       #
-      # Three named slots rather than a list, because the position IS the
-      # meaning: a consumer must never have to guess which of an array of
-      # people is the final manager. Everyone who can see the employee can read
-      # this, including the employee themselves; changing it needs
-      # employees.manage_reporting_managers.
+      # `project_managers` is an array; the other four are a single person or
+      # null. Everyone who can see the employee can read this, including the
+      # employee themselves; changing it needs employees.manage_reporting_managers.
+      # Keys camelised by hand: `transform_keys :lower_camel` rewrites the
+      # attribute names Alba itself generates, not the keys of a plain Hash
+      # handed back from a block. It went unnoticed while every slot was a
+      # single word — department_head and project_managers are the first that
+      # would have shipped snake_case.
       attribute :manager_hierarchy do |employee|
-        employee.manager_hierarchy.transform_values do |manager|
-          manager && Api::V1::EmployeeSummarySerializer.new(manager).as_json
+        employee.manager_hierarchy.to_h do |level, value|
+          serialized =
+            if value.is_a?(Enumerable)
+              Api::V1::EmployeeSummarySerializer.new(value.to_a).as_json
+            else
+              value && Api::V1::EmployeeSummarySerializer.new(value).as_json
+            end
+
+          [ level.camelize(:lower), serialized ]
         end
       end
 

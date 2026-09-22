@@ -27,6 +27,36 @@ export const PERMISSIONS = {
   leaveView: "leave.view",
   leaveCreate: "leave.create",
   leaveApprove: "leave.approve",
+  // --- Performance appraisal ---------------------------------------------
+  appraisalTemplatesView: "appraisal_templates.view",
+  appraisalTemplatesManage: "appraisal_templates.manage",
+  appraisalCyclesView: "appraisal_cycles.view",
+  appraisalCyclesManage: "appraisal_cycles.manage",
+  /** See every employee's appraisal (HR/Admin). */
+  appraisalsViewAll: "appraisals.view_all",
+  /** Fill in your own self-appraisal. Held by everyone with a record. */
+  appraisalsSubmitSelf: "appraisals.submit_self",
+  /**
+   * Review at all. Held broadly, because being someone's manager is an
+   * assignment rather than a system role — the backend still refuses unless the
+   * appraisal actually names you at the stage it is sitting at.
+   */
+  appraisalsReview: "appraisals.review",
+  appraisalsRelease: "appraisals.release",
+  appraisalsManageCompensation: "appraisals.manage_compensation",
+  notificationsView: "notifications.view",
+  // --- Phase 1 profile records / Phase 5 continuous performance ----------
+  /** Read employment history company-wide. Employees read their own via policy. */
+  employeeHistoryView: "employee_history.view",
+  /** Restricted pay data — Admin/Accounts only, and never the employee. */
+  compensationManage: "compensation.manage",
+  assetsManage: "assets.manage",
+  goalsManage: "goals.manage",
+  skillsManage: "skills.manage",
+  trainingManage: "training.manage",
+  pipManage: "pip.manage",
+  /** Request optional 360° feedback (§21). Responding needs no key. */
+  appraisalFeedbackManage: "appraisal_feedback.manage",
   payrollView: "payroll.view",
   payrollManage: "payroll.manage",
   expensesView: "expenses.view",
@@ -101,4 +131,17 @@ export const PEOPLE_MANAGEMENT_PERMISSIONS: PermissionKey[] = [
   PERMISSIONS.employeesCreate,
   PERMISSIONS.employeesUpdate,
   PERMISSIONS.employeesDelete,
+]
+
+/**
+ * Anyone who has any business in the Appraisal workspace at all — HR/Admin who
+ * run it, managers who review in it, and employees who have their own appraisal
+ * there. The tab itself is broad; what each person SEES inside it is decided by
+ * the individual keys above and by the backend's own scoping.
+ */
+export const APPRAISAL_ACCESS_PERMISSIONS: PermissionKey[] = [
+  PERMISSIONS.appraisalCyclesView,
+  PERMISSIONS.appraisalsViewAll,
+  PERMISSIONS.appraisalsSubmitSelf,
+  PERMISSIONS.appraisalsReview,
 ]

@@ -1,4 +1,4 @@
-import type { EmployeeLevel, ManagerLevel } from "@/types/employees"
+import type { EmployeeLevel, ManagerLevel, ReviewChainLevel } from "@/types/employees"
 
 /**
  * The career ladder, in ladder order (not alphabetical) — every select, badge
@@ -57,7 +57,7 @@ export const DEFAULT_EMPLOYEE_ROLE_SLUG = "employee"
  * assigned without a Primary.
  */
 export const MANAGER_LEVELS: {
-  value: ManagerLevel
+  value: ReviewChainLevel
   label: string
   /** Who normally fills this slot — the brief's own guidance, shown inline. */
   hint: string
@@ -87,6 +87,44 @@ export const MANAGER_LEVELS: {
   },
 ]
 
-export const MANAGER_LEVEL_LABELS: Record<ManagerLevel, string> = Object.fromEntries(
-  MANAGER_LEVELS.map((level) => [level.value, level.label])
-) as Record<ManagerLevel, string>
+/**
+ * §4's two further relationships, kept apart from MANAGER_LEVELS on purpose:
+ * they are NOT rungs of the review chain, and the UI must not imply they are.
+ * Neither is read by the appraisal workflow.
+ */
+export const ADDITIONAL_MANAGER_RELATIONSHIPS: {
+  value: Extract<ManagerLevel, "project_manager" | "department_head">
+  label: string
+  hint: string
+  /** True for the one slot that holds several people. */
+  multiple: boolean
+  className: string
+}[] = [
+  {
+    value: "project_manager",
+    label: "Project Manager(s)",
+    hint: "One per project — an employee may have several at once",
+    multiple: true,
+    className: "bg-info/15 text-info",
+  },
+  {
+    value: "department_head",
+    label: "Department Head",
+    hint: "Separate from the Final Reviewer, and not automatically the same person",
+    multiple: false,
+    className: "bg-role-admin/15 text-role-admin",
+  },
+]
+
+export const MANAGER_LEVEL_LABELS: Record<string, string> = Object.fromEntries(
+  [...MANAGER_LEVELS, ...ADDITIONAL_MANAGER_RELATIONSHIPS].map((level) => [level.value, level.label])
+)
+
+/** §3's employment TYPE — a different axis from the lifecycle `status`. */
+export const EMPLOYMENT_TYPES = [
+  { value: "full_time", label: "Full-time" },
+  { value: "part_time", label: "Part-time" },
+  { value: "contract", label: "Contract" },
+  { value: "intern", label: "Intern" },
+  { value: "consultant", label: "Consultant" },
+]

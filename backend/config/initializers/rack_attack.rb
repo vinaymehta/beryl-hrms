@@ -16,4 +16,17 @@ class Rack::Attack
   end
 end
 
-Rack::Attack.cache.store = ActiveSupport::Cache::RedisCacheStore.new(url: ENV.fetch("REDIS_URL", "redis://localhost:6390/0"))
+# Redis everywhere EXCEPT test. Pointing the test suite at the same Redis as
+# the dev server made the throttle counter shared and persistent across runs:
+# a suite that legitimately makes a few hundred authenticated requests would
+# trip the 300/5min limit and fail unrelated examples with 429s, and running
+# the suite twice inside five minutes could fail it outright. An in-memory
+# store per test process keeps Rack::Attack exercised while making the suite
+# hermetic. (config/environments/test.rb already sets cache_store :null_store
+# for the app's own cache; Rack::Attack keeps its own store, hence this line.)
+Rack::Attack.cache.store =
+  if Rails.env.test?
+    ActiveSupport::Cache::MemoryStore.new
+  else
+    ActiveSupport::Cache::RedisCacheStore.new(url: ENV.fetch("REDIS_URL", "redis://localhost:6390/0"))
+  end

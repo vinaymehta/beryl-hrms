@@ -44,11 +44,13 @@ import {
   GENDER_OPTIONS,
   DEFAULT_EMPLOYEE_ROLE_SLUG,
   MANAGER_LEVELS,
+  ADDITIONAL_MANAGER_RELATIONSHIPS,
+  EMPLOYMENT_TYPES,
 } from "@/features/employees/constants"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS, roleBadgeClasses } from "@/constants/permissions"
 import { API_ORIGIN } from "@/lib/api-client"
-import type { Employee, EmployeeSummary, ManagerLevel } from "@/types/employees"
+import type { Employee, EmployeeSummary, ReviewChainLevel } from "@/types/employees"
 
 function initialsOf(name: string) {
   return name
@@ -121,8 +123,12 @@ function ReadOnlyNote({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** The id currently sitting in one slot, as the string the form fields use. */
-function managerIdOf(employee: Employee | undefined, level: ManagerLevel): string {
+/**
+ * The id currently sitting in one single-valued slot, as the string the form
+ * fields use. Only for the four slots that hold one person — project managers
+ * are a list and read separately.
+ */
+function managerIdOf(employee: Employee | undefined, level: ReviewChainLevel | "departmentHead"): string {
   const assigned = employee?.managerHierarchy?.[level]
   return assigned ? String(assigned.id) : ""
 }
@@ -217,9 +223,13 @@ export function EmployeeForm({
       departmentId: employee?.department?.id != null ? String(employee.department.id) : "",
       designationId: employee?.designation?.id != null ? String(employee.designation.id) : "",
       currentLevel: employee?.currentLevel ?? "",
+      employmentType: employee?.employmentType ?? "",
+      workLocation: employee?.workLocation ?? "",
       primaryManagerId: managerIdOf(employee, "primary"),
       secondaryManagerId: managerIdOf(employee, "secondary"),
       finalManagerId: managerIdOf(employee, "final"),
+      departmentHeadId: managerIdOf(employee, "departmentHead"),
+      projectManagerIds: employee?.managerHierarchy?.projectManagers?.map((m) => String(m.id)) ?? [],
       workEmail: employee?.user?.email ?? "",
       roleIds: employee?.roles.map((r) => String(r.id)) ?? [],
       dateOfJoining: employee?.dateOfJoining ?? "",
@@ -248,7 +258,11 @@ export function EmployeeForm({
    * vanish the moment the query stopped matching them.
    */
   const managerOptions: MultiSelectOption[] = useMemo(() => {
-    const chosen = Object.values(employee?.managerHierarchy ?? {}).filter(Boolean) as EmployeeSummary[]
+    // Everyone already assigned, flattened across all five slots, so their
+    // chips survive a search that no longer matches them.
+    const chosen = Object.values(employee?.managerHierarchy ?? {})
+      .flatMap((value) => (Array.isArray(value) ? value : [value]))
+      .filter(Boolean) as EmployeeSummary[]
     const fromSearch = (managerResults?.data ?? [])
       .filter((candidate) => String(candidate.id) !== String(employee?.id))
       .map<EmployeeSummary>((candidate) => ({
@@ -312,6 +326,8 @@ export function EmployeeForm({
       primaryManagerId,
       secondaryManagerId,
       finalManagerId,
+      departmentHeadId,
+      projectManagerIds,
       roleIds,
       workEmail,
       ...rest
@@ -324,6 +340,8 @@ export function EmployeeForm({
       payload.primaryManagerId = primaryManagerId || null
       payload.secondaryManagerId = secondaryManagerId || null
       payload.finalManagerId = finalManagerId || null
+      payload.departmentHeadId = departmentHeadId || null
+      payload.projectManagerIds = projectManagerIds
     }
     if (canManageRoles) {
       payload.roleIds = roleIds
@@ -501,6 +519,38 @@ export function EmployeeForm({
                 </Select>
                 <FieldHint>Seniority on the career ladder — separate from system roles.</FieldHint>
               </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="employee-employment-type">Employment type</Label>
+                <Select
+                  items={EMPLOYMENT_TYPES}
+                  value={form.watch("employmentType") || null}
+                  onValueChange={(v) => form.setValue("employmentType", v ?? "")}
+                >
+                  <SelectTrigger id="employee-employment-type" className="h-9 w-full">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EMPLOYMENT_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <FormField
+                control={form.control}
+                name="workLocation"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Work location</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="e.g. Jaipur" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="dateOfJoining"
@@ -559,6 +609,50 @@ export function EmployeeForm({
                     )
                   })}
                 </ol>
+                <div className="grid gap-4.5 border-t pt-4">
+                  {/* Rendered OUTSIDE the numbered chain on purpose: §4 lists
+                      these alongside the review line, not inside it, and the UI
+                      must not imply a Department Head is the Final Reviewer. */}
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Additional relationships — outside the review chain
+                  </p>
+
+                  {ADDITIONAL_MANAGER_RELATIONSHIPS.map((relationship) => (
+                    <div key={relationship.value} className="grid gap-1.5">
+                      <Label htmlFor={`employee-${relationship.value}`}>{relationship.label}</Label>
+                      {relationship.multiple ? (
+                        <MultiSelect
+                          id={`employee-${relationship.value}`}
+                          aria-label={relationship.label}
+                          options={managerOptions}
+                          value={form.watch("projectManagerIds")}
+                          onChange={(next) => form.setValue("projectManagerIds", next)}
+                          onSearchChange={setManagerSearch}
+                          isLoading={managersLoading}
+                          placeholder="Select one or more project managers"
+                          searchPlaceholder="Search active employees…"
+                          emptyMessage="No active employees match that search."
+                        />
+                      ) : (
+                        <SearchSelect
+                          id={`employee-${relationship.value}`}
+                          aria-label={relationship.label}
+                          options={managerOptions}
+                          value={form.watch("departmentHeadId") || null}
+                          onChange={(next) => form.setValue("departmentHeadId", next ?? "")}
+                          onSearchChange={setManagerSearch}
+                          isLoading={managersLoading}
+                          clearable
+                          placeholder="Select a department head"
+                          searchPlaceholder="Search active employees…"
+                          emptyMessage="No active employees match that search."
+                        />
+                      )}
+                      <FieldHint>{relationship.hint}</FieldHint>
+                    </div>
+                  ))}
+                </div>
+
                 <FieldHint>
                   Any active employee can be selected. These are reporting assignments, not system
                   roles — being someone&apos;s manager grants no extra access.
@@ -605,6 +699,46 @@ export function EmployeeForm({
                     )
                   })}
                 </ol>
+                <div className="grid gap-3 border-t pt-4">
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Additional relationships — outside the review chain
+                  </p>
+                  {ADDITIONAL_MANAGER_RELATIONSHIPS.map((relationship) => {
+                    const people = relationship.multiple
+                      ? (employee?.managerHierarchy?.projectManagers ?? [])
+                      : [ employee?.managerHierarchy?.departmentHead ].filter(Boolean)
+
+                    return (
+                      <div key={relationship.value} className="grid gap-1.5">
+                        <span className="text-sm font-medium">{relationship.label}</span>
+                        {people.length === 0 ? (
+                          <p className="rounded-lg border border-dashed p-2.5 text-center text-xs text-muted-foreground">
+                            Not assigned
+                          </p>
+                        ) : (
+                          people.map((person) => (
+                            <div key={person!.id} className="flex items-center gap-2.5 rounded-lg border p-2.5">
+                              <Avatar size="sm">
+                                {person!.profilePhotoUrl && (
+                                  <AvatarImage src={photoUrl(person!.profilePhotoUrl)} alt={person!.fullName} />
+                                )}
+                                <AvatarFallback className="bg-role-hr/12 text-[10px] text-role-hr">
+                                  {initialsOf(person!.fullName)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium">{person!.fullName}</p>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {person!.designationTitle ?? person!.employeeCode}
+                                </p>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
                 <ReadOnlyNote>Reporting managers are assigned by Admin or HR.</ReadOnlyNote>
               </>
             )}

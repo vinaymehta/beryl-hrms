@@ -15,6 +15,14 @@ module Permissions
       attendance.view attendance.manage
       leave.view leave.create leave.approve
       documents.view documents.create documents.delete documents.manage_own
+      employee_history.view compensation.manage assets.manage
+      goals.manage skills.manage training.manage pip.manage
+      appraisal_feedback.manage
+      appraisal_templates.view appraisal_templates.manage
+      appraisal_cycles.view appraisal_cycles.manage
+      appraisals.view_all appraisals.submit_self appraisals.review
+      appraisals.release appraisals.manage_compensation
+      notifications.view
       payroll.view payroll.manage
       expenses.view expenses.create expenses.approve
       mail.view mail.search

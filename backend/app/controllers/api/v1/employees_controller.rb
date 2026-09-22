@@ -4,14 +4,20 @@ module Api
       rescue_from ::Employees::AccountProvisioner::Error, with: :render_unprocessable
       rescue_from ::Employee::ManagerHierarchyError, with: :render_unprocessable
 
-      # Employee → Primary Manager → (optional) Secondary Manager → Final
-      # Manager. One request param per slot: absent means "leave this slot
-      # alone", an explicit null or "" clears it, an id sets it.
+      # §4's five relationships. One request param per slot: absent means
+      # "leave this slot alone", an explicit null or "" clears it.
+      #
+      # The four single-valued slots take an id; `project_manager` takes an
+      # ARRAY, which is why it is listed separately — permitting a scalar and an
+      # array through one code path would silently drop one of them.
       MANAGER_PARAMS = {
         "primary" => :primary_manager_id,
         "secondary" => :secondary_manager_id,
-        "final" => :final_manager_id
+        "final" => :final_manager_id,
+        "department_head" => :department_head_id
       }.freeze
+
+      MULTI_MANAGER_PARAMS = { "project_manager" => :project_manager_ids }.freeze
 
       def index
         authorize Employee
@@ -110,7 +116,8 @@ module Api
         def employee_params
           params.permit(
             :employee_code, :first_name, :last_name, :department_id, :designation_id,
-            :date_of_joining, :status, :current_level, :date_of_birth, :gender, :phone, :personal_email,
+            :date_of_joining, :status, :current_level, :employment_type, :work_location,
+            :date_of_birth, :gender, :phone, :personal_email,
             :address_line1, :address_line2, :city, :state, :postal_code, :country,
             :emergency_contact_name, :emergency_contact_phone, :profile_photo
           )
@@ -123,10 +130,16 @@ module Api
         # touch the manager hierarchy must not need the permission to change it.
         def apply_manager_hierarchy(employee)
           submitted = MANAGER_PARAMS.select { |_level, key| params.key?(key) }
+                                    .transform_values { |key| params[key] }
+          MULTI_MANAGER_PARAMS.each do |level, key|
+            next unless params.key?(key)
+
+            submitted[level] = Array(params.permit(key => [])[key])
+          end
           return if submitted.empty?
 
           authorize employee, :manage_reporting_managers?
-          employee.assign_managers!(submitted.transform_values { |key| params[key] })
+          employee.assign_managers!(submitted)
           ::Audit::Record.call(action: "employee.managers_assigned", auditable: employee, request: request)
         end
 

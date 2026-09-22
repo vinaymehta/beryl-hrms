@@ -23,6 +23,11 @@ class Employee < ApplicationRecord
   # ArgumentError from the setter, which surfaces as a 500 rather than the 422
   # every other bad field on this form produces. allow_nil because the level
   # is genuinely optional: existing records have none.
+  # §3's employment TYPE, a different axis from `status` (the lifecycle above).
+  enum :employment_type,
+       { full_time: 0, part_time: 1, contract: 2, intern: 3, consultant: 4 },
+       prefix: :employment, validate: { allow_nil: true }
+
   enum :current_level,
        { intern: 0, junior: 1, senior: 2, lead: 3, manager: 4 },
        prefix: :level, validate: { allow_nil: true }
@@ -53,34 +58,107 @@ class Employee < ApplicationRecord
            dependent: :destroy,
            inverse_of: :manager
 
-  # has_one per level rather than a single has_many every caller has to filter:
-  # the cardinality (at most one each) IS the rule, so the associations should
-  # state it. The DB's unique index on (employee_id, manager_level) is what
-  # actually guarantees it.
-  EmployeeManager::LEVELS.each do |level|
-    has_one :"#{level}_manager_assignment",
+  # has_one for the single-valued levels rather than a has_many every caller
+  # has to filter: the cardinality IS the rule, so the association should state
+  # it. EmployeeManager enforces it (the DB index can't, now that one level is
+  # plural).
+  #
+  # Association names come from EmployeeManager::ASSOCIATION_FOR_LEVEL — a
+  # department head is not a "department_head_manager".
+  EmployeeManager::SINGLE_LEVELS.each do |level|
+    association = EmployeeManager::ASSOCIATION_FOR_LEVEL.fetch(level)
+
+    has_one :"#{association}_assignment",
             -> { where(manager_level: EmployeeManager.manager_levels[level]) },
             class_name: "EmployeeManager",
             inverse_of: :employee,
             dependent: nil
-    has_one :"#{level}_manager",
-            through: :"#{level}_manager_assignment",
-            source: :manager
+    has_one association, through: :"#{association}_assignment", source: :manager
   end
+
+  # §4's one plural slot. A has_many, because an employee may sit on several
+  # projects at once — and deliberately separate from the review chain, which
+  # the appraisal workflow reads and this has no part in.
+  has_many :project_manager_assignments,
+           -> { where(manager_level: EmployeeManager.manager_levels["project_manager"]) },
+           class_name: "EmployeeManager",
+           inverse_of: :employee,
+           dependent: nil
+  has_many :project_managers, through: :project_manager_assignments, source: :manager
+
+  # --- Appraisals -----------------------------------------------------------
+  # `appraisals` are this employee's own; the three manager associations are the
+  # ones they REVIEW. nullify rather than destroy on the reviewer side: removing
+  # a manager must not take somebody else's appraisal history with it.
+  # --- Phase 1 history + Phase 5 continuous performance --------------------
+  # dependent: :destroy throughout: these records only mean anything in the
+  # context of the employee they describe.
+  has_many :employment_events,
+           -> { chronological },
+           class_name: "EmployeeEmploymentEvent", dependent: :destroy, inverse_of: :employee
+  has_many :compensation_records,
+           -> { chronological },
+           class_name: "EmployeeCompensationRecord", dependent: :destroy, inverse_of: :employee
+  has_many :assets, class_name: "EmployeeAsset", dependent: :nullify, inverse_of: :employee
+  has_many :goals, -> { newest_first }, class_name: "EmployeeGoal", dependent: :destroy, inverse_of: :employee
+  has_many :skills, -> { order(:name) }, class_name: "EmployeeSkill", dependent: :destroy, inverse_of: :employee
+  has_many :trainings, -> { newest_first }, class_name: "EmployeeTraining", dependent: :destroy, inverse_of: :employee
+  has_many :improvement_plans,
+           -> { newest_first },
+           class_name: "PerformanceImprovementPlan", dependent: :destroy, inverse_of: :employee
+
+  has_many :appraisals, dependent: :destroy
+  has_many :appraisals_as_primary_manager,
+           class_name: "Appraisal", foreign_key: :primary_manager_id, dependent: :nullify, inverse_of: :primary_manager
+  has_many :appraisals_as_secondary_manager,
+           class_name: "Appraisal", foreign_key: :secondary_manager_id, dependent: :nullify, inverse_of: :secondary_manager
+  has_many :appraisals_as_final_manager,
+           class_name: "Appraisal", foreign_key: :final_manager_id, dependent: :nullify, inverse_of: :final_manager
 
   has_one_attached :profile_photo
 
   validates :employee_code, presence: true, uniqueness: { scope: :company_id }
   validates :first_name, :last_name, presence: true
 
-  # The hierarchy as the API and the UI talk about it.
+  # §3: "structured history rather than overwriting past values", and §26:
+  # historical records must not change when current attributes do. Recorded by
+  # callback rather than by a form — history somebody has to remember to write
+  # down is not history. The events themselves are immutable.
+  after_create :record_joining_event
+  after_update :record_employment_changes
+
+  # `has_one :through` gives a reader for the RECORD but not for its id, and
+  # plenty of callers only want the id (snapshotting a cycle's reviewers, say).
+  # Defined explicitly rather than reaching through the association every time.
+  EmployeeManager::SINGLE_LEVELS.each do |level|
+    define_method(:"#{EmployeeManager::ASSOCIATION_FOR_LEVEL.fetch(level)}_id") { assigned_manager_id(level) }
+  end
+
+  def project_manager_ids
+    manager_assignments_for("project_manager").map(&:manager_id)
+  end
+
+  # The full §4 hierarchy as the API and the UI talk about it.
+  #
+  # The three review-chain slots plus the two that sit outside it. Department
+  # Head is its own entry and is never derived from the Final Reviewer — §4
+  # lists them separately, and an employee's department head must not be
+  # treated as their final reviewer.
   def manager_hierarchy
-    { "primary" => primary_manager, "secondary" => secondary_manager, "final" => final_manager }
+    {
+      "primary" => primary_manager,
+      "secondary" => secondary_manager,
+      "final" => final_manager,
+      "department_head" => department_head,
+      "project_managers" => project_managers.to_a
+    }
   end
 
   # Primary and Final are both required for a complete hierarchy; Secondary is
   # optional. Reported rather than enforced as a blanket model validation — see
   # #enforce_hierarchy_shape! for exactly where the line is drawn and why.
+  # Primary and Final only: the review chain is what a cycle needs. Project
+  # managers and a department head are orthogonal and never block an appraisal.
   def manager_hierarchy_complete?
     assigned_manager_id("primary").present? && assigned_manager_id("final").present?
   end
@@ -88,6 +166,17 @@ class Employee < ApplicationRecord
   def full_name
     "#{first_name} #{last_name}".strip
   end
+
+  # The employment fields whose changes are worth a history entry, mapped to
+  # the event type each produces. Address and phone are deliberately absent:
+  # correcting a typo in a postcode is not an employment event.
+  TRACKED_EMPLOYMENT_CHANGES = {
+    "designation_id" => :designation_changed,
+    "department_id" => :department_changed,
+    "status" => :status_changed,
+    "employment_type" => :employment_type_changed,
+    "work_location" => :location_changed
+  }.freeze
 
   # Applies the submitted slots of the reporting-manager hierarchy.
   #
@@ -97,19 +186,112 @@ class Employee < ApplicationRecord
   #
   # Raises (rolling the caller's transaction back) rather than half-applying.
   # Authorization is the CALLER's job — EmployeePolicy#manage_reporting_managers?.
+  # Single-valued levels take an id (or blank to clear); `project_manager`
+  # takes an ARRAY of ids and is synced as a set.
   def assign_managers!(assignments)
-    assignments.each do |level, manager_id|
+    assignments.each do |level, value|
       level = level.to_s
       raise ManagerHierarchyError, "#{level} is not a manager level" unless EmployeeManager::LEVELS.include?(level)
 
-      apply_manager_slot(level, manager_id)
+      if EmployeeManager.single_level?(level)
+        apply_manager_slot(level, value)
+      else
+        sync_multi_level(level, value)
+      end
     end
 
     reset_manager_associations
     enforce_hierarchy_shape!
+    record_manager_change(assignments.keys)
+  end
+
+  # Reads the loaded association when it is already in memory, so a
+  # `includes(:manager_assignments)` on a list doesn't turn into N queries.
+  def assigned_manager_id(level)
+    if manager_assignments.loaded?
+      manager_assignments.detect { |a| a.manager_level == level.to_s }&.manager_id
+    else
+      manager_assignments.find_by(manager_level: level)&.manager_id
+    end
   end
 
   private
+    def record_joining_event
+      employment_events.create!(
+        event_type: :joined,
+        to_value: designation&.title || department&.name,
+        effective_on: date_of_joining || Date.current,
+        recorded_by: Current.user
+      )
+    end
+
+    def record_employment_changes
+      TRACKED_EMPLOYMENT_CHANGES.each do |attribute, event_type|
+        change = previous_changes[attribute]
+        next if change.blank?
+
+        employment_events.create!(
+          event_type: event_type,
+          from_value: readable_employment_value(attribute, change.first),
+          to_value: readable_employment_value(attribute, change.last),
+          effective_on: Date.current,
+          recorded_by: Current.user
+        )
+      end
+    end
+
+    def record_manager_change(levels)
+      levels.each do |level|
+        association = EmployeeManager::ASSOCIATION_FOR_LEVEL.fetch(level.to_s)
+        assigned = public_send(association)
+        # The plural slot records the whole set, so the history entry reads as
+        # "who are the project managers now" rather than one line per person.
+        to_value = assigned.is_a?(Enumerable) ? assigned.map(&:full_name).join(", ").presence : assigned&.full_name
+
+        employment_events.create!(
+          event_type: :manager_changed,
+          from_value: level.to_s,
+          to_value: to_value,
+          effective_on: Date.current,
+          recorded_by: Current.user
+        )
+      end
+    end
+
+    # Names, not ids: an event has to stay readable after the record it points
+    # at is renamed or removed (§26).
+    def readable_employment_value(attribute, raw)
+      return nil if raw.blank?
+
+      case attribute
+      when "designation_id" then Designation.find_by(id: raw)&.title
+      when "department_id" then Department.find_by(id: raw)&.name
+      when "status" then self.class.statuses.key(raw) || raw
+      when "employment_type" then self.class.employment_types.key(raw) || raw
+      else raw.to_s
+      end
+    end
+
+    # Adds and removes only what changed, so an unrelated save doesn't churn the
+    # rows (and their history entries).
+    def sync_multi_level(level, manager_ids)
+      desired = Array(manager_ids).compact_blank.map(&:to_i).uniq
+      current = manager_assignments_for(level).map(&:manager_id)
+
+      manager_assignments.where(manager_level: level, manager_id: current - desired).destroy_all
+      (desired - current).each do |manager_id|
+        manager_assignments.create!(manager_level: level, manager_id: manager_id)
+      end
+    end
+
+    def manager_assignments_for(level)
+      if manager_assignments.loaded?
+        manager_assignments.select { |a| a.manager_level == level.to_s }
+      else
+        manager_assignments.where(manager_level: level).to_a
+      end
+    end
+
     def apply_manager_slot(level, manager_id)
       existing = manager_assignments.find_by(manager_level: level)
 
@@ -126,20 +308,24 @@ class Employee < ApplicationRecord
 
     def reset_manager_associations
       manager_assignments.reset
-      EmployeeManager::LEVELS.each do |level|
-        association(:"#{level}_manager_assignment").reset
-        association(:"#{level}_manager").reset
+      EmployeeManager::SINGLE_LEVELS.each do |level|
+        association_name = EmployeeManager::ASSOCIATION_FOR_LEVEL.fetch(level)
+        association(:"#{association_name}_assignment").reset
+        association(association_name).reset
       end
+      association(:project_manager_assignments).reset
+      association(:project_managers).reset
     end
 
-    def assigned_manager_id(level)
-      manager_assignments.find_by(manager_level: level)&.manager_id
-    end
 
-    # The Primary Manager anchors the chain: a Secondary supplements them (it is
-    # the cross-project/shared-reporting slot, not a substitute), and a Final
-    # sits above them. Assigning either without a Primary would leave a
-    # hierarchy with a hole at the top, so any assignment at all requires one.
+
+    # The Primary Manager anchors the REVIEW CHAIN: a Secondary supplements them
+    # and a Final sits above them, so neither can stand without a Primary.
+    #
+    # Project Managers and the Department Head are deliberately exempt — §4
+    # lists them as relationships alongside the chain, not inside it, and an
+    # employee can perfectly well have a department head before their review
+    # line is set up.
     #
     # Note what is deliberately NOT enforced here: that a Final is present
     # whenever a Primary is. Both are required for a COMPLETE hierarchy, and the

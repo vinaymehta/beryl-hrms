@@ -27,6 +27,8 @@ RSpec.describe "Api::V1::Employees", type: :request do
     post "/api/v1/employees", params: attrs.to_json, headers: json_headers
   end
 
+  def body_hierarchy = response.parsed_body.dig("data", "managerHierarchy")
+
   def employee_for(email)
     in_tenant { company.employees.find_by!(user_id: company.users.find_by!(email_address: email).id) }
   end
@@ -310,6 +312,189 @@ RSpec.describe "Api::V1::Employees", type: :request do
 
       expect(response).to have_http_status(:not_found)
       expect(in_tenant { report.reload.first_name }).not_to eq("Renamed")
+    end
+  end
+
+  describe "project managers (§4) — the one plural slot" do
+    it "accepts a single project manager" do
+      pm = in_tenant { create(:employee, company: company, first_name: "Pam", last_name: "Project") }
+      employee = in_tenant { create(:employee, company: company) }
+
+      patch "/api/v1/employees/#{employee.id}",
+            params: { projectManagerIds: [ pm.id ] }.to_json, headers: json_headers
+
+      expect(response).to have_http_status(:ok)
+      expect(body_hierarchy["projectManagers"].map { |m| m["fullName"] }).to eq([ "Pam Project" ])
+    end
+
+    it "accepts SEVERAL project managers at once" do
+      one = in_tenant { create(:employee, company: company, first_name: "One", last_name: "Pm") }
+      two = in_tenant { create(:employee, company: company, first_name: "Two", last_name: "Pm") }
+      three = in_tenant { create(:employee, company: company, first_name: "Three", last_name: "Pm") }
+      employee = in_tenant { create(:employee, company: company) }
+
+      patch "/api/v1/employees/#{employee.id}",
+            params: { projectManagerIds: [ one.id, two.id, three.id ] }.to_json, headers: json_headers
+
+      expect(response).to have_http_status(:ok)
+      expect(body_hierarchy["projectManagers"].map { |m| m["fullName"] })
+        .to match_array([ "One Pm", "Two Pm", "Three Pm" ])
+      expect(in_tenant { employee.reload.project_manager_ids.size }).to eq(3)
+    end
+
+    it "syncs the set rather than appending to it" do
+      one = in_tenant { create(:employee, company: company) }
+      two = in_tenant { create(:employee, company: company) }
+      employee = in_tenant { create(:employee, company: company) }
+      in_tenant { employee.assign_managers!("project_manager" => [ one.id, two.id ]) }
+
+      patch "/api/v1/employees/#{employee.id}",
+            params: { projectManagerIds: [ two.id ] }.to_json, headers: json_headers
+
+      expect(body_hierarchy["projectManagers"].map { |m| m["id"] }).to eq([ two.id ])
+    end
+
+    it "clears them when sent an empty array" do
+      pm = in_tenant { create(:employee, company: company) }
+      employee = in_tenant { create(:employee, company: company) }
+      in_tenant { employee.assign_managers!("project_manager" => [ pm.id ]) }
+
+      patch "/api/v1/employees/#{employee.id}",
+            params: { projectManagerIds: [] }.to_json, headers: json_headers
+
+      expect(body_hierarchy["projectManagers"]).to be_empty
+    end
+
+    it "does not need a primary manager first — it sits outside the review chain" do
+      pm = in_tenant { create(:employee, company: company) }
+      employee = in_tenant { create(:employee, company: company) }
+
+      patch "/api/v1/employees/#{employee.id}",
+            params: { projectManagerIds: [ pm.id ] }.to_json, headers: json_headers
+
+      expect(response).to have_http_status(:ok)
+      expect(body_hierarchy["primary"]).to be_nil
+    end
+
+    it "keeps the same person from being added twice" do
+      pm = in_tenant { create(:employee, company: company) }
+      employee = in_tenant { create(:employee, company: company) }
+
+      patch "/api/v1/employees/#{employee.id}",
+            params: { projectManagerIds: [ pm.id, pm.id ] }.to_json, headers: json_headers
+
+      expect(response).to have_http_status(:ok)
+      expect(body_hierarchy["projectManagers"].size).to eq(1)
+    end
+
+    it "still refuses self, another company, and an inactive employee" do
+      employee = in_tenant { create(:employee, company: company) }
+      inactive = in_tenant { create(:employee, company: company, status: :inactive) }
+      outsider = create(:company)
+      foreign = ActsAsTenant.with_tenant(outsider) { create(:employee, company: outsider) }
+
+      [ employee.id, inactive.id, foreign.id ].each do |bad_id|
+        patch "/api/v1/employees/#{employee.id}",
+              params: { projectManagerIds: [ bad_id ] }.to_json, headers: json_headers
+        expect(response).to have_http_status(:unprocessable_content)
+      end
+      expect(in_tenant { employee.reload.project_manager_ids }).to be_empty
+    end
+  end
+
+  describe "department head (§4) — separate from the final reviewer" do
+    it "is its own relationship, held by a different person" do
+      head = in_tenant { create(:employee, company: company, first_name: "Dana", last_name: "Head") }
+      final = in_tenant { create(:employee, company: company, first_name: "Fin", last_name: "Final") }
+      primary = in_tenant { create(:employee, company: company) }
+      employee = in_tenant { create(:employee, company: company) }
+
+      patch "/api/v1/employees/#{employee.id}",
+            params: { primaryManagerId: primary.id, finalManagerId: final.id,
+                      departmentHeadId: head.id }.to_json, headers: json_headers
+
+      expect(response).to have_http_status(:ok)
+      hierarchy = body_hierarchy
+      expect(hierarchy["departmentHead"]["fullName"]).to eq("Dana Head")
+      expect(hierarchy["final"]["fullName"]).to eq("Fin Final")
+      expect(hierarchy["departmentHead"]["id"]).not_to eq(hierarchy["final"]["id"])
+    end
+
+    it "is NOT inferred from the final reviewer when only the final is set" do
+      final = in_tenant { create(:employee, company: company) }
+      primary = in_tenant { create(:employee, company: company) }
+      employee = in_tenant { create(:employee, company: company) }
+
+      patch "/api/v1/employees/#{employee.id}",
+            params: { primaryManagerId: primary.id, finalManagerId: final.id }.to_json,
+            headers: json_headers
+
+      expect(body_hierarchy["departmentHead"]).to be_nil
+    end
+
+    it "can be set with no review chain at all" do
+      head = in_tenant { create(:employee, company: company) }
+      employee = in_tenant { create(:employee, company: company) }
+
+      patch "/api/v1/employees/#{employee.id}",
+            params: { departmentHeadId: head.id }.to_json, headers: json_headers
+
+      expect(response).to have_http_status(:ok)
+      expect(body_hierarchy["departmentHead"]["id"]).to eq(head.id)
+    end
+
+    it "holds at most one person" do
+      first = in_tenant { create(:employee, company: company, first_name: "First", last_name: "Head") }
+      second = in_tenant { create(:employee, company: company, first_name: "Second", last_name: "Head") }
+      employee = in_tenant { create(:employee, company: company) }
+
+      patch "/api/v1/employees/#{employee.id}",
+            params: { departmentHeadId: first.id }.to_json, headers: json_headers
+      patch "/api/v1/employees/#{employee.id}",
+            params: { departmentHeadId: second.id }.to_json, headers: json_headers
+
+      expect(body_hierarchy["departmentHead"]["fullName"]).to eq("Second Head")
+      expect(in_tenant { employee.reload.manager_assignments.where(manager_level: :department_head).count }).to eq(1)
+    end
+  end
+
+  describe "the five slots stay independent" do
+    it "keeps project managers and the department head out of the review chain" do
+      primary = in_tenant { create(:employee, company: company, first_name: "Pri", last_name: "Mary") }
+      final = in_tenant { create(:employee, company: company, first_name: "Fin", last_name: "Al") }
+      head = in_tenant { create(:employee, company: company, first_name: "Dept", last_name: "Head") }
+      pm = in_tenant { create(:employee, company: company, first_name: "Proj", last_name: "Mgr") }
+      employee = in_tenant { create(:employee, company: company) }
+
+      patch "/api/v1/employees/#{employee.id}",
+            params: { primaryManagerId: primary.id, finalManagerId: final.id,
+                      departmentHeadId: head.id, projectManagerIds: [ pm.id ] }.to_json,
+            headers: json_headers
+
+      hierarchy = body_hierarchy
+      names = {
+        primary: hierarchy["primary"]["fullName"],
+        final: hierarchy["final"]["fullName"],
+        head: hierarchy["departmentHead"]["fullName"],
+        pm: hierarchy["projectManagers"].first["fullName"]
+      }
+      # Four slots, four different people, none standing in for another.
+      expect(names.values.uniq.size).to eq(4)
+      expect(hierarchy["managerHierarchyComplete"]).to be_nil # lives on the employee, not the hierarchy
+      expect(response.parsed_body["data"]["managerHierarchyComplete"]).to be(true)
+    end
+
+    it "leaves an untouched slot alone" do
+      pm = in_tenant { create(:employee, company: company) }
+      head = in_tenant { create(:employee, company: company) }
+      employee = in_tenant { create(:employee, company: company) }
+      in_tenant { employee.assign_managers!("project_manager" => [ pm.id ], "department_head" => head.id) }
+
+      patch "/api/v1/employees/#{employee.id}",
+            params: { phone: "555-0100" }.to_json, headers: json_headers
+
+      expect(body_hierarchy["projectManagers"].size).to eq(1)
+      expect(body_hierarchy["departmentHead"]).to be_present
     end
   end
 

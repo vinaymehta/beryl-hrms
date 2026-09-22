@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_21_160100) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_22_110000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -61,6 +61,251 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_160100) do
     t.index ["company_id", "operation"], name: "index_ai_processing_logs_on_company_id_and_operation"
     t.index ["company_id"], name: "index_ai_processing_logs_on_company_id"
     t.index ["job_id"], name: "index_ai_processing_logs_on_job_id"
+  end
+
+  create_table "appraisal_answers", force: :cascade do |t|
+    t.bigint "appraisal_revision_id", null: false
+    t.bigint "appraisal_template_question_id", null: false
+    t.text "comment"
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.integer "rating"
+    t.datetime "updated_at", null: false
+    t.index ["appraisal_revision_id", "appraisal_template_question_id"], name: "index_appraisal_answers_uniqueness", unique: true
+    t.index ["appraisal_revision_id"], name: "index_appraisal_answers_on_revision"
+    t.index ["appraisal_template_question_id"], name: "index_appraisal_answers_on_question"
+    t.index ["company_id"], name: "index_appraisal_answers_on_company_id"
+  end
+
+  create_table "appraisal_comments", force: :cascade do |t|
+    t.bigint "appraisal_id", null: false
+    t.bigint "appraisal_revision_id"
+    t.bigint "author_user_id", null: false
+    t.text "body", null: false
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.integer "visibility", default: 1, null: false
+    t.index ["appraisal_id", "visibility"], name: "index_appraisal_comments_on_appraisal_id_and_visibility"
+    t.index ["appraisal_id"], name: "index_appraisal_comments_on_appraisal_id"
+    t.index ["appraisal_revision_id"], name: "index_appraisal_comments_on_revision"
+    t.index ["author_user_id"], name: "index_appraisal_comments_on_author_user_id"
+    t.index ["company_id"], name: "index_appraisal_comments_on_company_id"
+  end
+
+  create_table "appraisal_compensation_decisions", force: :cascade do |t|
+    t.bigint "actor_user_id"
+    t.bigint "appraisal_id", null: false
+    t.decimal "approved_compensation", precision: 12, scale: 2
+    t.decimal "approved_increment_percentage", precision: 5, scale: 2
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.decimal "current_compensation", precision: 12, scale: 2
+    t.bigint "current_designation_id"
+    t.date "effective_date"
+    t.date "last_increment_on"
+    t.decimal "last_increment_percentage", precision: 5, scale: 2
+    t.text "management_comments"
+    t.text "new_responsibilities"
+    t.date "promotion_effective_date"
+    t.text "promotion_reason"
+    t.integer "promotion_recommendation", default: 0, null: false
+    t.bigint "proposed_designation_id"
+    t.decimal "recommended_compensation", precision: 12, scale: 2
+    t.decimal "recommended_increment_percentage", precision: 5, scale: 2
+    t.datetime "updated_at", null: false
+    t.index ["actor_user_id"], name: "index_appraisal_compensation_decisions_on_actor_user_id"
+    t.index ["appraisal_id"], name: "index_appraisal_compensation_decisions_on_appraisal_id", unique: true
+    t.index ["company_id"], name: "index_appraisal_compensation_decisions_on_company_id"
+    t.index ["current_designation_id"], name: "idx_on_current_designation_id_62ccb4d005"
+    t.index ["proposed_designation_id"], name: "idx_on_proposed_designation_id_d62dc8ae26"
+  end
+
+  create_table "appraisal_cycle_participants", force: :cascade do |t|
+    t.bigint "appraisal_cycle_id", null: false
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "employee_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["appraisal_cycle_id", "employee_id"], name: "index_appraisal_participants_uniqueness", unique: true
+    t.index ["appraisal_cycle_id"], name: "index_appraisal_cycle_participants_on_appraisal_cycle_id"
+    t.index ["company_id"], name: "index_appraisal_cycle_participants_on_company_id"
+    t.index ["employee_id"], name: "index_appraisal_cycle_participants_on_employee_id"
+  end
+
+  create_table "appraisal_cycles", force: :cascade do |t|
+    t.bigint "appraisal_template_id", null: false
+    t.date "assessment_period_end"
+    t.date "assessment_period_start"
+    t.datetime "closed_at"
+    t.bigint "company_id", null: false
+    t.date "compensation_effective_date"
+    t.datetime "created_at", null: false
+    t.bigint "created_by_id"
+    t.text "description"
+    t.date "employee_submission_deadline"
+    t.date "finalization_deadline"
+    t.string "name", null: false
+    t.date "primary_review_deadline"
+    t.integer "review_type", default: 0, null: false
+    t.date "secondary_review_deadline"
+    t.boolean "secondary_review_enabled", default: false, null: false
+    t.datetime "started_at"
+    t.date "starts_on"
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["appraisal_template_id"], name: "index_appraisal_cycles_on_appraisal_template_id"
+    t.index ["company_id", "review_type"], name: "index_appraisal_cycles_on_company_id_and_review_type"
+    t.index ["company_id", "status"], name: "index_appraisal_cycles_on_company_id_and_status"
+    t.index ["company_id"], name: "index_appraisal_cycles_on_company_id"
+    t.index ["created_by_id"], name: "index_appraisal_cycles_on_created_by_id"
+  end
+
+  create_table "appraisal_feedback_requests", force: :cascade do |t|
+    t.bigint "appraisal_id", null: false
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.text "prompt"
+    t.bigint "requested_by_id"
+    t.bigint "requested_from_id", null: false
+    t.datetime "responded_at"
+    t.text "response"
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.integer "visibility", default: 1, null: false
+    t.index ["appraisal_id", "requested_from_id"], name: "index_feedback_requests_uniqueness", unique: true
+    t.index ["appraisal_id"], name: "index_appraisal_feedback_requests_on_appraisal_id"
+    t.index ["company_id"], name: "index_appraisal_feedback_requests_on_company_id"
+    t.index ["requested_by_id"], name: "index_appraisal_feedback_requests_on_requested_by_id"
+    t.index ["requested_from_id"], name: "index_appraisal_feedback_requests_on_requested_from_id"
+  end
+
+  create_table "appraisal_revisions", force: :cascade do |t|
+    t.text "achievements"
+    t.bigint "appraisal_id", null: false
+    t.bigint "author_employee_id"
+    t.bigint "author_user_id"
+    t.decimal "calculated_score", precision: 6, scale: 2
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.text "improvement_areas"
+    t.text "next_period_goals"
+    t.integer "stage", null: false
+    t.text "strengths"
+    t.datetime "submitted_at", null: false
+    t.text "summary"
+    t.text "training_needs"
+    t.datetime "updated_at", null: false
+    t.integer "version_number", null: false
+    t.index ["appraisal_id", "stage"], name: "index_appraisal_revisions_on_appraisal_id_and_stage"
+    t.index ["appraisal_id", "version_number"], name: "index_appraisal_revisions_uniqueness", unique: true
+    t.index ["appraisal_id"], name: "index_appraisal_revisions_on_appraisal_id"
+    t.index ["author_employee_id"], name: "index_appraisal_revisions_on_author_employee_id"
+    t.index ["author_user_id"], name: "index_appraisal_revisions_on_author_user_id"
+    t.index ["company_id"], name: "index_appraisal_revisions_on_company_id"
+  end
+
+  create_table "appraisal_score_overrides", force: :cascade do |t|
+    t.bigint "actor_user_id"
+    t.bigint "appraisal_id", null: false
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.decimal "new_score", precision: 6, scale: 2, null: false
+    t.decimal "previous_score", precision: 6, scale: 2
+    t.text "reason", null: false
+    t.datetime "updated_at", null: false
+    t.index ["actor_user_id"], name: "index_appraisal_score_overrides_on_actor_user_id"
+    t.index ["appraisal_id"], name: "index_appraisal_score_overrides_on_appraisal_id"
+    t.index ["company_id"], name: "index_appraisal_score_overrides_on_company_id"
+  end
+
+  create_table "appraisal_template_categories", force: :cascade do |t|
+    t.bigint "appraisal_template_id", null: false
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.integer "lens", default: 0, null: false
+    t.string "name", null: false
+    t.integer "position", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.decimal "weight", precision: 5, scale: 2, default: "0.0", null: false
+    t.index ["appraisal_template_id", "position"], name: "index_appraisal_categories_on_template_and_position"
+    t.index ["appraisal_template_id"], name: "index_appraisal_template_categories_on_appraisal_template_id"
+    t.index ["company_id"], name: "index_appraisal_template_categories_on_company_id"
+  end
+
+  create_table "appraisal_template_questions", force: :cascade do |t|
+    t.bigint "appraisal_template_category_id", null: false
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.boolean "manager_rating", default: true, null: false
+    t.integer "position", default: 0, null: false
+    t.string "prompt", null: false
+    t.boolean "required", default: true, null: false
+    t.boolean "requires_comment", default: false, null: false
+    t.boolean "self_rating", default: true, null: false
+    t.datetime "updated_at", null: false
+    t.index ["appraisal_template_category_id"], name: "index_appraisal_questions_on_category"
+    t.index ["company_id"], name: "index_appraisal_template_questions_on_company_id"
+  end
+
+  create_table "appraisal_templates", force: :cascade do |t|
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "created_by_id"
+    t.text "description"
+    t.bigint "lineage_id"
+    t.string "name", null: false
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.integer "version", default: 1, null: false
+    t.index ["company_id", "lineage_id", "version"], name: "index_appraisal_templates_on_lineage_version", unique: true
+    t.index ["company_id", "status"], name: "index_appraisal_templates_on_company_id_and_status"
+    t.index ["company_id"], name: "index_appraisal_templates_on_company_id"
+    t.index ["created_by_id"], name: "index_appraisal_templates_on_created_by_id"
+  end
+
+  create_table "appraisal_transitions", force: :cascade do |t|
+    t.bigint "actor_user_id"
+    t.bigint "appraisal_id", null: false
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.integer "from_status"
+    t.text "notes"
+    t.integer "to_status", null: false
+    t.datetime "updated_at", null: false
+    t.index ["actor_user_id"], name: "index_appraisal_transitions_on_actor_user_id"
+    t.index ["appraisal_id", "created_at"], name: "index_appraisal_transitions_on_appraisal_id_and_created_at"
+    t.index ["appraisal_id"], name: "index_appraisal_transitions_on_appraisal_id"
+    t.index ["company_id"], name: "index_appraisal_transitions_on_company_id"
+  end
+
+  create_table "appraisals", force: :cascade do |t|
+    t.datetime "acknowledged_at"
+    t.text "acknowledgement_note"
+    t.bigint "appraisal_cycle_id", null: false
+    t.decimal "calculated_score", precision: 6, scale: 2
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "employee_id", null: false
+    t.bigint "final_manager_id"
+    t.decimal "final_score", precision: 6, scale: 2
+    t.bigint "primary_manager_id"
+    t.datetime "released_at"
+    t.bigint "released_by_id"
+    t.bigint "secondary_manager_id"
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["appraisal_cycle_id", "employee_id"], name: "index_appraisals_uniqueness", unique: true
+    t.index ["appraisal_cycle_id"], name: "index_appraisals_on_appraisal_cycle_id"
+    t.index ["company_id", "final_manager_id"], name: "index_appraisals_on_company_id_and_final_manager_id"
+    t.index ["company_id", "primary_manager_id"], name: "index_appraisals_on_company_id_and_primary_manager_id"
+    t.index ["company_id", "secondary_manager_id"], name: "index_appraisals_on_company_id_and_secondary_manager_id"
+    t.index ["company_id", "status"], name: "index_appraisals_on_company_id_and_status"
+    t.index ["company_id"], name: "index_appraisals_on_company_id"
+    t.index ["employee_id"], name: "index_appraisals_on_employee_id"
+    t.index ["released_by_id"], name: "index_appraisals_on_released_by_id"
   end
 
   create_table "attendance_records", force: :cascade do |t|
@@ -344,6 +589,81 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_160100) do
     t.index ["uploaded_by_id"], name: "index_documents_on_uploaded_by_id"
   end
 
+  create_table "employee_assets", force: :cascade do |t|
+    t.integer "asset_type", default: 0, null: false
+    t.date "assigned_on"
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "employee_id"
+    t.string "identifier"
+    t.string "name", null: false
+    t.text "note"
+    t.date "returned_on"
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "status"], name: "index_employee_assets_on_company_id_and_status"
+    t.index ["company_id"], name: "index_employee_assets_on_company_id"
+    t.index ["employee_id"], name: "index_employee_assets_on_employee_id"
+  end
+
+  create_table "employee_compensation_records", force: :cascade do |t|
+    t.decimal "annual_compensation", precision: 12, scale: 2
+    t.bigint "appraisal_id"
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.date "effective_on", null: false
+    t.bigint "employee_id", null: false
+    t.decimal "increment_percentage", precision: 5, scale: 2
+    t.text "note"
+    t.integer "reason", default: 0, null: false
+    t.bigint "recorded_by_id"
+    t.datetime "updated_at", null: false
+    t.index ["appraisal_id"], name: "index_employee_compensation_records_on_appraisal_id"
+    t.index ["company_id"], name: "index_employee_compensation_records_on_company_id"
+    t.index ["employee_id", "effective_on"], name: "index_compensation_records_on_employee_and_date"
+    t.index ["employee_id"], name: "index_employee_compensation_records_on_employee_id"
+    t.index ["recorded_by_id"], name: "index_employee_compensation_records_on_recorded_by_id"
+  end
+
+  create_table "employee_employment_events", force: :cascade do |t|
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.date "effective_on", null: false
+    t.bigint "employee_id", null: false
+    t.integer "event_type", null: false
+    t.string "from_value"
+    t.text "note"
+    t.bigint "recorded_by_id"
+    t.string "to_value"
+    t.datetime "updated_at", null: false
+    t.index ["company_id"], name: "index_employee_employment_events_on_company_id"
+    t.index ["employee_id", "effective_on"], name: "index_employment_events_on_employee_and_date"
+    t.index ["employee_id"], name: "index_employee_employment_events_on_employee_id"
+    t.index ["recorded_by_id"], name: "index_employee_employment_events_on_recorded_by_id"
+  end
+
+  create_table "employee_goals", force: :cascade do |t|
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "created_by_id"
+    t.text "description"
+    t.bigint "employee_id", null: false
+    t.text "manager_comment"
+    t.integer "priority", default: 1, null: false
+    t.text "progress_note"
+    t.bigint "source_appraisal_id"
+    t.integer "status", default: 0, null: false
+    t.text "success_criteria"
+    t.date "target_date"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id"], name: "index_employee_goals_on_company_id"
+    t.index ["created_by_id"], name: "index_employee_goals_on_created_by_id"
+    t.index ["employee_id", "status"], name: "index_employee_goals_on_employee_id_and_status"
+    t.index ["employee_id"], name: "index_employee_goals_on_employee_id"
+    t.index ["source_appraisal_id"], name: "index_employee_goals_on_source_appraisal_id"
+  end
+
   create_table "employee_managers", force: :cascade do |t|
     t.bigint "company_id", null: false
     t.datetime "created_at", null: false
@@ -353,9 +673,45 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_160100) do
     t.datetime "updated_at", null: false
     t.index ["company_id", "manager_id"], name: "index_employee_managers_on_company_and_manager"
     t.index ["company_id"], name: "index_employee_managers_on_company_id"
-    t.index ["employee_id", "manager_level"], name: "index_employee_managers_uniqueness", unique: true
+    t.index ["employee_id", "manager_level", "manager_id"], name: "index_employee_managers_uniqueness", unique: true
     t.index ["employee_id"], name: "index_employee_managers_on_employee_id"
     t.index ["manager_id"], name: "index_employee_managers_on_manager_id"
+  end
+
+  create_table "employee_skills", force: :cascade do |t|
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "employee_id", null: false
+    t.text "evidence"
+    t.string "name", null: false
+    t.integer "proficiency", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.boolean "validated", default: false, null: false
+    t.bigint "validated_by_id"
+    t.date "validated_on"
+    t.index ["company_id"], name: "index_employee_skills_on_company_id"
+    t.index ["employee_id", "name"], name: "index_employee_skills_uniqueness", unique: true
+    t.index ["employee_id"], name: "index_employee_skills_on_employee_id"
+    t.index ["validated_by_id"], name: "index_employee_skills_on_validated_by_id"
+  end
+
+  create_table "employee_trainings", force: :cascade do |t|
+    t.bigint "company_id", null: false
+    t.date "completed_on"
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.bigint "employee_id", null: false
+    t.date "identified_on"
+    t.string "name", null: false
+    t.bigint "source_appraisal_id"
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.bigint "validated_by_id"
+    t.index ["company_id"], name: "index_employee_trainings_on_company_id"
+    t.index ["employee_id", "status"], name: "index_employee_trainings_on_employee_id_and_status"
+    t.index ["employee_id"], name: "index_employee_trainings_on_employee_id"
+    t.index ["source_appraisal_id"], name: "index_employee_trainings_on_source_appraisal_id"
+    t.index ["validated_by_id"], name: "index_employee_trainings_on_validated_by_id"
   end
 
   create_table "employees", force: :cascade do |t|
@@ -373,6 +729,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_160100) do
     t.string "emergency_contact_name"
     t.string "emergency_contact_phone"
     t.string "employee_code", null: false
+    t.integer "employment_type"
     t.string "first_name", null: false
     t.string "gender"
     t.string "last_name", null: false
@@ -383,6 +740,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_160100) do
     t.integer "status", default: 0, null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id"
+    t.string "work_location"
     t.index ["company_id", "current_level"], name: "index_employees_on_company_id_and_current_level"
     t.index ["company_id", "department_id"], name: "index_employees_on_company_id_and_department_id"
     t.index ["company_id", "employee_code"], name: "index_employees_on_company_id_and_employee_code", unique: true
@@ -427,6 +785,47 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_160100) do
     t.index ["company_id"], name: "index_leave_requests_on_company_id"
     t.index ["employee_id", "start_date"], name: "index_leave_requests_on_employee_id_and_start_date"
     t.index ["employee_id"], name: "index_leave_requests_on_employee_id"
+  end
+
+  create_table "notifications", force: :cascade do |t|
+    t.string "action_url"
+    t.text "body"
+    t.string "category", null: false
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "notifiable_id"
+    t.string "notifiable_type"
+    t.datetime "read_at"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["company_id", "created_at"], name: "index_notifications_on_company_id_and_created_at"
+    t.index ["company_id"], name: "index_notifications_on_company_id"
+    t.index ["notifiable_type", "notifiable_id"], name: "index_notifications_on_notifiable_type_and_notifiable_id"
+    t.index ["user_id", "read_at"], name: "index_notifications_on_user_id_and_read_at"
+    t.index ["user_id"], name: "index_notifications_on_user_id"
+  end
+
+  create_table "performance_improvement_plans", force: :cascade do |t|
+    t.date "closed_on"
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.text "employee_comments"
+    t.bigint "employee_id", null: false
+    t.text "expected_improvement"
+    t.text "issue_description", null: false
+    t.text "measurable_targets"
+    t.bigint "opened_by_id"
+    t.text "outcome_note"
+    t.date "review_on"
+    t.date "starts_on"
+    t.integer "status", default: 0, null: false
+    t.text "support_provided"
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "status"], name: "index_performance_improvement_plans_on_company_id_and_status"
+    t.index ["company_id"], name: "index_performance_improvement_plans_on_company_id"
+    t.index ["employee_id"], name: "index_performance_improvement_plans_on_employee_id"
+    t.index ["opened_by_id"], name: "index_performance_improvement_plans_on_opened_by_id"
   end
 
   create_table "permissions", force: :cascade do |t|
@@ -523,6 +922,51 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_160100) do
   add_foreign_key "ai_processing_logs", "candidates"
   add_foreign_key "ai_processing_logs", "companies"
   add_foreign_key "ai_processing_logs", "jobs"
+  add_foreign_key "appraisal_answers", "appraisal_revisions"
+  add_foreign_key "appraisal_answers", "appraisal_template_questions"
+  add_foreign_key "appraisal_answers", "companies"
+  add_foreign_key "appraisal_comments", "appraisal_revisions"
+  add_foreign_key "appraisal_comments", "appraisals"
+  add_foreign_key "appraisal_comments", "companies"
+  add_foreign_key "appraisal_comments", "users", column: "author_user_id"
+  add_foreign_key "appraisal_compensation_decisions", "appraisals"
+  add_foreign_key "appraisal_compensation_decisions", "companies"
+  add_foreign_key "appraisal_compensation_decisions", "designations", column: "current_designation_id"
+  add_foreign_key "appraisal_compensation_decisions", "designations", column: "proposed_designation_id"
+  add_foreign_key "appraisal_compensation_decisions", "users", column: "actor_user_id"
+  add_foreign_key "appraisal_cycle_participants", "appraisal_cycles"
+  add_foreign_key "appraisal_cycle_participants", "companies"
+  add_foreign_key "appraisal_cycle_participants", "employees"
+  add_foreign_key "appraisal_cycles", "appraisal_templates"
+  add_foreign_key "appraisal_cycles", "companies"
+  add_foreign_key "appraisal_cycles", "users", column: "created_by_id"
+  add_foreign_key "appraisal_feedback_requests", "appraisals"
+  add_foreign_key "appraisal_feedback_requests", "companies"
+  add_foreign_key "appraisal_feedback_requests", "employees", column: "requested_from_id"
+  add_foreign_key "appraisal_feedback_requests", "users", column: "requested_by_id"
+  add_foreign_key "appraisal_revisions", "appraisals"
+  add_foreign_key "appraisal_revisions", "companies"
+  add_foreign_key "appraisal_revisions", "employees", column: "author_employee_id"
+  add_foreign_key "appraisal_revisions", "users", column: "author_user_id"
+  add_foreign_key "appraisal_score_overrides", "appraisals"
+  add_foreign_key "appraisal_score_overrides", "companies"
+  add_foreign_key "appraisal_score_overrides", "users", column: "actor_user_id"
+  add_foreign_key "appraisal_template_categories", "appraisal_templates"
+  add_foreign_key "appraisal_template_categories", "companies"
+  add_foreign_key "appraisal_template_questions", "appraisal_template_categories"
+  add_foreign_key "appraisal_template_questions", "companies"
+  add_foreign_key "appraisal_templates", "companies"
+  add_foreign_key "appraisal_templates", "users", column: "created_by_id"
+  add_foreign_key "appraisal_transitions", "appraisals"
+  add_foreign_key "appraisal_transitions", "companies"
+  add_foreign_key "appraisal_transitions", "users", column: "actor_user_id"
+  add_foreign_key "appraisals", "appraisal_cycles"
+  add_foreign_key "appraisals", "companies"
+  add_foreign_key "appraisals", "employees"
+  add_foreign_key "appraisals", "employees", column: "final_manager_id"
+  add_foreign_key "appraisals", "employees", column: "primary_manager_id"
+  add_foreign_key "appraisals", "employees", column: "secondary_manager_id"
+  add_foreign_key "appraisals", "users", column: "released_by_id"
   add_foreign_key "attendance_records", "companies"
   add_foreign_key "attendance_records", "employees"
   add_foreign_key "audit_logs", "companies"
@@ -551,9 +995,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_160100) do
   add_foreign_key "documents", "companies"
   add_foreign_key "documents", "employees"
   add_foreign_key "documents", "users", column: "uploaded_by_id"
+  add_foreign_key "employee_assets", "companies"
+  add_foreign_key "employee_assets", "employees"
+  add_foreign_key "employee_compensation_records", "appraisals"
+  add_foreign_key "employee_compensation_records", "companies"
+  add_foreign_key "employee_compensation_records", "employees"
+  add_foreign_key "employee_compensation_records", "users", column: "recorded_by_id"
+  add_foreign_key "employee_employment_events", "companies"
+  add_foreign_key "employee_employment_events", "employees"
+  add_foreign_key "employee_employment_events", "users", column: "recorded_by_id"
+  add_foreign_key "employee_goals", "appraisals", column: "source_appraisal_id"
+  add_foreign_key "employee_goals", "companies"
+  add_foreign_key "employee_goals", "employees"
+  add_foreign_key "employee_goals", "users", column: "created_by_id"
   add_foreign_key "employee_managers", "companies"
   add_foreign_key "employee_managers", "employees"
   add_foreign_key "employee_managers", "employees", column: "manager_id"
+  add_foreign_key "employee_skills", "companies"
+  add_foreign_key "employee_skills", "employees"
+  add_foreign_key "employee_skills", "users", column: "validated_by_id"
+  add_foreign_key "employee_trainings", "appraisals", column: "source_appraisal_id"
+  add_foreign_key "employee_trainings", "companies"
+  add_foreign_key "employee_trainings", "employees"
+  add_foreign_key "employee_trainings", "users", column: "validated_by_id"
   add_foreign_key "employees", "companies"
   add_foreign_key "employees", "departments"
   add_foreign_key "employees", "designations"
@@ -563,6 +1027,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_160100) do
   add_foreign_key "leave_requests", "companies"
   add_foreign_key "leave_requests", "employees"
   add_foreign_key "leave_requests", "users", column: "approved_by_id"
+  add_foreign_key "notifications", "companies"
+  add_foreign_key "notifications", "users"
+  add_foreign_key "performance_improvement_plans", "companies"
+  add_foreign_key "performance_improvement_plans", "employees"
+  add_foreign_key "performance_improvement_plans", "users", column: "opened_by_id"
   add_foreign_key "role_permissions", "permissions"
   add_foreign_key "role_permissions", "roles"
   add_foreign_key "roles", "companies"
