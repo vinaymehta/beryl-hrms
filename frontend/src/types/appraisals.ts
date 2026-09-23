@@ -244,6 +244,8 @@ export interface SelfAppraisalDraft {
 }
 
 export interface AppraisalDetail extends AppraisalSummary {
+  /** The subject's own compact record, for the page header. */
+  employee: EmployeeSummary | null
   cycle: AppraisalCycle
   /** The cycle's FROZEN template — never the newest version. */
   template: AppraisalTemplate

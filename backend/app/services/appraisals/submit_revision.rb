@@ -10,6 +10,11 @@ module Appraisals
   class SubmitRevision
     class Error < StandardError; end
 
+    # How a perspective's per-employee manager assessment is keyed inside a
+    # revision's `responses`, alongside the template's own field keys.
+    MANAGER_RATING_SUFFIX = "__manager_rating".freeze
+    MANAGER_SUMMARY_SUFFIX = "__manager_summary".freeze
+
     STAGE_FOR_STATUS = {
       "self_appraisal_open" => :self_appraisal,
       "primary_review" => :primary_review,
@@ -82,9 +87,19 @@ module Appraisals
 
       def template_field_keys
         structure = @appraisal.appraisal_cycle.appraisal_template.structure || {}
-        Array(structure["wizardSections"] || structure["wizard_sections"])
-          .flat_map { |section| Array(section["fields"]).map { |field| field["key"].to_s } }
-          .compact_blank
+        sections = Array(structure["wizardSections"] || structure["wizard_sections"])
+
+        sections.flat_map do |section|
+          keys = Array(section["fields"]).map { |field| field["key"].to_s }.compact_blank
+          next keys unless section["kind"] == "perspectives"
+
+          # A perspective's weight and focus belong to the TEMPLATE; the rating
+          # and the evidence behind it are this reviewer's assessment of this
+          # employee, so they are answered per appraisal rather than stored on
+          # the template. Derived from the template's own keys so the allowlist
+          # still comes from the form, not from whatever a client posts.
+          keys + keys.flat_map { |key| [ "#{key}#{MANAGER_RATING_SUFFIX}", "#{key}#{MANAGER_SUMMARY_SUFFIX}" ] }
+        end
       end
 
       def narrative_attributes

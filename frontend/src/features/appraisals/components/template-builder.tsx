@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
-  PlusIcon, Trash2Icon, ArrowLeftIcon, TriangleAlertIcon, CheckCircle2Icon, LayersIcon,
+  PlusIcon, Trash2Icon, ArrowLeftIcon, TriangleAlertIcon, CheckCircle2Icon, LayersIcon, ChevronDownIcon,
 } from "lucide-react"
 import { cn } from "cn"
 
@@ -81,7 +81,15 @@ function categoriesFrom(template?: AppraisalTemplate): DraftCategory[] {
  * flat one-row-per-question sheet, which has no such sections.
  */
 function structureFromImport(preview: TemplateImportPreview): Record<string, unknown> | null {
-  if (preview.layout !== "sectioned") return null
+  // Keyed off whether sections were actually FOUND, not off the layout label.
+  // Gating on `layout === "sectioned"` meant one unrecognised heading threw
+  // away every section that had been read successfully.
+  const hasSections =
+    (preview.perspectives?.length ?? 0) > 0 ||
+    (preview.developmentFields?.length ?? 0) > 0 ||
+    (preview.finalReviewFields?.length ?? 0) > 0 ||
+    (preview.ratingGuide?.length ?? 0) > 0
+  if (!hasSections) return null
 
   return {
     title: preview.title ?? null,
@@ -97,6 +105,107 @@ function structureFromImport(preview: TemplateImportPreview): Record<string, unk
     // renamed, added or removed section changes the form without a code change.
     wizardSections: preview.wizardSections ?? [],
   }
+}
+
+interface ImportedItem {
+  label: string
+  detail?: string | null
+}
+
+interface ImportedSectionData {
+  label: string
+  items: ImportedItem[]
+}
+
+/**
+ * What the workbook carried, as readable lists rather than counts.
+ *
+ * A bare "Development & career prompts: 5" is a receipt, not a review — it
+ * tells you something arrived but not whether it is the right something, which
+ * is indistinguishable from the import having silently dropped it. These rows
+ * open to show the actual labels the appraisal form will ask.
+ */
+function importedSections(structure: Record<string, unknown>): ImportedSectionData[] {
+  const list = <T,>(key: string) => (structure[key] as T[] | undefined) ?? []
+
+  const perspectives = list<{ name?: string; weight?: number; assessmentFocus?: string }>("perspectives")
+  const development = list<{ label?: string; value?: string }>("developmentFields")
+  const finalReview = list<{ label?: string; value?: string }>("finalReviewFields")
+  const guide = list<{ rating?: number; level?: string; definition?: string }>("ratingGuide")
+  const employee =
+    ((structure.employeeFields as { fields?: { label?: string; value?: string }[] })?.fields) ?? []
+  const steps = list<{ title?: string; fields?: unknown[] }>("wizardSections")
+
+  return [
+    {
+      label: "Performance perspectives",
+      items: perspectives.map((row) => ({
+        label: [ row.name, row.weight != null ? `${row.weight}%` : null ].filter(Boolean).join(" · "),
+        detail: row.assessmentFocus,
+      })),
+    },
+    {
+      label: "Development & career prompts",
+      items: development.map((row) => ({ label: row.label ?? "", detail: row.value })),
+    },
+    {
+      label: "Final review fields",
+      items: finalReview.map((row) => ({ label: row.label ?? "", detail: row.value })),
+    },
+    {
+      label: "Rating guide entries",
+      items: guide.map((row) => ({
+        label: [ row.rating, row.level ].filter((part) => part != null && part !== "").join(" · "),
+        detail: row.definition,
+      })),
+    },
+    {
+      label: "Employee information fields",
+      // Mostly blank in a template — the values are filled in per employee.
+      items: employee.map((row) => ({ label: row.label ?? "", detail: row.value })),
+    },
+    {
+      label: "Appraisal form steps",
+      items: steps.map((row) => ({
+        label: row.title ?? "",
+        detail: `${row.fields?.length ?? 0} field${(row.fields?.length ?? 0) === 1 ? "" : "s"}`,
+      })),
+    },
+  ].filter((section) => section.items.length > 0)
+}
+
+function ImportedSection({ section }: { section: ImportedSectionData }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <li className="overflow-hidden rounded-lg border">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-xs transition-colors hover:bg-muted/50"
+      >
+        <ChevronDownIcon
+          className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+        />
+        <span className="flex-1">{section.label}</span>
+        <Badge variant="outline" className="tabular-nums">
+          {section.items.length}
+        </Badge>
+      </button>
+
+      {open && (
+        <ul className="grid gap-1 border-t bg-muted/20 px-2.5 py-2">
+          {section.items.map((item, index) => (
+            <li key={`${item.label}-${index}`} className="text-xs">
+              <span className="font-medium text-foreground">{item.label || "(unnamed)"}</span>
+              {item.detail && <span className="text-muted-foreground"> — {item.detail}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  )
 }
 
 /** Parsed spreadsheet → the same draft shape a hand-built template uses. */
@@ -445,34 +554,33 @@ function TemplateBuilderBody({ source }: { source?: AppraisalTemplate }) {
               and reasonably concludes the other sections were dropped. They
               are not edited here — they are saved with the template exactly as
               the spreadsheet defined them. */}
+          {/* Loud when nothing came through. An import that finds the seven
+              areas and no sections looks like a success until the appraisal
+              form comes up short. */}
+          {categories.length > 0 && !structure && (
+            <section className="grid gap-1 rounded-xl border border-warning/40 bg-warning/5 p-4">
+              <p className="text-sm font-medium text-warning">
+                No perspectives, development prompts, final review or rating guide were read from this file
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Only the performance areas were imported. If the workbook has those sections, check that each
+                one&apos;s heading sits on a row of its own.
+              </p>
+            </section>
+          )}
+
           {structure && (
             <section className="grid gap-2 rounded-xl border bg-card p-4 shadow-2xs">
               <div>
                 <h3 className="text-sm font-semibold">Also imported from the workbook</h3>
                 <p className="text-xs text-muted-foreground">
-                  Saved with this template and rendered by the appraisal form. Change them in the
-                  spreadsheet and import again.
+                  Saved with this template and rendered by the appraisal form. Open one to check what
+                  came through; to change any of it, edit the spreadsheet and import again.
                 </p>
               </div>
-              <ul className="grid gap-1.5 sm:grid-cols-2">
-                {[
-                  [ "Performance perspectives", (structure.perspectives as unknown[])?.length ],
-                  [ "Development & career prompts", (structure.developmentFields as unknown[])?.length ],
-                  [ "Final review fields", (structure.finalReviewFields as unknown[])?.length ],
-                  [ "Rating guide entries", (structure.ratingGuide as unknown[])?.length ],
-                  [ "Employee information fields",
-                    ((structure.employeeFields as { fields?: unknown[] })?.fields)?.length ],
-                  [ "Wizard steps", (structure.wizardSections as unknown[])?.length ],
-                ].map(([label, count]) => (
-                  <li
-                    key={String(label)}
-                    className="flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-xs"
-                  >
-                    <span>{String(label)}</span>
-                    <Badge variant="outline" className="tabular-nums">
-                      {Number(count ?? 0)}
-                    </Badge>
-                  </li>
+              <ul className="grid gap-1.5">
+                {importedSections(structure).map((section) => (
+                  <ImportedSection key={section.label} section={section} />
                 ))}
               </ul>
             </section>

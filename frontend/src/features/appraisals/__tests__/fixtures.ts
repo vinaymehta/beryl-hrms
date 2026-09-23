@@ -76,6 +76,7 @@ export function appraisal(overrides: Partial<AppraisalDetail> = {}): AppraisalDe
     status: "self_appraisal_open",
     appraisalCycleId: "cyc-1",
     employeeId: "emp-1",
+    employee: null,
     cycleName: "FY26 Review",
     employeeName: "Sofia Reyes",
     employeeCode: "ACM-004",

@@ -217,6 +217,43 @@ RSpec.describe "Api::V1::AppraisalTemplates structure", type: :request do
     end
   end
 
+  # A heading worded slightly differently used to make the whole workbook read
+  # as the flat one-row-per-question format: the seven areas came through and
+  # every section below them was dropped without a word.
+  describe "headings worded differently" do
+    {
+      "a plural PERSPECTIVES" => { [ 20, 1 ] => "PERFORMANCE PERSPECTIVES" },
+      "'and' spelled out" => { [ 28, 1 ] => "DEVELOPMENT AND CAREER DISCUSSION" },
+      "title case with a colon" => { [ 28, 1 ] => "Development & Career Discussion:" },
+      "RATING SCALE rather than GUIDE" => { [ 52, 1 ] => "RATING SCALE" },
+      "every heading reworded at once" => {
+        [ 20, 1 ] => "Performance Perspectives",
+        [ 28, 1 ] => "Development and Career Discussion",
+        [ 45, 1 ] => "Final Assessment",
+        [ 52, 1 ] => "Rating Key"
+      }
+    }.each do |label, edits|
+      it "still reads the whole workbook with #{label}" do
+        upload(workbook_with(edits).path, filename: "reworded.xlsx")
+
+        expect(body["layout"]).to eq("sectioned")
+        expect(body["categories"].size).to eq(7)
+        expect(body["perspectives"].size).to eq(3)
+        expect(body["developmentFields"].size).to eq(5)
+        expect(body["finalReviewFields"].size).to eq(6)
+        expect(body["ratingGuide"].size).to eq(5)
+        expect(body["wizardSections"].size).to eq(3)
+      end
+    end
+
+    it "says which section it could not find rather than dropping it quietly" do
+      # Blank the perspectives banner AND its header, so the section is gone.
+      upload(workbook_with([ 20, 1 ] => nil, [ 21, 1 ] => nil).path, filename: "missing.xlsx")
+
+      expect(body["warnings"].join).to match(/no performance perspectives were found/i)
+    end
+  end
+
   describe "templates already in use" do
     it "leaves a started cycle's template exactly as it was when a new one is imported" do
       upload(FIXTURE)
@@ -277,6 +314,120 @@ RSpec.describe "Api::V1::AppraisalTemplates structure", type: :request do
             params: { name: "Renamed" }.to_json, headers: json_headers
 
       expect(response).to have_http_status(:unprocessable_content)
+    end
+  end
+
+  # The workbook's perspective table carries a Manager Rating and a Manager
+  # Summary / Evidence column. Those are the reviewer's assessment of this
+  # employee, not part of the form the employee fills in.
+  describe "perspective manager fields" do
+    def running_appraisal
+      upload(FIXTURE)
+      create_template_from(body, name: "FY26", status: "active")
+      template_id = body["id"]
+
+      subject_employee, reviewer = in_tenant do
+        emp_user = create(:user, company: company, email_address: "p.emp@acme.test", password: "correct-horse-battery-1")
+        create(:user_role, user: emp_user, role: company.roles.find_by!(slug: "employee"), company: company)
+        rev_user = create(:user, company: company, email_address: "p.mgr@acme.test", password: "correct-horse-battery-1")
+        create(:user_role, user: rev_user, role: company.roles.find_by!(slug: "employee"), company: company)
+        emp = create(:employee, company: company, user: emp_user)
+        mgr = create(:employee, company: company, user: rev_user)
+        emp.assign_managers!("primary" => mgr.id, "final" => mgr.id)
+        [ emp, mgr ]
+      end
+
+      post "/api/v1/appraisal_cycles",
+           params: { name: "FY26", appraisalTemplateId: template_id, eligibleEmployeeIds: [ subject_employee.id ] }.to_json,
+           headers: json_headers
+      post "/api/v1/appraisal_cycles/#{body['id']}/start", params: {}.to_json, headers: json_headers
+      appraisal = in_tenant { Appraisal.find_by!(employee_id: subject_employee.id) }
+
+      # Record something in those columns so "absent" can't pass by accident.
+      in_tenant do
+        template = AppraisalTemplate.find(template_id)
+        structure = template.structure
+        structure["perspectives"] = structure["perspectives"].map do |row|
+          # Stored snake_case: the inbound filter underscores every key, and
+          # the serializer camelises on the way back out.
+          row.merge("manager_rating" => "4", "manager_summary" => "Manager's private view")
+        end
+        template.update_column(:structure, structure)
+      end
+
+      [ appraisal, reviewer ]
+    end
+
+    def login(email)
+      post "/api/v1/auth/login",
+           params: { email: email, password: "correct-horse-battery-1" }.to_json, headers: json_headers
+    end
+
+    it "withholds the manager rating and summary from the employee" do
+      appraisal, = running_appraisal
+
+      login("p.emp@acme.test")
+      get "/api/v1/appraisals/#{appraisal.id}"
+
+      perspectives = body["template"]["structure"]["perspectives"]
+      expect(perspectives.size).to eq(3)
+      expect(perspectives.map(&:keys).flatten.uniq).not_to include("managerRating", "managerSummary")
+      expect(response.body).not_to include("Manager's private view")
+    end
+
+    it "still tells the employee how the appraisal is weighted" do
+      appraisal, = running_appraisal
+
+      login("p.emp@acme.test")
+      get "/api/v1/appraisals/#{appraisal.id}"
+
+      perspectives = body["template"]["structure"]["perspectives"]
+      expect(perspectives.map { |row| row["weight"] }).to eq([ 60.0, 25.0, 15.0 ])
+      expect(perspectives.first["assessmentFocus"]).to be_present
+    end
+
+    it "gives them to the assigned reviewer" do
+      appraisal, = running_appraisal
+
+      login("p.mgr@acme.test")
+      get "/api/v1/appraisals/#{appraisal.id}"
+
+      perspectives = body["template"]["structure"]["perspectives"]
+      expect(perspectives.first["managerSummary"]).to eq("Manager's private view")
+    end
+
+    it "gives them to an appraisals.view_all holder" do
+      appraisal, = running_appraisal
+
+      get "/api/v1/appraisals/#{appraisal.id}"
+
+      expect(body["template"]["structure"]["perspectives"].first["managerRating"]).to eq("4")
+    end
+
+    # The weights belong to the template; the rating and evidence are recorded
+    # against THIS employee, on the reviewer's own revision.
+    it "stores a reviewer's per-employee perspective assessment on their revision" do
+      appraisal, = running_appraisal
+
+      login("p.emp@acme.test")
+      post "/api/v1/appraisals/#{appraisal.id}/submit_self",
+           params: { answers: [] }.to_json, headers: json_headers
+      expect(response).to have_http_status(:ok)
+
+      login("p.mgr@acme.test")
+      post "/api/v1/appraisals/#{appraisal.id}/submit_review",
+           params: {
+             answers: [],
+             responses: {
+               past_performance__manager_rating: "4",
+               past_performance__manager_summary: "Shipped the migration on time."
+             }
+           }.to_json, headers: json_headers
+
+      expect(response).to have_http_status(:ok)
+      stored = in_tenant { appraisal.revisions.order(:version_number).last.responses }
+      expect(stored["past_performance__manager_rating"]).to eq("4")
+      expect(stored["past_performance__manager_summary"]).to eq("Shipped the migration on time.")
     end
   end
 

@@ -232,7 +232,11 @@ export function TemplateImportPanel({
           {/* Everything else the workbook carried. Shown before saving so the
               admin can confirm it was all read — the importer used to stop at
               the totals row and discard every one of these sections. */}
-          {preview.layout === "sectioned" && (
+          {(preview.perspectives?.length ?? 0) +
+            (preview.developmentFields?.length ?? 0) +
+            (preview.finalReviewFields?.length ?? 0) +
+            (preview.ratingGuide?.length ?? 0) >
+            0 && (
             <div className="grid gap-1.5">
               <p className="text-xs font-semibold">Also detected in this workbook</p>
 

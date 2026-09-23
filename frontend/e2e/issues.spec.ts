@@ -146,7 +146,10 @@ test("Employee row click navigates to full employee page with back button instea
   await expect(page).toHaveURL(/\/employees$/)
 })
 
-test("Settings closes side pane and adds open/close button only in settings", async ({ page }) => {
+// The sidebar used to collapse on /settings and hand you a button to get it
+// back, which made the nav come and go depending on where you were standing.
+// That behaviour was removed; this now pins the absence of it.
+test("Settings keeps the side pane, with no open/close button anywhere", async ({ page }) => {
   await page.route("**/api/v1/auth/me", async (route) => {
     await route.fulfill({ json: { data: ADMIN_ME_RESPONSE } })
   })
@@ -162,33 +165,18 @@ test("Settings closes side pane and adds open/close button only in settings", as
 
   await page.goto("/employees")
   await expect(page.getByRole("heading", { level: 1, name: "Employees" })).toBeVisible()
-
-  // On /employees: side pane is open and toggle button is NOT present
   await expect(page.locator("aside")).toBeVisible()
-  await expect(page.getByRole("button", { name: "Open side panel" })).not.toBeVisible()
-  await expect(page.getByRole("button", { name: "Close side panel" })).not.toBeVisible()
 
-  // Click Settings in the sidebar
   await page.getByRole("link", { name: /^Settings$/i }).click()
   await expect(page).toHaveURL(/\/settings$/)
 
-  // On /settings: side pane is closed and "Open side panel" button is visible
-  await expect(page.locator("aside")).not.toBeVisible()
-  const openBtn = page.getByRole("button", { name: "Open side panel" })
-  await expect(openBtn).toBeVisible()
-
-  // Click "Open side panel"
-  await openBtn.click()
-
-  // Side pane is now open, and button is now "Close side panel"
+  // Still there, and no toggle was introduced to take it away.
   await expect(page.locator("aside")).toBeVisible()
-  const closeBtn = page.getByRole("button", { name: "Close side panel" })
-  await expect(closeBtn).toBeVisible()
+  await expect(page.getByRole("button", { name: "Open side panel" })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Close side panel" })).toHaveCount(0)
 
-  // Click "Close side panel"
-  await closeBtn.click()
-  await expect(page.locator("aside")).not.toBeVisible()
-  await expect(page.getByRole("button", { name: "Open side panel" })).toBeVisible()
+  // Settings itself is tabbed, matching the rest of the app.
+  await expect(page.getByRole("navigation", { name: "Settings sections" })).toBeVisible()
 })
 
 

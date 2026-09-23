@@ -45,7 +45,6 @@ module Roles
         attendance.view
         leave.view leave.create
         documents.view documents.manage_own
-        mail.view mail.search
         appraisals.submit_self appraisals.review
         notifications.view
       ]

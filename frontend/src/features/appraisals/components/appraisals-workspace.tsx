@@ -13,7 +13,6 @@ import { AppraisalList } from "@/features/appraisals/components/appraisal-list"
 import { AppraisalCyclesView } from "@/features/appraisals/components/appraisal-cycles-view"
 import { TemplatesView } from "@/features/appraisals/components/templates-view"
 import { CalibrationView } from "@/features/appraisals/components/calibration-view"
-import { AppraisalDetail } from "@/features/appraisals/components/appraisal-detail"
 import { useAppraisals, useAppraisalCycles } from "@/features/appraisals/hooks/use-appraisals"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
@@ -125,7 +124,10 @@ export function AppraisalsWorkspace() {
   const fromUrl = tabs.some((tab) => tab.id === requestedTab) ? requestedTab : null
   const currentTab = activeTab ?? fromUrl ?? defaultTab
 
-  const [openAppraisalId, setOpenAppraisalId] = useState<string | null>(null)
+  // Opening an appraisal NAVIGATES rather than swapping this component out:
+  // the workspace writes its active section to ?tab=, which only survives a
+  // refresh if the appraisal has a URL of its own.
+  const openAppraisal = (id: string) => router.push(`/appraisals/${id}`)
   const [cycleFilter, setCycleFilter] = useState<string | undefined>(undefined)
 
   function selectTab(tab: TabId) {
@@ -139,9 +141,6 @@ export function AppraisalsWorkspace() {
     currentTab !== "cycles" && currentTab !== "templates" && currentTab !== "calibration"
   )
 
-  if (openAppraisalId) {
-    return <AppraisalDetail appraisalId={openAppraisalId} onBack={() => setOpenAppraisalId(null)} />
-  }
 
   return (
     <div className="grid gap-4">
@@ -195,7 +194,7 @@ export function AppraisalsWorkspace() {
         <CalibrationPane
           cycleFilter={cycleFilter}
           onPickCycle={setCycleFilter}
-          onOpen={setOpenAppraisalId}
+          onOpen={openAppraisal}
         />
       ) : currentTab === "cycles" ? (
         <AppraisalCyclesView
@@ -222,7 +221,7 @@ export function AppraisalsWorkspace() {
             isLoading={false}
             isError={isError}
             onRetry={() => refetch()}
-            onOpen={setOpenAppraisalId}
+            onOpen={openAppraisal}
             showEmployee={currentTab !== "mine"}
             emptyTitle={
               currentTab === "pending"

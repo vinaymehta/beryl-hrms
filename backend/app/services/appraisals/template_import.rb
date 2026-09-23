@@ -48,14 +48,30 @@ module Appraisals
 
     TRUTHY = %w[y yes true 1 required].freeze
 
-    # Banner rows that open a section in the sectioned layout. Matched on the
-    # first populated cell of a row, upcased.
-    SECTION_BANNERS = {
-      "PERFORMANCE PERSPECTIVE" => :perspectives,
-      "DEVELOPMENT & CAREER DISCUSSION" => :development,
-      "FINAL REVIEW" => :final_review,
-      "RATING GUIDE" => :rating_guide
-    }.freeze
+    # Banner rows that open a section, matched on the first populated cell of
+    # a row.
+    #
+    # PATTERNS, not exact strings. An exact match meant that a workbook saying
+    # "PERFORMANCE PERSPECTIVES" instead of "PERSPECTIVE", or "Development and
+    # Career Discussion" instead of "&", was not recognised as sectioned at
+    # all — it fell through to the one-row-per-question reader, which finds the
+    # seven areas and silently drops every section below them. That is a
+    # spelling difference costing the admin most of their document, so the
+    # matching is deliberately forgiving.
+    SECTION_BANNERS = [
+      [ :perspectives, /\APERFORMANCE\s+PERSPECTIVES?\b/ ],
+      [ :development, /\ADEVELOPMENT\b/ ],
+      [ :final_review, /\AFINAL\s+(REVIEW|ASSESSMENT)\b/ ],
+      [ :rating_guide, /\ARATING\s+(GUIDE|SCALE|KEY)\b/ ]
+    ].freeze
+
+    # Upcased, "&" spelled out, runs of whitespace collapsed and surrounding
+    # punctuation dropped — so "Development & Career Discussion:" and
+    # "DEVELOPMENT AND CAREER  DISCUSSION" both land on the same string.
+    def self.banner_key(text)
+      normalised = text.to_s.upcase.gsub("&", " AND ").gsub(/[^A-Z0-9\s]/, " ").squeeze(" ").strip
+      SECTION_BANNERS.find { |(_, pattern)| normalised.match?(pattern) }&.first
+    end
 
     # The employee-detail labels the workbook carries, in the order it lists
     # them. Used to recognise the detail block rather than to demand it: a
@@ -142,13 +158,23 @@ module Appraisals
 
       # --- layout detection ---------------------------------------------------
 
+      # A workbook is "sectioned" if it names a section OR simply looks like a
+      # full appraisal form. The second half matters: a workbook whose banners
+      # are worded unusually still has a Performance Area / What is Evaluated
+      # table, and reading it as sectioned means the sections that ARE
+      # recognisable still come through instead of all of them being lost.
       def sectioned?
-        @rows.any? { |(_, cells)| SECTION_BANNERS.key?(first_cell(cells).to_s.upcase) }
+        banner_rows.any? || area_header_row.present?
       end
 
       def banner_rows
         @banner_rows ||= @rows.filter_map do |(number, cells)|
-          key = SECTION_BANNERS[first_cell(cells).to_s.upcase]
+          # A banner is a heading: one populated cell, on its own row. Without
+          # that check, a data row beginning "Development of the team…" would
+          # be read as opening a section.
+          next unless cells.compact.count { |cell| cell.to_s.strip.present? } == 1
+
+          key = self.class.banner_key(first_cell(cells))
           [ number, key ] if key
         end.to_h
       end
@@ -177,6 +203,23 @@ module Appraisals
         total = categories.sum { |category| category[:weight].to_d }
 
         warnings = []
+
+        # Say so when a section is absent. Silence here was the whole problem:
+        # a workbook that lost its perspectives looked exactly like one that
+        # never had any, and the admin found out only when the appraisal form
+        # came up short.
+        {
+          "performance perspectives" => perspectives,
+          "development & career prompts" => parse_labelled_block(:development),
+          "final review fields" => parse_final_review,
+          "rating guide" => parse_rating_guide
+        }.each do |label, rows|
+          next if rows.any?
+
+          warnings << "No #{label} were found in this workbook. If it has that section, check the heading " \
+                      "above it — the importer looks for a row containing only that heading."
+        end
+
         if categories.any?
           # The scope's lenses are defined by the workbook's own PERFORMANCE
           # PERSPECTIVE block, which does NOT say which of the seven areas
