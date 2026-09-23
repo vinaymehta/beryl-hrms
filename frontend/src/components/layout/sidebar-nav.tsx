@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 
 import { cn } from "cn"
 import { NAV_ITEMS } from "@/constants/nav"
+import { useCurrentUser } from "@/features/auth/hooks/use-current-user"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
@@ -29,7 +30,14 @@ function NavLink({
   onNavigate?: () => void
 }) {
   const allowed = usePermissionOrTrue(item.permission)
+  const excluded = usePermission(item.hiddenFor ?? [])
+  const { user } = useCurrentUser()
+
   if (!allowed) return null
+  // Hidden rather than disabled: a link to a page that has nothing to show is
+  // not a feature this login is missing, it is one that doesn't apply to it.
+  if (item.requiresEmployeeRecord && !user?.employeeId) return null
+  if (item.hiddenFor && excluded) return null
 
   const Icon = item.icon
 

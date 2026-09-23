@@ -58,11 +58,11 @@ describe("SelfAppraisalWizard", () => {
     const user = userEvent.setup()
     renderWizard()
 
-    await user.click(screen.getByRole("button", { name: /^next$/i }))
+    await user.click(screen.getByRole("button", { name: /continue to next step/i }))
     expect(appraisalsApi.saveDraft).toHaveBeenCalledTimes(1)
     expect(vi.mocked(appraisalsApi.saveDraft).mock.calls[0][1]).toMatchObject({ step: 2 })
 
-    await user.click(screen.getByRole("button", { name: /^next$/i }))
+    await user.click(screen.getByRole("button", { name: /continue to next step/i }))
     expect(appraisalsApi.saveDraft).toHaveBeenCalledTimes(2)
     expect(vi.mocked(appraisalsApi.saveDraft).mock.calls[1][1]).toMatchObject({ step: 3 })
   })
@@ -93,9 +93,9 @@ describe("SelfAppraisalWizard", () => {
     const user = userEvent.setup()
     renderWizard()
 
-    await user.click(screen.getByRole("button", { name: /^next$/i }))
+    await user.click(screen.getByRole("button", { name: /continue to next step/i }))
 
-    expect(screen.getByText(/step 2 of 5 · performance perspectives/i)).toBeInTheDocument()
+    expect(screen.getByText(/step 2 of 5 · perspective/i)).toBeInTheDocument()
     // 20 + 20 + 15 + 10 past, 10 + 10 current, 15 future — from the template.
     // This one is deliberately NOT the scope's 60/25/15 default, so the step
     // has to read the template rather than print the standard split.
@@ -110,7 +110,7 @@ describe("SelfAppraisalWizard", () => {
     renderWizard()
 
     await rate(user, 0, 5)
-    await user.click(screen.getByRole("button", { name: /^next$/i }))
+    await user.click(screen.getByRole("button", { name: /continue to next step/i }))
     expect(screen.getByText(/step 2 of 5/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: /^back$/i }))
@@ -126,7 +126,7 @@ describe("SelfAppraisalWizard", () => {
 
     expect(screen.getByRole("button", { name: /looking ahead/i })).toBeDisabled()
 
-    await user.click(screen.getByRole("button", { name: /^next$/i }))
+    await user.click(screen.getByRole("button", { name: /continue to next step/i }))
     await user.click(screen.getByRole("button", { name: /performance areas/i }))
 
     expect(screen.getByText(/step 1 of 5/i)).toBeInTheDocument()
@@ -141,11 +141,11 @@ describe("SelfAppraisalWizard", () => {
       screen.getByLabelText(/evidence for: how did you do on technical skills/i),
       "Rewrote the importer."
     )
-    await user.click(screen.getByRole("button", { name: /^next$/i })) // lenses
-    await user.click(screen.getByRole("button", { name: /^next$/i })) // story
+    await user.click(screen.getByRole("button", { name: /continue to next step/i })) // lenses
+    await user.click(screen.getByRole("button", { name: /continue to next step/i })) // story
     await user.type(screen.getByLabelText(/overall summary/i), "A solid year.")
-    await user.click(screen.getByRole("button", { name: /^next$/i })) // ahead
-    await user.click(screen.getByRole("button", { name: /^next$/i })) // review
+    await user.click(screen.getByRole("button", { name: /continue to next step/i })) // ahead
+    await user.click(screen.getByRole("button", { name: /continue to next step/i })) // review
 
     expect(screen.getByText(/step 5 of 5 · review & submit/i)).toBeInTheDocument()
     expect(screen.getByText("Rewrote the importer.")).toBeInTheDocument()
@@ -159,7 +159,7 @@ describe("SelfAppraisalWizard", () => {
     renderWizard()
 
     for (let step = 0; step < 4; step += 1) {
-      await user.click(screen.getByRole("button", { name: /^next$/i }))
+      await user.click(screen.getByRole("button", { name: /continue to next step/i }))
     }
     expect(screen.getByText(/step 5 of 5/i)).toBeInTheDocument()
 
@@ -174,7 +174,7 @@ describe("SelfAppraisalWizard", () => {
 
     await rate(user, 0, 5) // 5 requires evidence, and none is given
     for (let step = 0; step < 4; step += 1) {
-      await user.click(screen.getByRole("button", { name: /^next$/i }))
+      await user.click(screen.getByRole("button", { name: /continue to next step/i }))
     }
 
     expect(screen.getByRole("button", { name: /submit self-appraisal/i })).toBeDisabled()
@@ -186,12 +186,12 @@ describe("SelfAppraisalWizard", () => {
     renderWizard()
 
     await rate(user, 0, 3)
-    await user.click(screen.getByRole("button", { name: /^next$/i }))
-    await user.click(screen.getByRole("button", { name: /^next$/i }))
+    await user.click(screen.getByRole("button", { name: /continue to next step/i }))
+    await user.click(screen.getByRole("button", { name: /continue to next step/i }))
     await user.type(screen.getByLabelText(/overall summary/i), "A solid year.")
-    await user.click(screen.getByRole("button", { name: /^next$/i }))
+    await user.click(screen.getByRole("button", { name: /continue to next step/i }))
     await user.type(screen.getByLabelText(/goals for the next period/i), "Lead the migration.")
-    await user.click(screen.getByRole("button", { name: /^next$/i }))
+    await user.click(screen.getByRole("button", { name: /continue to next step/i }))
 
     await user.click(screen.getByRole("button", { name: /submit self-appraisal/i }))
 
@@ -214,8 +214,133 @@ describe("SelfAppraisalWizard", () => {
       })
     )
 
-    expect(screen.getByText(/step 3 of 5 · your year in your words/i)).toBeInTheDocument()
+    expect(screen.getByText(/step 3 of 5 · in your words/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/overall summary/i)).toHaveValue("Half-written.")
     expect(screen.getByText(/draft saved/i)).toBeInTheDocument()
+  })
+})
+
+/**
+ * The workbook is the form. These prove the wizard reads its steps and its
+ * questions from the template's `structure` — so an admin who renames a
+ * section, adds a prompt or drops one changes what an employee is asked
+ * WITHOUT anyone touching this codebase.
+ */
+describe("a template imported from a workbook", () => {
+  const imported = (sections: unknown[]) =>
+    appraisal({
+      template: {
+        ...appraisal().template,
+        structure: { wizardSections: sections },
+      },
+    } as never)
+
+  const DEV_SECTION = {
+    key: "development",
+    kind: "long_text",
+    title: "Development & Career Discussion",
+    caption: "In your own words",
+    fields: [
+      { key: "key_achievements_contributions", label: "Key Achievements / Contributions", input: "textarea" },
+      { key: "key_strengths", label: "Key Strengths", input: "textarea" },
+    ],
+  }
+
+  const PERSPECTIVES_SECTION = {
+    key: "perspectives",
+    kind: "perspectives",
+    title: "Performance Perspective",
+    caption: "Weighted view",
+    fields: [
+      { key: "past_performance", label: "Past Performance", description: "What was delivered", weight: 60 },
+      { key: "future_readiness", label: "Future Readiness", description: "Ready for what's next", weight: 15 },
+    ],
+  }
+
+  it("names its steps from the workbook, not from the frontend", () => {
+    renderWizard(imported([PERSPECTIVES_SECTION, DEV_SECTION]))
+
+    expect(screen.getByRole("button", { name: /Development & Career Discussion/ })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /Performance Perspective/ })).toBeInTheDocument()
+    // The hardcoded step names are gone for this template.
+    expect(screen.queryByRole("button", { name: /Your year in your words/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /Looking ahead/i })).not.toBeInTheDocument()
+  })
+
+  it("renders the workbook's own prompts as the free-text inputs", async () => {
+    const user = userEvent.setup()
+    renderWizard(imported([PERSPECTIVES_SECTION, DEV_SECTION]))
+
+    await user.click(screen.getByRole("button", { name: /continue to next step/i })) // perspectives
+    await user.click(screen.getByRole("button", { name: /continue to next step/i })) // development
+
+    expect(screen.getByLabelText("Key Achievements / Contributions")).toBeInTheDocument()
+    expect(screen.getByLabelText("Key Strengths")).toBeInTheDocument()
+    // A prompt this template does not define is not rendered.
+    expect(screen.queryByLabelText("Training needs")).not.toBeInTheDocument()
+  })
+
+  it("shows each perspective's weight and focus from the template", async () => {
+    const user = userEvent.setup()
+    renderWizard(imported([PERSPECTIVES_SECTION, DEV_SECTION]))
+
+    await user.click(screen.getByRole("button", { name: /continue to next step/i }))
+
+    expect(screen.getByText("Past Performance")).toBeInTheDocument()
+    expect(screen.getByText("What was delivered")).toBeInTheDocument()
+    expect(screen.getByText("Ready for what's next")).toBeInTheDocument()
+  })
+
+  it("submits the answers keyed by the workbook's field keys", async () => {
+    const user = userEvent.setup()
+    renderWizard(imported([PERSPECTIVES_SECTION, DEV_SECTION]))
+
+    await user.click(screen.getByRole("button", { name: /continue to next step/i }))
+    await user.click(screen.getByRole("button", { name: /continue to next step/i }))
+    await user.type(screen.getByLabelText("Key Strengths"), "Deep focus")
+    await user.click(screen.getByRole("button", { name: /save draft/i }))
+
+    const payload = vi.mocked(appraisalsApi.saveDraft).mock.calls.at(-1)![1] as {
+      responses: Record<string, string>
+    }
+    expect(payload.responses).toEqual({ key_strengths: "Deep focus" })
+  })
+
+  // The regression that matters most: a renamed field is a different question.
+  it("follows a renamed prompt without any code change here", async () => {
+    const user = userEvent.setup()
+    const renamed = {
+      ...DEV_SECTION,
+      fields: [{ key: "signature_strengths", label: "Signature Strengths", input: "textarea" }],
+    }
+    renderWizard(imported([PERSPECTIVES_SECTION, renamed]))
+
+    await user.click(screen.getByRole("button", { name: /continue to next step/i }))
+    await user.click(screen.getByRole("button", { name: /continue to next step/i }))
+
+    expect(screen.getByLabelText("Signature Strengths")).toBeInTheDocument()
+    expect(screen.queryByLabelText("Key Strengths")).not.toBeInTheDocument()
+  })
+
+  it("never offers the reviewer-only Final Review section as an employee step", () => {
+    const finalReview = {
+      key: "final_review",
+      kind: "long_text",
+      title: "Final Review",
+      audience: "reviewer",
+      fields: [{ key: "manager_final_comments", label: "Manager Final Comments", input: "textarea" }],
+    }
+    renderWizard(imported([PERSPECTIVES_SECTION, DEV_SECTION, finalReview]))
+
+    expect(screen.queryByRole("button", { name: /Final Review/ })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Manager Final Comments")).not.toBeInTheDocument()
+  })
+
+  // A hand-built template has no structure, and must keep working unchanged.
+  it("falls back to the built-in steps when the template was not imported", () => {
+    renderWizard()
+
+    expect(screen.getByRole("button", { name: /In your words/ })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /Looking ahead/ })).toBeInTheDocument()
   })
 })

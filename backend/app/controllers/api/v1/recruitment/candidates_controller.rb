@@ -40,7 +40,7 @@ module Api
             )
           end
 
-          page = [params[:page].to_i, 1].max
+          page = [ params[:page].to_i, 1 ].max
           per_page = 20
           total_count = scope.count
           candidates = scope.offset((page - 1) * per_page).limit(per_page)
@@ -169,7 +169,7 @@ module Api
             @candidate.update!(status: new_status)
             render json: { data: candidate_detail(@candidate) }
           else
-            render json: { errors: [{ message: "Invalid candidate status: #{new_status}" }] }, status: :unprocessable_entity
+            render json: { errors: [ { message: "Invalid candidate status: #{new_status}" } ] }, status: :unprocessable_entity
           end
         end
 

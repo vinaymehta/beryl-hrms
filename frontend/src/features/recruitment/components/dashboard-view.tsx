@@ -42,14 +42,14 @@ import {
   ResponsiveContainer,
   LabelList,
 } from "recharts"
-import type { CandidateStatus } from "@/types/recruitment"
+import type { CandidateStatus, RecruitmentTab } from "@/types/recruitment"
 
 export type DashboardDetail =
   | { type: "candidates"; status: CandidateStatus | ""; label: string }
   | { type: "resumes"; status: string; label: string }
 
 interface DashboardViewProps {
-  onNavigateTab: (tab: string, filter?: string) => void
+  onNavigateTab: (tab: RecruitmentTab, filter?: string) => void
   detail: DashboardDetail | null
   onOpenDetail: (detail: DashboardDetail) => void
   onCloseDetail: () => void
@@ -187,7 +187,23 @@ function EmptyChart({ label, compact }: { label: string; compact?: boolean }) {
   )
 }
 
-function ChartTooltip({ active, payload, nameKey, unit }: { active?: boolean; payload?: any[]; nameKey: string; unit: string }) {
+/** Recharts passes each hovered series entry in `payload`; only the datum it
+ *  wraps is read here, so that is all this types. */
+interface ChartTooltipEntry {
+  payload: Record<string, string | number | null | undefined>
+}
+
+function ChartTooltip({
+  active,
+  payload,
+  nameKey,
+  unit,
+}: {
+  active?: boolean
+  payload?: ChartTooltipEntry[]
+  nameKey: string
+  unit: string
+}) {
   if (!active || !payload?.length) return null
   const item = payload[0].payload
   return (
@@ -227,7 +243,7 @@ function HorizontalBarList({ items }: { items: { name: string; count: number }[]
 // without navigating away from the Dashboard tab.
 function DetailPanel({ detail, onNavigateTab, onClose }: {
   detail: DashboardDetail
-  onNavigateTab: (tab: string, filter?: string) => void
+  onNavigateTab: (tab: RecruitmentTab, filter?: string) => void
   onClose: () => void
 }) {
   const candidatesQuery = useCandidates({

@@ -94,7 +94,8 @@ RSpec.describe "Api::V1::Employees", type: :request do
       # `invited`, not `active`: the account exists but nobody — not the
       # creator, not the API response — holds a password for it.
       expect(user).to be_invited
-      expect(response.parsed_body["data"]["user"].keys).to match_array(%w[id email status emailVerifiedAt])
+      expect(response.parsed_body["data"]["user"].keys)
+        .to match_array(%w[id email status emailVerifiedAt lastLoginAt])
     end
 
     it "links an existing account rather than creating a second one" do

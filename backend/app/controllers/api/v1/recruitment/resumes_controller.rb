@@ -23,7 +23,7 @@ module Api
             # attachments the AI determined aren't resumes, and repeat submissions
             # of a file already on file, stay out unless their dedicated tab
             # explicitly asks for them.
-            scope = scope.where.not(processing_status: [:not_a_resume, :duplicate])
+            scope = scope.where.not(processing_status: [ :not_a_resume, :duplicate ])
           end
 
           if params[:search].present?
@@ -64,7 +64,7 @@ module Api
           else scope
           end
 
-          page = [params[:page].to_i, 1].max
+          page = [ params[:page].to_i, 1 ].max
           per_page = 20
           total_count = scope.count
           resumes = scope.offset((page - 1) * per_page).limit(per_page)
@@ -92,7 +92,7 @@ module Api
 
           file = params[:file]
           unless file.respond_to?(:read)
-            render json: { errors: [{ message: "Please provide a valid resume file (PDF or DOCX)" }] }, status: :unprocessable_entity
+            render json: { errors: [ { message: "Please provide a valid resume file (PDF or DOCX)" } ] }, status: :unprocessable_entity
             return
           end
 
@@ -207,7 +207,7 @@ module Api
           from_date = parse_scan_date(params[:from])
           to_date = parse_scan_date(params[:to])
           if from_date.nil? || to_date.nil?
-            render json: { errors: [{ message: "Please select a date range before scanning." }] }, status: :unprocessable_entity
+            render json: { errors: [ { message: "Please select a date range before scanning." } ] }, status: :unprocessable_entity
             return
           end
 
@@ -238,7 +238,7 @@ module Api
           raise
         rescue => e
           Rails.logger.error("scan_zoho_mail error: #{e.message}\n#{e.backtrace.take(5).join("\n")}")
-          render json: { errors: [{ message: "Failed to scan mailbox: #{e.message}" }] }, status: :unprocessable_entity
+          render json: { errors: [ { message: "Failed to scan mailbox: #{e.message}" } ] }, status: :unprocessable_entity
         end
 
         # DELETE /api/v1/recruitment/resumes/:id
@@ -263,7 +263,7 @@ module Api
         # proxy rules.
         def send_resume_file(disposition:, audit_action:)
           unless @resume.file.attached?
-            return render json: { errors: [{ message: "Resume file not found on storage" }] }, status: :not_found
+            return render json: { errors: [ { message: "Resume file not found on storage" } ] }, status: :not_found
           end
 
           ::Audit::Record.call(action: audit_action, auditable: @resume, request: request)

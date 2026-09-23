@@ -71,11 +71,16 @@ export default function EmployeesPage() {
   const { user, isLoading: isUserLoading } = useCurrentUser()
   const managesPeople = usePermission(PEOPLE_MANAGEMENT_PERMISSIONS)
 
+  // /employees is the HR/Admin management list. Someone without those
+  // permissions who lands here is looking for their own record, so they get
+  // /profile — not /employees/<their id>, which would put an id they could
+  // edit into the address bar of the very page this redirect exists to
+  // keep them out of.
   const redirectToOwnRecord = !isUserLoading && !!user && !managesPeople && !!user.employeeId
 
   useEffect(() => {
-    if (redirectToOwnRecord) router.replace(`/employees/${user!.employeeId}`)
-  }, [redirectToOwnRecord, router, user])
+    if (redirectToOwnRecord) router.replace("/profile")
+  }, [redirectToOwnRecord, router])
 
   const [params, setParams] = useState<EmployeeListParams>({ page: 1 })
   const [addOpen, setAddOpen] = useState(false)

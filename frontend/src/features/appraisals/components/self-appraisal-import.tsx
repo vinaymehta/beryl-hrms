@@ -3,6 +3,7 @@
 import { useRef, useState } from "react"
 import { UploadIcon, DownloadIcon, CheckCircle2Icon, TriangleAlertIcon } from "lucide-react"
 import { toast } from "sonner"
+import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -21,9 +22,16 @@ import type { ImportPreview, ImportPreviewRow } from "@/types/appraisals"
 export function SelfAppraisalImport({
   appraisalId,
   onConfirm,
+  /**
+   * Drops the "Prefer a spreadsheet?" framing and renders just the two
+   * buttons, for a caller that already has a section header to hang them on.
+   * The upload flow is unchanged — only the surrounding blurb goes.
+   */
+  compact,
 }: {
   appraisalId: string
   onConfirm: (rows: ImportPreviewRow[]) => void
+  compact?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
@@ -43,14 +51,16 @@ export function SelfAppraisalImport({
   }
 
   return (
-    <div className="grid gap-3 rounded-xl border border-dashed p-4">
+    <div className={cn("grid gap-3", !compact && "rounded-xl border border-dashed p-4")}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-sm font-medium">Prefer a spreadsheet?</p>
-          <p className="text-xs text-muted-foreground">
-            Download the workbook, fill in Rating and Comments, upload it back. Nothing is saved until you submit.
-          </p>
-        </div>
+        {!compact && (
+          <div>
+            <p className="text-sm font-medium">Prefer a spreadsheet?</p>
+            <p className="text-xs text-muted-foreground">
+              Download the workbook, fill in Rating and Comments, upload it back. Nothing is saved until you submit.
+            </p>
+          </div>
+        )}
         <input
           ref={inputRef}
           type="file"

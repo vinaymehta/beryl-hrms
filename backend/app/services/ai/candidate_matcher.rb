@@ -67,7 +67,7 @@ module Ai
       <<~TXT
         Name: #{candidate.full_name}
         Current Role: #{candidate.current_role}
-        Location: #{[candidate.city, candidate.state, candidate.country].compact.join(", ")}
+        Location: #{[ candidate.city, candidate.state, candidate.country ].compact.join(", ")}
         Experience Years: #{candidate.experience_years}
         Highest Qualification: #{candidate.highest_qualification}
         Skills: #{skills_list.presence || "None specified"}

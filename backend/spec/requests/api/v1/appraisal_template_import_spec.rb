@@ -31,6 +31,17 @@ RSpec.describe "Api::V1::AppraisalTemplates import", type: :request do
          params: { file: Rack::Test::UploadedFile.new(file.path, type, original_filename: filename) }
   end
 
+  def upload_workbook
+    post "/api/v1/appraisal_templates/import_preview",
+         params: {
+           file: Rack::Test::UploadedFile.new(
+             Rails.root.join("spec/fixtures/files/Beryl_Systems_Engineering_Appraisal_2026.xlsm"),
+             "application/vnd.ms-excel.sheet.macroEnabled.12",
+             original_filename: "Beryl_Systems_Engineering_Appraisal_2026.xlsm"
+           )
+         }
+  end
+
   # The scope's seven areas at their stated weights (20/20/15/15/10/10/10 = 100).
   SEVEN_AREAS = <<~CSV.freeze
     Category,Lens,Weight %,Question,Guidance,Self rating,Manager rating,Evidence required,Required
@@ -148,15 +159,7 @@ RSpec.describe "Api::V1::AppraisalTemplates import", type: :request do
     end
 
     it "parses .xlsm corporate appraisal workbook fixture successfully" do
-      fixture_path = Rails.root.join("spec/fixtures/files/Beryl_Systems_Engineering_Appraisal_2026.xlsm")
-      post "/api/v1/appraisal_templates/import_preview",
-           params: {
-             file: Rack::Test::UploadedFile.new(
-               fixture_path,
-               "application/vnd.ms-excel.sheet.macroEnabled.12",
-               original_filename: "Beryl_Systems_Engineering_Appraisal_2026.xlsm"
-             )
-           }
+      upload_workbook
 
       expect(response).to have_http_status(:ok)
       expect(body["categories"].size).to eq(7)
@@ -164,6 +167,187 @@ RSpec.describe "Api::V1::AppraisalTemplates import", type: :request do
       expect(body["totalWeight"]).to eq(100.0)
       expect(body["weightsValid"]).to be(true)
       expect(body["errors"]).to be_empty
+    end
+  end
+
+  # The importer used to stop reading at the TOTAL WEIGHT row, so the seven
+  # performance areas came through and every section below them — the three
+  # perspectives, the development prompts, the final review, the rating guide —
+  # was read past and discarded without a word. These pin each section against
+  # the real workbook, and the last one is the general guard: whatever the
+  # parser does not understand has to be REPORTED, never dropped.
+  describe "the full Beryl Systems workbook" do
+    before { upload_workbook }
+
+    it "reads it as a sectioned workbook and names the document" do
+      expect(body["layout"]).to eq("sectioned")
+      expect(body["title"]).to match(/BERYL SYSTEMS.*ENGINEERING PERFORMANCE APPRAISAL 2026/i)
+      expect(body["assessmentPeriod"]).to eq("July 2025 – June 2026")
+    end
+
+    it "keeps all eight employee information fields" do
+      labels = body["employeeFields"]["fields"].map { |field| field["label"] }
+
+      expect(labels).to contain_exactly(
+        "Employee Name", "Job Title", "Reporting Manager", "Review Date",
+        "Employee ID", "Department", "Current Role / Level", "Date of Joining"
+      )
+      expect(body["employeeFields"]["missing"]).to be_empty
+    end
+
+    it "keeps a value already filled into the workbook" do
+      department = body["employeeFields"]["fields"].find { |field| field["label"] == "Department" }
+
+      expect(department["value"]).to eq("Engineering")
+    end
+
+    it "keeps every performance area with its weight and full description" do
+      areas = body["categories"].to_h { |category| [ category["name"], category ] }
+
+      expect(areas.keys).to eq([
+        "Technical Skills & Code Quality", "Delivery & Productivity", "Ownership & Accountability",
+        "AI & Modern Engineering Skills", "Learning & Skill Growth", "Communication & Teamwork",
+        "Business & Client Impact"
+      ])
+      expect(areas.values.map { |c| c["weight"] }).to eq([ 20.0, 20.0, 15.0, 15.0, 10.0, 10.0, 10.0 ])
+      # The full "What is Evaluated" text, not a truncation of it.
+      expect(areas["Technical Skills & Code Quality"]["description"])
+        .to eq("Technical fundamentals, solution design, debugging, maintainability, PR/code quality, " \
+               "testing, performance and security awareness.")
+      expect(areas.values.map { |c| c["description"] }).to all(be_present)
+    end
+
+    it "carries each area's four answer columns through" do
+      captures = body["categories"].first["captures"]
+
+      expect(captures.keys).to contain_exactly(
+        "selfComments", "selfRating", "managerComments", "managerRating"
+      )
+    end
+
+    # The workbook defines the perspectives in their own block and never says
+    # which area belongs to which. Inventing that mapping would put a decision
+    # the company has not made into their template.
+    it "assigns no lens to a performance area, and says why" do
+      expect(body["categories"].map { |category| category["lens"] }).to all(be_nil)
+      expect(body["warnings"].join).to match(/does not map each performance area/i)
+    end
+
+    it "keeps the three performance perspectives with their own weights" do
+      perspectives = body["perspectives"]
+
+      expect(perspectives.map { |p| p["name"] })
+        .to eq([ "Past Performance", "Current Capability", "Future Readiness" ])
+      expect(perspectives.map { |p| p["weight"] }).to eq([ 60.0, 25.0, 15.0 ])
+      expect(perspectives.map { |p| p["lens"] })
+        .to eq(%w[past current_capability future_readiness])
+    end
+
+    it "keeps each perspective's assessment focus, manager rating and summary" do
+      past = body["perspectives"].first
+
+      expect(past["assessmentFocus"]).to match(/what the employee actually delivered/i)
+      expect(past).to have_key("managerRating")
+      expect(past).to have_key("managerSummary")
+    end
+
+    it "keeps all five development & career discussion prompts" do
+      expect(body["developmentFields"].map { |field| field["label"] }).to eq([
+        "Key Achievements / Contributions",
+        "Key Strengths",
+        "Areas for Improvement",
+        "Skills / Training Required for Next 12 Months",
+        "Next-Year Goals / Increased Responsibilities"
+      ])
+    end
+
+    it "keeps all six final review fields" do
+      expect(body["finalReviewFields"].map { |field| field["label"] }).to contain_exactly(
+        "Overall Performance Rating",
+        "Recommended Role / Responsibility Change",
+        "Increment / Compensation Recommendation",
+        "Promotion Recommendation",
+        "Manager Final Comments",
+        "Employee Final Comments"
+      )
+    end
+
+    it "keeps the whole rating guide, with levels and definitions" do
+      guide = body["ratingGuide"]
+
+      expect(guide.map { |row| row["rating"] }).to eq([ 5, 4, 3, 2, 1 ])
+      expect(guide.map { |row| row["level"] }).to eq([
+        "Exceptional", "Strong", "Meets Expectations", "Needs Improvement", "Unsatisfactory"
+      ])
+      expect(guide.map { |row| row["definition"] }).to all(be_present)
+      expect(guide.first["definition"]).to match(/consistently operates beyond role expectations/i)
+    end
+
+    it "keeps the totals strip and the calibration note" do
+      expect(body["totals"]["totalWeight"]).to eq(100.0)
+      expect(body["notes"].join).to match(/calibration principle/i)
+    end
+
+    # The guarantee behind all of the above: every row carrying content is
+    # accounted for by some section. If the parser ever stops understanding
+    # part of this workbook, this fails rather than the content vanishing.
+    it "drops nothing — every populated row is claimed by a section" do
+      expect(body["unmappedRows"]).to eq([])
+    end
+  end
+
+  describe "saving an imported workbook" do
+    it "stores the sections the question model has no column for" do
+      upload_workbook
+      preview = body
+
+      post "/api/v1/appraisal_templates",
+           params: {
+             name: "Engineering Appraisal 2026",
+             structure: {
+               employeeFields: preview["employeeFields"],
+               perspectives: preview["perspectives"],
+               developmentFields: preview["developmentFields"],
+               finalReviewFields: preview["finalReviewFields"],
+               ratingGuide: preview["ratingGuide"],
+               assessmentPeriod: preview["assessmentPeriod"]
+             },
+             categoriesAttributes: preview["categories"].each_with_index.map do |category, position|
+               {
+                 name: category["name"], lens: "past", weight: category["weight"], position: position,
+                 description: category["description"],
+                 questionsAttributes: category["questions"].each_with_index.map do |question, qp|
+                   { prompt: question["prompt"], description: question["description"], position: qp }
+                 end
+               }
+             end
+           }.to_json, headers: json_headers
+
+      expect(response).to have_http_status(:created)
+      stored = body["structure"]
+      expect(stored["perspectives"].size).to eq(3)
+      expect(stored["ratingGuide"].size).to eq(5)
+      expect(stored["developmentFields"].size).to eq(5)
+      expect(stored["finalReviewFields"].size).to eq(6)
+      expect(stored["employeeFields"]["fields"].size).to eq(8)
+      expect(stored["assessmentPeriod"]).to eq("July 2025 – June 2026")
+    end
+
+    it "carries the structure into a new version rather than losing it" do
+      template = in_tenant do
+        company.appraisal_templates.create!(
+          name: "Versioned", status: :active,
+          structure: { "ratingGuide" => [ { "rating" => 5, "level" => "Exceptional" } ] }
+        ).tap do |t|
+          category = t.categories.create!(name: "C", lens: :past, weight: 100, position: 0)
+          category.questions.create!(prompt: "Q", position: 0)
+        end
+      end
+
+      post "/api/v1/appraisal_templates/#{template.id}/new_version", params: {}.to_json, headers: json_headers
+
+      expect(response).to have_http_status(:created)
+      expect(body["structure"]["ratingGuide"].first["level"]).to eq("Exceptional")
     end
 
     it "produces a useful validation error for corrupt or unreadable spreadsheets" do

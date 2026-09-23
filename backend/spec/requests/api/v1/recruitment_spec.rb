@@ -218,7 +218,7 @@ RSpec.describe "Api::V1::Recruitment", type: :request do
 
       expect(response).to have_http_status(:ok)
       names = response.parsed_body["data"].map { |c| c["fullName"] }
-      expect(names).to eq(["Match"])
+      expect(names).to eq([ "Match" ])
     end
   end
 

@@ -28,6 +28,7 @@ import type { CandidateStatus, CandidateSummary } from "@/types/recruitment"
 import { recruitmentApi } from "../api"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
+import { errorMessage } from "@/lib/errors"
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/)
@@ -113,8 +114,8 @@ export function CandidatesView({ initialStatus = "" }: CandidatesViewProps) {
     try {
       await shortlist.mutateAsync(c.id)
       toast.success(`${c.fullName} marked as Shortlisted`)
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to shortlist")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to shortlist"))
     }
   }
 
@@ -123,8 +124,8 @@ export function CandidatesView({ initialStatus = "" }: CandidatesViewProps) {
     try {
       await reject.mutateAsync(c.id)
       toast.info(`${c.fullName} marked as Rejected`)
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to update status")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to update status"))
     }
   }
 
@@ -150,8 +151,8 @@ export function CandidatesView({ initialStatus = "" }: CandidatesViewProps) {
       await Promise.all(Array.from(checkedIds).map((id) => shortlist.mutateAsync(id)))
       toast.success(`${checkedIds.size} candidate(s) shortlisted`)
       setCheckedIds(new Set())
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to shortlist selected candidates")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to shortlist selected candidates"))
     } finally {
       setBulkPending(false)
     }
@@ -164,8 +165,8 @@ export function CandidatesView({ initialStatus = "" }: CandidatesViewProps) {
       await Promise.all(Array.from(checkedIds).map((id) => reject.mutateAsync(id)))
       toast.info(`${checkedIds.size} candidate(s) rejected`)
       setCheckedIds(new Set())
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to reject selected candidates")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to reject selected candidates"))
     } finally {
       setBulkPending(false)
     }

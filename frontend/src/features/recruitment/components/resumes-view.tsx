@@ -47,6 +47,7 @@ import { isInInterviewWorkflow } from "@/types/recruitment"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
 import { cn } from "cn"
+import { errorMessage } from "@/lib/errors"
 
 interface ResumesViewProps {
   onOpenCandidate?: (candidateId: string) => void
@@ -135,8 +136,8 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
     try {
       await reprocess.mutateAsync(r.id)
       toast.success(`Re-queued ${r.fileName} for parsing`)
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to reprocess resume")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to reprocess resume"))
     }
   }
 
@@ -150,8 +151,8 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
     try {
       await deleteResume.mutateAsync(pendingDelete.id)
       toast.info("Resume deleted")
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to delete resume")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to delete resume"))
     } finally {
       setPendingDelete(null)
     }
@@ -179,8 +180,8 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
       await Promise.all(Array.from(checkedIds).map((id) => reprocess.mutateAsync(id)))
       toast.success(`${checkedIds.size} resume(s) re-queued for parsing`)
       setCheckedIds(new Set())
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to reprocess selected resumes")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to reprocess selected resumes"))
     } finally {
       setBulkPending(false)
     }
@@ -202,8 +203,8 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
       }
       toast.info(`${ids.length} resume(s) deleted`)
       setCheckedIds(new Set())
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to delete selected resumes")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to delete selected resumes"))
     } finally {
       setBulkPending(false)
       setBulkDeleteConfirmOpen(false)

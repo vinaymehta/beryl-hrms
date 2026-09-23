@@ -34,6 +34,7 @@ import { recruitmentApi } from "../api"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
 import { cn } from "cn"
+import { errorMessage } from "@/lib/errors"
 
 interface ResumeDetailPanelProps {
   resumeId: string | null
@@ -117,8 +118,8 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
     try {
       await reprocess.mutateAsync(resumeId)
       toast.success("Resume re-queued for AI parsing")
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to reprocess resume")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to reprocess resume"))
     }
   }
 
@@ -138,8 +139,8 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
     try {
       await reject.mutateAsync(resume.candidate.id)
       toast.success(`${resume.candidate.fullName} marked as Rejected`)
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to reject")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to reject"))
     }
   }
 

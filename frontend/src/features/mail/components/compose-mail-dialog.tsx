@@ -17,6 +17,7 @@ import {
   SheetClose,
 } from "@/components/ui/sheet"
 import { useSendMailMessage } from "@/features/mail/hooks/use-mail-messages"
+import { errorMessage } from "@/lib/errors"
 
 export function ComposeMailDialog({
   open,
@@ -68,8 +69,8 @@ export function ComposeMailDialog({
       setShowCc(false)
       setShowBcc(false)
       onOpenChange(false)
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to send email. Please check your recipient and try again.")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to send email. Please check your recipient and try again."))
     }
   }
 

@@ -29,6 +29,7 @@ import {
   FilterIcon,
 } from "lucide-react"
 import { cn } from "cn"
+import { errorMessage } from "@/lib/errors"
 
 interface ScanZohoModalProps {
   open: boolean
@@ -110,8 +111,8 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
       const skippedSuffix = skippedParts.length > 0 ? ` Skipped ${skippedParts.join(" and ")} attachment(s).` : ""
 
       toast.success(`Scan complete! Found ${res.detectedResumes} new resume(s).${skippedSuffix}`)
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to scan mailbox")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to scan mailbox"))
     }
   }
 

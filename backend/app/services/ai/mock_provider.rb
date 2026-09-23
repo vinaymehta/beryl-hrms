@@ -105,8 +105,8 @@ module Ai
         potential_gaps: [
           "Kubernetes production management experience not explicitly detailed"
         ],
-        matching_skills: ["Ruby", "Ruby on Rails", "PostgreSQL", "React", "Docker"],
-        missing_skills: ["Kubernetes", "AWS Lambda"],
+        matching_skills: [ "Ruby", "Ruby on Rails", "PostgreSQL", "React", "Docker" ],
+        missing_skills: [ "Kubernetes", "AWS Lambda" ],
         ai_explanation: "Strong candidate matching 87% of role requirements with solid backend foundation and modern stack experience."
       }.to_json
     end

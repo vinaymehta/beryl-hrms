@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_22_130000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_23_160000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -190,6 +190,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_130000) do
     t.datetime "created_at", null: false
     t.text "improvement_areas"
     t.text "next_period_goals"
+    t.jsonb "responses", default: {}, null: false
     t.integer "stage", null: false
     t.text "strengths"
     t.datetime "submitted_at", null: false
@@ -224,7 +225,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_130000) do
     t.bigint "company_id", null: false
     t.datetime "created_at", null: false
     t.text "description"
-    t.integer "lens", default: 0, null: false
+    t.integer "lens"
     t.string "name", null: false
     t.integer "position", default: 0, null: false
     t.datetime "updated_at", null: false
@@ -258,6 +259,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_130000) do
     t.bigint "lineage_id"
     t.string "name", null: false
     t.integer "status", default: 0, null: false
+    t.jsonb "structure", default: {}, null: false
     t.datetime "updated_at", null: false
     t.integer "version", default: 1, null: false
     t.index ["company_id", "lineage_id", "version"], name: "index_appraisal_templates_on_lineage_version", unique: true

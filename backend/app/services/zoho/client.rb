@@ -1,5 +1,4 @@
 module Zoho
-
   # Thin wrapper around Zoho's OAuth v2 + Mail API v1.
   class Client
     OAUTH_SCOPE = "ZohoMail.accounts.ALL,ZohoMail.messages.ALL,ZohoMail.folders.ALL,AaaServer.profile.READ".freeze
@@ -169,7 +168,7 @@ module Zoho
       mode = read ? "markAsRead" : "markAsUnread"
       res = authenticated_api_connection(access_token).put("accounts/#{account_id}/updatemessage") do |req|
         req.headers["Content-Type"] = "application/json"
-        req.body = { mode: mode, messageId: [message_id.to_s] }.to_json
+        req.body = { mode: mode, messageId: [ message_id.to_s ] }.to_json
       end
       parse_response(res)
     end

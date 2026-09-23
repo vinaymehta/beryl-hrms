@@ -26,7 +26,7 @@ export function RatingScaleInput({
   labelledBy?: string
 }) {
   return (
-    <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-labelledby={labelledBy}>
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" role="radiogroup" aria-labelledby={labelledBy}>
       {RATING_SCALE.map((option) => {
         const active = value === option.value
         return (
@@ -40,15 +40,36 @@ export function RatingScaleInput({
             onClick={() => onChange(option.value)}
             title={option.description}
             className={cn(
-              "flex min-w-22 flex-1 flex-col items-center gap-0.5 rounded-lg border px-2 py-1.5 text-center transition-colors",
+              "flex flex-col items-center gap-1 rounded-xl border px-2 py-2.5 text-center transition-colors",
               active
-                ? "border-role-hr bg-role-hr text-role-hr-foreground"
-                : "border-input hover:bg-accent hover:text-accent-foreground",
+                ? "border-role-hr bg-role-hr/8 ring-1 ring-role-hr"
+                : "border-input hover:border-role-hr/40 hover:bg-accent/60",
               disabled && "cursor-not-allowed opacity-60"
             )}
           >
-            <span className="text-sm font-semibold tabular-nums">{option.value}</span>
-            <span className={cn("text-[10px] leading-tight", active ? "opacity-90" : "text-muted-foreground")}>
+            <span className="flex items-center gap-1.5">
+              {/* A real radio dot rather than a filled block: five solid
+                  buttons in a row read as five separate actions, where this
+                  reads as one choice with five options. */}
+              <span
+                aria-hidden
+                className={cn(
+                  "flex size-3.5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                  active ? "border-role-hr" : "border-muted-foreground/40"
+                )}
+              >
+                {active && <span className="size-1.5 rounded-full bg-role-hr" />}
+              </span>
+              <span
+                className={cn(
+                  "text-sm font-semibold tabular-nums",
+                  active ? "text-role-hr" : "text-foreground"
+                )}
+              >
+                {option.value}
+              </span>
+            </span>
+            <span className={cn("text-[11px] leading-tight", active ? "text-role-hr" : "text-muted-foreground")}>
               {option.label}
             </span>
           </button>
@@ -77,6 +98,8 @@ export function QuestionAnswer({
   onChange,
   reference,
   referenceLabel,
+  hidePrompt,
+  guideLength,
 }: {
   question: AppraisalTemplateQuestion
   value: AnswerValue
@@ -84,6 +107,14 @@ export function QuestionAnswer({
   /** The employee's own answer, when this form belongs to a reviewer. */
   reference?: { rating: number | null; comment: string | null }
   referenceLabel?: string
+  /** For a one-question area whose only question repeats the area's own name. */
+  hidePrompt?: boolean
+  /**
+   * Shows a `n/guide` counter under the evidence box. A GUIDE, not a cap —
+   * nothing is truncated and the backend stores `text` with no length limit,
+   * so going over turns the counter amber rather than eating what was typed.
+   */
+  guideLength?: number
 }) {
   const missing = needsEvidence(value)
   // Scope §12: a significant gap between the employee's own rating and the
@@ -94,7 +125,7 @@ export function QuestionAnswer({
 
   return (
     <div className="grid gap-2 border-b pb-4 last:border-0 last:pb-0">
-      <div>
+      <div className={cn(hidePrompt && "sr-only")}>
         <p id={`question-${question.id}`} className="text-sm font-medium text-foreground">
           {question.prompt}
         </p>
@@ -128,17 +159,34 @@ export function QuestionAnswer({
         onChange={(rating) => onChange({ rating })}
       />
 
-      <textarea
-        rows={2}
-        aria-label={`Evidence for: ${question.prompt}`}
-        value={value.comment}
-        onChange={(event) => onChange({ comment: event.target.value })}
-        placeholder={question.requiresComment ? "Evidence (required for this question)" : "Comments / evidence"}
-        className={cn(
-          "w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30",
-          missing && "border-warning"
+      <div className="relative">
+        <textarea
+          rows={3}
+          aria-label={`Evidence for: ${question.prompt}`}
+          value={value.comment}
+          onChange={(event) => onChange({ comment: event.target.value })}
+          placeholder={
+            question.requiresComment
+              ? "Evidence (required for this question)"
+              : "Share specific examples, projects or evidence…"
+          }
+          className={cn(
+            "w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30",
+            guideLength && "pb-6",
+            missing && "border-warning"
+          )}
+        />
+        {guideLength && (
+          <span
+            className={cn(
+              "pointer-events-none absolute right-2.5 bottom-2 text-[11px] tabular-nums",
+              value.comment.length > guideLength ? "text-warning" : "text-muted-foreground"
+            )}
+          >
+            {value.comment.length}/{guideLength}
+          </span>
         )}
-      />
+      </div>
       {missing && (
         <p className="flex items-center gap-1.5 text-xs text-warning">
           <TriangleAlertIcon className="size-3.5" />A rating of {value.rating} needs evidence.

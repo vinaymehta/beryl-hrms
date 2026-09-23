@@ -11,6 +11,7 @@ import {
   MailIcon,
   BriefcaseIcon,
   TrendingUpIcon,
+  CircleUserIcon,
   SettingsIcon,
 } from "lucide-react"
 
@@ -28,6 +29,24 @@ export interface NavItem {
   icon: LucideIcon
   /** Omit for items every authenticated user can see (Settings). An array means "any of these". */
   permission?: PermissionKey | PermissionKey[]
+  /**
+   * Only show this to a login that has an Employee record of its own.
+   *
+   * Not expressible as a permission: "My profile" isn't a privilege, it's a
+   * question of whether there is anything to show. A bare admin account with
+   * no employee record would otherwise get a link that bounces straight back
+   * — see app/(dashboard)/profile/page.tsx.
+   */
+  requiresEmployeeRecord?: boolean
+  /**
+   * Hide this from anyone holding one of these permissions.
+   *
+   * The inverse of `permission`, and needed because "My Profile" is for people
+   * who have no other way in: HR and Admin reach their own record through the
+   * Employees directory they already manage, so a second entry point to the
+   * same page is just clutter in their nav.
+   */
+  hiddenFor?: PermissionKey | PermissionKey[]
 }
 
 const ALL_NAV_ITEMS: (NavItem & { hidden?: boolean })[] = [
@@ -54,10 +73,34 @@ const ALL_NAV_ITEMS: (NavItem & { hidden?: boolean })[] = [
   // TO RE-ENABLE: uncomment the line below and restore the render in
   // app/(dashboard)/mail/page.tsx.
   // { label: "Mail", href: "/mail", icon: MailIcon, permission: PERMISSIONS.mailView },
+  // Your own record, reached without an id — see app/(dashboard)/profile.
+  // Deliberately NOT /employees/<id>: that route is the HR management view of
+  // somebody else, and putting an employee's own id in the address bar is an
+  // invitation to try a different one.
+  //
+  // Above Appraisal, so an employee's whole nav reads My Profile, Appraisal,
+  // Settings — their own record first, then the work about it.
+  //
+  // Not shown to HR/Admin: they open their own record from the Employees
+  // directory like any other, so this would be a second door onto the same
+  // page. The /profile ROUTE still works for them — only the nav entry is
+  // withheld.
+  {
+    label: "My Profile",
+    href: "/profile",
+    icon: CircleUserIcon,
+    requiresEmployeeRecord: true,
+    hiddenFor: PEOPLE_MANAGEMENT_PERMISSIONS,
+  },
   // Its own top-level workspace, deliberately NOT nested under Employees: an
   // appraisal cycle is a company-wide process, and an ordinary employee reaches
   // their own appraisal here rather than through the people directory.
   { label: "Appraisal", href: "/appraisals", icon: TrendingUpIcon, permission: APPRAISAL_ACCESS_PERMISSIONS },
+  // Your own record, reached without an id — see app/(dashboard)/profile.
+  // Deliberately NOT /employees/<id>: that route is the HR management view of
+  // somebody else, and putting an employee's own id in the address bar is an
+  // invitation to try a different one.
+  //
   { label: "Recruitment", href: "/recruitment", icon: BriefcaseIcon, permission: PERMISSIONS.recruitmentView },
   { label: "Settings", href: "/settings", icon: SettingsIcon },
 ]

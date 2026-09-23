@@ -61,7 +61,11 @@ module Api
           id: employee.user.id,
           email: employee.user.email_address,
           status: employee.user.status,
-          emailVerifiedAt: employee.user.email_verified_at
+          emailVerifiedAt: employee.user.email_verified_at,
+          # Null until this account's first login since the field started
+          # being recorded — an account that has never been used and one that
+          # predates the stamp look the same, which is the honest reading.
+          lastLoginAt: employee.user.last_login_at
         }
       end
 

@@ -26,7 +26,7 @@ module Appraisals
       raise Error, "This cycle has already been started" if @cycle.started?
       raise Error, "A cycle needs at least one eligible employee before it can start" if participants.empty?
 
-      created = 0
+      created = []
       skipped = []
 
       ActiveRecord::Base.transaction do
@@ -42,17 +42,31 @@ module Appraisals
           appraisal.save!
           Workflow.record_transition(appraisal, from: nil, to: :self_appraisal_open, actor: @actor,
                                      notes: "Cycle started")
-          Notifier.self_appraisal_opened(appraisal)
-          created += 1
+          created << appraisal
         end
 
         @cycle.update!(status: :active, started_at: Time.current)
       end
 
-      Result.new(created_count: created, skipped: skipped)
+      announce(created)
+
+      Result.new(created_count: created.size, skipped: skipped)
     end
 
     private
+      # After the commit, and never able to undo it — the same rule
+      # Workflow#announce follows. Inside the transaction a single failed
+      # notification would roll back the entire cycle start, which is the
+      # opposite of the priority: the appraisals are the fact, telling people
+      # about them is the courtesy.
+      def announce(appraisals)
+        appraisals.each do |appraisal|
+          Notifier.self_appraisal_opened(appraisal)
+        rescue StandardError => e
+          Rails.logger.warn("[appraisal] start notification failed for ##{appraisal.id}: #{e.class}: #{e.message}")
+        end
+      end
+
       def participants
         @participants ||= @cycle.eligible_employees.includes(:manager_assignments).to_a
       end

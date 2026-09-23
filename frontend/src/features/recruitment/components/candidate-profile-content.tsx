@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useCandidate, useCandidateMutations } from "../hooks"
+import type { CandidateSkill } from "@/types/recruitment"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -39,6 +40,7 @@ import {
 import { recruitmentApi } from "../api"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
+import { errorMessage } from "@/lib/errors"
 
 const statusColors: Record<string, string> = {
   needs_review: "bg-amber-500/10 text-amber-600 border-amber-500/30",
@@ -80,8 +82,8 @@ export function CandidateProfileContent({ candidateId }: { candidateId: string }
     try {
       await reject.mutateAsync(candidateId)
       toast.info("Candidate marked as Rejected")
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to update status")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to update status"))
     }
   }
 
@@ -90,8 +92,8 @@ export function CandidateProfileContent({ candidateId }: { candidateId: string }
       await deleteCandidate.mutateAsync(candidateId)
       toast.success("Candidate deleted")
       router.push("/recruitment")
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to delete candidate")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to delete candidate"))
     } finally {
       setConfirmingDelete(false)
     }
@@ -101,8 +103,8 @@ export function CandidateProfileContent({ candidateId }: { candidateId: string }
     try {
       await confirmDuplicate.mutateAsync(candidateId)
       toast.success("Marked as a confirmed duplicate")
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to update duplicate status")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to update duplicate status"))
     }
   }
 
@@ -110,8 +112,8 @@ export function CandidateProfileContent({ candidateId }: { candidateId: string }
     try {
       await dismissDuplicate.mutateAsync(candidateId)
       toast.success("Duplicate flag dismissed")
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to update duplicate status")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to update duplicate status"))
     }
   }
 
@@ -344,9 +346,9 @@ export function CandidateProfileContent({ candidateId }: { candidateId: string }
 
           <div className="flex flex-wrap gap-1.5">
             {candidate.skills && candidate.skills.length > 0 ? (
-              candidate.skills.map((s: any, idx: number) => {
+              candidate.skills.map((s: CandidateSkill | string, idx: number) => {
                 const skillName = typeof s === "string" ? s : s.name
-                const provenance = typeof s === "object" ? s.provenance : "explicit"
+                const provenance = typeof s === "string" ? "explicit" : s.provenance
                 return (
                   <span
                     key={idx}

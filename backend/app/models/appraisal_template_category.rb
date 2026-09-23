@@ -3,7 +3,10 @@ class AppraisalTemplateCategory < ApplicationRecord
 
   # The three performance lenses the scope names, with their headline split.
   # Stored per category so a template can carry several categories per lens.
-  enum :lens, { past: 0, current_capability: 1, future_readiness: 2 }, prefix: true, validate: true
+  # Nil is a real state: "the source never said which perspective this is".
+  # Activation is where it becomes mandatory — see AppraisalTemplate.
+  enum :lens, { past: 0, current_capability: 1, future_readiness: 2 },
+       prefix: true, validate: { allow_nil: true }
 
   LENS_TARGET_WEIGHTS = { "past" => 60, "current_capability" => 25, "future_readiness" => 15 }.freeze
 

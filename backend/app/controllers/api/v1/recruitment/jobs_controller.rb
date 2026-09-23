@@ -112,7 +112,7 @@ module Api
             end
             render json: { data: serialize_match(match) }
           else
-            render json: { errors: [{ message: "Invalid match status: #{new_status}" }] }, status: :unprocessable_entity
+            render json: { errors: [ { message: "Invalid match status: #{new_status}" } ] }, status: :unprocessable_entity
           end
         end
 

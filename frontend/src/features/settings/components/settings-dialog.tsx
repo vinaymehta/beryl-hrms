@@ -59,49 +59,40 @@ export function SettingsView({ initialSection }: { initialSection: SettingsSecti
         </div>
       </div>
 
-      <div className="flex min-h-[600px] flex-col overflow-hidden rounded-2xl border bg-card shadow-2xs lg:flex-row">
-        {/* Horizontal strip on narrow screens, a proper column beside the
-            content once there's room for one. */}
-        <nav
-          aria-label="Settings sections"
-          className="flex shrink-0 gap-1 overflow-x-auto border-b p-3 lg:w-64 lg:flex-col lg:overflow-x-visible lg:overflow-y-auto lg:border-b-0 lg:border-r"
-        >
-          {SETTINGS_SECTIONS.map((s) => (
-            <SettingsNavItem
-              key={s.id}
-              section={s}
-              active={s.id === section}
-              onSelect={() => selectSection(s.id)}
-            />
-          ))}
-          {/* A section the viewer has no business in renders nothing at all
-              — see SettingsNavItem. */}
-        </nav>
+      {/* Underline tabs across the top, matching the Appraisal workspace —
+          the two are peers in the app, so they navigate the same way. A
+          section the viewer has no business in renders nothing at all; see
+          SettingsTab. */}
+      <nav aria-label="Settings sections" className="flex flex-wrap gap-1.5 border-b pb-px">
+        {SETTINGS_SECTIONS.map((s) => (
+          <SettingsTab
+            key={s.id}
+            section={s}
+            active={s.id === section}
+            onSelect={() => selectSection(s.id)}
+          />
+        ))}
+      </nav>
 
-        <div className="min-w-0 flex-1 overflow-y-auto p-5 sm:p-6">
-          <div className="space-y-5">
-            <div className="flex items-center gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-role-admin/12 text-role-admin">
-                <active.icon className="size-5" />
-              </span>
-              <div className="min-w-0">
-                <h2 className="text-lg font-semibold tracking-tight text-foreground">
-                  {active.label}
-                </h2>
-                <p className="text-sm text-muted-foreground">{active.description}</p>
-              </div>
-            </div>
-
-            {/* Required, not decorative: the Calendly and Mail sections
-                read the OAuth ?connected/?error params with
-                useSearchParams, and a static route that does so from a
-                Client Component fails the production build without a
-                Suspense boundary above the call. */}
-            <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
-              <Content />
-            </Suspense>
+      <div className="space-y-5">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-role-admin/12 text-role-admin">
+            <active.icon className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">{active.label}</h2>
+            <p className="text-sm text-muted-foreground">{active.description}</p>
           </div>
         </div>
+
+        {/* Required, not decorative: the Calendly and Mail sections
+            read the OAuth ?connected/?error params with
+            useSearchParams, and a static route that does so from a
+            Client Component fails the production build without a
+            Suspense boundary above the call. */}
+        <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+          <Content />
+        </Suspense>
       </div>
     </div>
   )
@@ -109,7 +100,7 @@ export function SettingsView({ initialSection }: { initialSection: SettingsSecti
 
 export const SettingsDialog = SettingsView
 
-function SettingsNavItem({
+function SettingsTab({
   section,
   active,
   onSelect,
@@ -125,48 +116,24 @@ function SettingsNavItem({
 
   if (section.permission && !allowed) return null
 
+  // Same shape as the Appraisal workspace's tabs, in the settings accent
+  // colour. The section's caption is dropped rather than squeezed in: the
+  // description under the heading below already says the same thing, and a
+  // tab strip that wraps two lines per tab stops reading as a tab strip.
   return (
     <button
       type="button"
       onClick={onSelect}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "group relative flex shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors lg:w-full",
+        "flex items-center gap-1.5 rounded-t-lg border-b-2 px-3 py-2 text-sm transition-colors",
         active
-          ? "bg-role-admin/8 ring-1 ring-role-admin/20"
-          : "ring-1 ring-transparent hover:bg-muted/60"
+          ? "border-role-admin font-semibold text-role-admin"
+          : "border-transparent text-muted-foreground hover:text-foreground"
       )}
     >
-      {/* The purple edge marking the current section — the same cue the main
-          sidebar gives, at a size that suits a nested nav. */}
-      {active && (
-        <span aria-hidden className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-role-admin" />
-      )}
-
-      <span
-        className={cn(
-          "flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors",
-          active
-            ? "bg-role-admin/15 text-role-admin"
-            : "bg-muted text-muted-foreground group-hover:text-foreground"
-        )}
-      >
-        <Icon className="size-4.5" />
-      </span>
-
-      <span className="min-w-0">
-        <span
-          className={cn(
-            "block truncate text-sm font-medium",
-            active ? "text-role-admin" : "text-foreground"
-          )}
-        >
-          {section.label}
-        </span>
-        <span className="hidden truncate text-xs text-muted-foreground sm:block">
-          {section.caption}
-        </span>
-      </span>
+      <Icon className="size-4" />
+      {section.label}
     </button>
   )
 }

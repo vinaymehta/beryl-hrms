@@ -31,6 +31,7 @@ import {
 import type { Job, JobStatus, MatchStatus } from "@/types/recruitment"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
+import { errorMessage } from "@/lib/errors"
 
 interface JobsMatchingViewProps {
   onOpenCandidate?: (candidateId: string) => void
@@ -87,19 +88,21 @@ export function JobsMatchingView({ onOpenCandidate }: JobsMatchingViewProps) {
       setNewTitle("")
       setNewSkills("")
       setNewDesc("")
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to create job")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to create job"))
     }
   }
 
   const handleRunMatch = async (jobId: string) => {
     try {
       toast.info("Evaluating candidates against job requirements with Claude AI...")
-      const res: any = await matchCandidates.mutateAsync({ id: jobId })
+      const res = (await matchCandidates.mutateAsync({ id: jobId })) as
+        | { meta?: { matchedCandidatesCount?: number } }
+        | undefined
       const count = res?.meta?.matchedCandidatesCount ?? 0
       toast.success(`AI evaluation complete! Matched ${count} candidate(s).`)
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to match candidates")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to match candidates"))
     }
   }
 
@@ -111,8 +114,8 @@ export function JobsMatchingView({ onOpenCandidate }: JobsMatchingViewProps) {
     try {
       await updateMatch.mutateAsync({ jobId, matchId, status })
       toast.success(`Candidate match updated to ${status}`)
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to update match status")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to update match status"))
     }
   }
 

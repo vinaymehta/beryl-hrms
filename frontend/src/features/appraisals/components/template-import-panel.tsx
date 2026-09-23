@@ -1,7 +1,9 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { UploadIcon, DownloadIcon, CheckCircle2Icon, TriangleAlertIcon, FileSpreadsheetIcon } from "lucide-react"
+import {
+  UploadIcon, DownloadIcon, CheckCircle2Icon, TriangleAlertIcon, FileSpreadsheetIcon, InfoIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -21,6 +23,46 @@ import type { TemplateImportPreview } from "@/types/appraisals"
  * endpoint — so an imported template passes exactly the same rules as a typed
  * one, including the 100% weight total.
  */
+
+/** One detected section, listed so the admin can see it survived the import. */
+function DetectedSection({
+  title,
+  count,
+  children,
+}: {
+  title: string
+  count: number
+  children: React.ReactNode
+}) {
+  if (count === 0) return null
+
+  return (
+    <div className="grid gap-1 rounded-lg border p-2.5">
+      <p className="flex items-center justify-between gap-2 text-xs font-semibold">
+        {title}
+        <Badge variant="outline" className="tabular-nums">
+          {count}
+        </Badge>
+      </p>
+      {children}
+    </div>
+  )
+}
+
+/** Labels with whatever the workbook already had typed against them. */
+function FieldList({ fields }: { fields: { label: string; value: string | null }[] }) {
+  return (
+    <ul className="grid gap-0.5">
+      {fields.map((field) => (
+        <li key={field.label} className="flex items-start justify-between gap-2 text-xs text-muted-foreground">
+          <span>· {field.label}</span>
+          {field.value && <span className="shrink-0 font-medium text-foreground">{field.value}</span>}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export function TemplateImportPanel({
   onUse,
 }: {
@@ -129,13 +171,48 @@ export function TemplateImportPanel({
             </ul>
           )}
 
+          {(preview.warnings?.length ?? 0) > 0 && (
+            <ul className="grid gap-1 rounded-lg border border-info/40 bg-info/5 p-2.5">
+              {preview.warnings!.map((warning) => (
+                <li key={warning} className="flex items-start gap-1.5 text-xs text-info">
+                  <InfoIcon className="mt-px size-3 shrink-0" />
+                  {warning}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Anything the parser could not place. Empty is the normal case —
+              it is here so a workbook the importer only half-understands says
+              so out loud instead of quietly losing the rest. */}
+          {(preview.unmappedRows?.length ?? 0) > 0 && (
+            <div className="grid gap-1 rounded-lg border border-warning/40 bg-warning/5 p-2.5">
+              <p className="text-xs font-semibold text-warning">
+                {preview.unmappedRows!.length} row(s) were not recognised and will not be imported
+              </p>
+              <ul className="grid gap-0.5">
+                {preview.unmappedRows!.map((row) => (
+                  <li key={row.row} className="truncate text-xs text-muted-foreground">
+                    Row {row.row}: {row.content}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <ul className="grid max-h-80 gap-1.5 overflow-y-auto">
             {preview.categories.map((category) => (
               <li key={`${category.name}-${category.position}`} className="grid gap-1 rounded-lg border p-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-medium">{category.name}</p>
                   <div className="flex items-center gap-1.5">
-                    <LensBadge lens={category.lens} />
+                    {category.lens ? (
+                      <LensBadge lens={category.lens} />
+                    ) : (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        Perspective not set
+                      </Badge>
+                    )}
                     <Badge variant="outline" className="tabular-nums">
                       {category.weight}%
                     </Badge>
@@ -151,6 +228,63 @@ export function TemplateImportPanel({
               </li>
             ))}
           </ul>
+
+          {/* Everything else the workbook carried. Shown before saving so the
+              admin can confirm it was all read — the importer used to stop at
+              the totals row and discard every one of these sections. */}
+          {preview.layout === "sectioned" && (
+            <div className="grid gap-1.5">
+              <p className="text-xs font-semibold">Also detected in this workbook</p>
+
+              <DetectedSection
+                title="Employee information fields"
+                count={preview.employeeFields?.fields.length ?? 0}
+              >
+                <FieldList fields={preview.employeeFields?.fields ?? []} />
+                {(preview.employeeFields?.missing.length ?? 0) > 0 && (
+                  <p className="text-xs text-warning">
+                    Not found: {preview.employeeFields!.missing.join(", ")}
+                  </p>
+                )}
+              </DetectedSection>
+
+              <DetectedSection title="Performance perspectives" count={preview.perspectives?.length ?? 0}>
+                <ul className="grid gap-0.5">
+                  {preview.perspectives?.map((perspective) => (
+                    <li
+                      key={perspective.name}
+                      className="flex items-start justify-between gap-2 text-xs text-muted-foreground"
+                    >
+                      <span>· {perspective.name}</span>
+                      <span className="shrink-0 tabular-nums">{perspective.weight}%</span>
+                    </li>
+                  ))}
+                </ul>
+              </DetectedSection>
+
+              <DetectedSection
+                title="Development & career discussion"
+                count={preview.developmentFields?.length ?? 0}
+              >
+                <FieldList fields={preview.developmentFields ?? []} />
+              </DetectedSection>
+
+              <DetectedSection title="Final review" count={preview.finalReviewFields?.length ?? 0}>
+                <FieldList fields={preview.finalReviewFields ?? []} />
+              </DetectedSection>
+
+              <DetectedSection title="Rating guide" count={preview.ratingGuide?.length ?? 0}>
+                <ul className="grid gap-0.5">
+                  {preview.ratingGuide?.map((row) => (
+                    <li key={row.rating ?? row.level} className="text-xs text-muted-foreground">
+                      · <span className="font-medium text-foreground">{row.rating}</span> {row.level} —{" "}
+                      {row.definition}
+                    </li>
+                  ))}
+                </ul>
+              </DetectedSection>
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center justify-end gap-2">
             <p className="mr-auto text-xs text-muted-foreground">

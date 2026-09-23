@@ -75,6 +75,15 @@ export interface CandidateCertification {
   provenance: string
 }
 
+/** Which model produced an AI field, and when. Attached to anything AI-derived. */
+export interface AiMetadata {
+  provider?: string
+  model?: string
+  prompt_version?: string
+  evaluated_at?: string
+  processed_at?: string
+}
+
 export interface CandidateResumeSummary {
   id: string
   fileName: string
@@ -101,26 +110,29 @@ export interface CandidateResumeSummary {
   isDuplicate: boolean
   atsScore: number | null
   criteriaMatchPercentage: number | null
-  aiMetadata?: {
-    provider?: string
-    model?: string
-    prompt_version?: string
-    evaluated_at?: string
-    processed_at?: string
-  }
+  aiMetadata?: AiMetadata
+}
+
+/**
+ * What the AI parser pulls out of a resume. Every field is optional because
+ * the model returns what it found, not a fixed schema — and the index
+ * signature keeps that honest: extra keys are expected, they just aren't
+ * known ahead of time. Anything read from here still has to be narrowed.
+ */
+export interface ResumeExtractedData {
+  ai_summary?: string
+  skills?: { name?: string; category?: string }[]
+  qualifications?: { degree?: string; field_of_study?: string; institution?: string; year_completed?: number }[]
+  experiences?: { job_title?: string; company_name?: string; duration_months?: number }[]
+  [key: string]: unknown
 }
 
 export interface CandidateResumeDetail extends CandidateResumeSummary {
   rawText: string | null
-  extractedData: any
-  provenanceData: any
-  aiMetadata?: {
-    provider?: string
-    model?: string
-    prompt_version?: string
-    evaluated_at?: string
-    processed_at?: string
-  }
+  extractedData: ResumeExtractedData | null
+  /** Per-field origin trace kept for auditing the parse; opaque to the UI. */
+  provenanceData: unknown
+  aiMetadata?: AiMetadata
   fileHash: string | null
   eligibilityBreakdown: {
     qualification: boolean | null
@@ -189,7 +201,7 @@ export interface CandidateSummary {
   resumeDate: string | null
 }
 
-export interface CandidateDetail extends CandidateSummary {
+export interface CandidateDetail extends Omit<CandidateSummary, "skills"> {
   firstName?: string | null
   lastName?: string | null
   state?: string | null
@@ -200,7 +212,7 @@ export interface CandidateDetail extends CandidateSummary {
   industry?: string | null
   languages?: string[]
   notes?: string | null
-  skills: any[] // CandidateSkill[]
+  skills: CandidateSkill[]
   qualifications: CandidateQualification[]
   experiences: CandidateExperience[]
   certifications: CandidateCertification[]
@@ -225,7 +237,7 @@ export interface CandidateJobMatch {
   matchingSkills: string[]
   missingSkills: string[]
   aiExplanation: string
-  aiMetadata?: any
+  aiMetadata?: AiMetadata
   status: MatchStatus
   updatedAt: string
 }
@@ -315,3 +327,15 @@ export interface FeedbackForm {
   wouldRecommend: boolean | null
   comments: string | null
 }
+
+/** Every panel the recruitment workspace can show. Lives here rather than in
+ *  the workspace component so the child views can take it as a prop type
+ *  without importing their own parent. */
+export type RecruitmentTab =
+  | "dashboard"
+  | "candidates"
+  | "resumes"
+  | "search"
+  | "jobs"
+  | "shortlisted"
+  | "interviews"

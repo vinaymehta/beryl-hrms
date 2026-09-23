@@ -56,21 +56,21 @@ module Api
           resumes = policy_scope(CandidateResume)
 
           # Real SQL aggregations
-          cities = candidates.where.not(city: [nil, ""])
+          cities = candidates.where.not(city: [ nil, "" ])
                              .group(:city)
                              .order(Arel.sql("count(*) desc"))
                              .limit(6)
                              .count
                              .map { |k, v| { name: k, count: v } }
 
-          qualifications = candidates.where.not(highest_qualification: [nil, ""])
+          qualifications = candidates.where.not(highest_qualification: [ nil, "" ])
                                      .group(:highest_qualification)
                                      .order(Arel.sql("count(*) desc"))
                                      .limit(6)
                                      .count
                                      .map { |k, v| { name: k, count: v } }
 
-          job_titles = candidates.where.not(current_role: [nil, ""])
+          job_titles = candidates.where.not(current_role: [ nil, "" ])
                                  .group(:current_role)
                                  .order(Arel.sql("count(*) desc"))
                                  .limit(6)

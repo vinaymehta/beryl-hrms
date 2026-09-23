@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
-import type { CandidateStatus } from "@/types/recruitment"
+import type { CandidateStatus, RecruitmentTab } from "@/types/recruitment"
 import {
   UsersIcon,
   FileTextIcon,
@@ -39,9 +39,7 @@ interface Kpi {
 }
 
 export function RecruitmentWorkspace() {
-  const [activeTab, setActiveTab] = useState<
-    "dashboard" | "candidates" | "resumes" | "search" | "jobs" | "shortlisted" | "interviews"
-  >("resumes")
+  const [activeTab, setActiveTab] = useState<RecruitmentTab>("resumes")
   const [scanModalOpen, setScanModalOpen] = useState(false)
   const [dashboardDetail, setDashboardDetail] = useState<DashboardDetail | null>(null)
   const [candidatesFilter, setCandidatesFilter] = useState<CandidateStatus | "">("")
@@ -62,13 +60,13 @@ export function RecruitmentWorkspace() {
 
   // Plain tab navigation — used by "View all" links and manual tab clicks.
   // An optional filter seeds the Candidates/Resumes view's initial status.
-  function navigateTab(tab: string, filter?: string) {
+  function navigateTab(tab: RecruitmentTab, filter?: string) {
     if (tab === "candidates") setCandidatesFilter((filter as CandidateStatus) || "")
     if (tab === "resumes") {
       setResumesFilter(filter || "")
       setResumesCandidateStatusFilter("")
     }
-    setActiveTab(tab as any)
+    setActiveTab(tab)
   }
 
   // Needs Review / Rejected Resumes Quick Stats — filter Resumes by the
@@ -147,7 +145,7 @@ export function RecruitmentWorkspace() {
   // Resumes/AI Discovery tabs commented out per request — activeTab still
   // defaults to "resumes" below, so that view keeps rendering by default
   // with no visible tab bar to switch away from it.
-  const tabs: { id: string; label: string; icon: LucideIcon; badge?: string }[] = [
+  const tabs: { id: RecruitmentTab; label: string; icon: LucideIcon; badge?: string }[] = [
     // {
     //   id: "resumes",
     //   label: "Resumes",
@@ -255,7 +253,7 @@ export function RecruitmentWorkspace() {
             return (
               <button
                 key={tab.id}
-                onClick={() => (tab.id === "candidates" || tab.id === "resumes" ? navigateTab(tab.id) : setActiveTab(tab.id as any))}
+                onClick={() => (tab.id === "candidates" || tab.id === "resumes" ? navigateTab(tab.id) : setActiveTab(tab.id))}
                 className={`relative flex items-center gap-2 whitespace-nowrap px-1 py-3.5 text-sm font-medium transition-colors ${
                   isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}

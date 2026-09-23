@@ -26,10 +26,10 @@ module Ai
       end
 
       payload = {
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        contents: [ { role: "user", parts: [ { text: prompt } ] } ],
         generationConfig: { temperature: temperature, maxOutputTokens: max_tokens }
       }
-      payload[:systemInstruction] = { parts: [{ text: system }] } if system.present?
+      payload[:systemInstruction] = { parts: [ { text: system } ] } if system.present?
 
       response = connection.post("#{API_BASE}/#{@model}:generateContent") do |req|
         req.headers["x-goog-api-key"] = @api_key

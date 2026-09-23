@@ -21,10 +21,12 @@ export function AccountSecuritySettings() {
         <CardContent>
           {/* Form and requirements side by side, stacked on narrow screens —
               the rules stay readable while the fields are filled in rather
-              than sitting off the bottom of the card. The panel is sized for
-              the dialog's own content column (~688px at lg), not the
-              viewport, since the dialog caps at max-w-5xl either way. */}
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_14rem] lg:items-start">
+              than sitting off the bottom of the card. Both columns are given
+              fixed widths rather than 1fr: now that the section nav is a tab
+              strip above rather than a column beside, a fractional column
+              would stretch the full card and strand the rules panel at the
+              far right, yards from the fields it describes. */}
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,24rem)_14rem] lg:items-start lg:justify-start">
             <ChangePasswordForm />
 
             <div className="rounded-xl bg-role-admin/5 p-4 ring-1 ring-role-admin/15">

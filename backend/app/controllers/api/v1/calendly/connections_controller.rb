@@ -10,9 +10,17 @@ module Api
         allow_unauthenticated_access only: :callback
         skip_before_action :set_current_tenant, only: :callback
 
+        # Authorization runs as a FILTER, not as the first line of each action.
+        # A filter that renders halts the chain; a helper called inside the
+        # action does not — it renders the 403 and then lets the action carry
+        # on to its own render, which is a DoubleRenderError on a good day and
+        # an unauthorized `destroy` that actually destroys on a bad one.
+        before_action :authorize_view!, only: :index
+        before_action :authorize_manage!,
+                      only: %i[create event_types set_event_type register_webhook destroy]
+
         # POST /api/v1/calendly/connections
         def create
-          authorize_manage!
           return render_not_configured unless client.configured?
 
           state = ::Calendly::ConnectionState.encode(
@@ -23,7 +31,6 @@ module Api
 
         # GET /api/v1/calendly/connections
         def index
-          authorize_view!
           connection = Current.company.calendly_connections.order(created_at: :desc).first
           render json: { data: connection ? serialize(connection) : nil }
         end
@@ -81,7 +88,6 @@ module Api
         # availability rules are what define the interview slots — we only let
         # the admin choose which one to book against.
         def event_types
-          authorize_manage!
           connection = active_connection
           return render json: { data: [] } if connection.nil?
 
@@ -100,7 +106,6 @@ module Api
 
         # PATCH /api/v1/calendly/connections/event_type
         def set_event_type
-          authorize_manage!
           connection = active_connection
           return render json: { errors: [ { message: "No Calendly account is connected." } ] }, status: :unprocessable_entity if connection.nil?
 
@@ -112,7 +117,6 @@ module Api
         # Retry for the case where connecting succeeded but subscribing didn't
         # (Calendly hiccup, or the server wasn't publicly reachable yet).
         def register_webhook
-          authorize_manage!
           connection = active_connection
           return render json: { errors: [ { message: "No Calendly account is connected." } ] }, status: :unprocessable_entity if connection.nil?
 
@@ -126,7 +130,6 @@ module Api
 
         # DELETE /api/v1/calendly/connections/:id
         def destroy
-          authorize_manage!
           connection = Current.company.calendly_connections.find(params[:id])
 
           ::Audit::Record.call(

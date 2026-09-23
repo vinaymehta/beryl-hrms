@@ -92,6 +92,12 @@ module Api
         def template_params
           params.permit(
             :name, :description, :status,
+            # The workbook sections the question model has no column for —
+            # employee fields, perspectives, development prompts, the final
+            # review and the rating guide. Permitted wholesale because it is
+            # opaque document structure, not addressable state; nothing reads
+            # it back out to make a decision with.
+            structure: {},
             categories_attributes: [
               :id, :name, :description, :lens, :weight, :position, :_destroy,
               { questions_attributes: %i[id prompt description position self_rating manager_rating requires_comment required _destroy] }

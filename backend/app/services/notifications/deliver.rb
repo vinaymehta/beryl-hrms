@@ -10,8 +10,17 @@ module Notifications
   class Deliver
     def self.call(...) = new(...).call
 
+    # Skipping is correct — but skipping SILENTLY is not. An appraisal whose
+    # reviewer has no login parks at that stage forever and nothing anywhere
+    # says why, so the drop is logged even though it isn't an error.
     def self.to_employee(employee, **kwargs)
-      return nil if employee&.user.nil?
+      if employee&.user.nil?
+        Rails.logger.info(
+          "[notifications] skipped #{kwargs[:category]} — " \
+          "#{employee ? "employee ##{employee.id} (#{employee.full_name}) has no login" : 'no employee given'}"
+        )
+        return nil
+      end
 
       call(user: employee.user, **kwargs)
     end

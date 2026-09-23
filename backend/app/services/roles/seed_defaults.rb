@@ -64,10 +64,23 @@ module Roles
       @company = company
     end
 
+    # Idempotent: a role that already exists is left alone, and only a role
+    # created right here gets its default permission set applied.
+    #
+    # That second half matters. Re-assigning permissions to an existing role
+    # would silently revert whatever an admin had changed in Settings — the
+    # defaults are a STARTING POINT, not a state to be re-imposed every time
+    # this runs. Registration is unaffected: a brand-new company has no roles,
+    # so every one of them is created and seeded exactly as before.
     def call
       ActsAsTenant.with_tenant(@company) do
         DEFAULT_ROLE_PERMISSIONS.each do |slug, keys|
-          role = @company.roles.create!(name: DISPLAY_NAMES.fetch(slug) { slug.titleize }, slug: slug, system_default: true)
+          role = @company.roles.find_by(slug: slug)
+          next if role
+
+          role = @company.roles.create!(
+            name: DISPLAY_NAMES.fetch(slug) { slug.titleize }, slug: slug, system_default: true
+          )
           role.permissions = (keys == :all ? Permission.all : Permission.where(key: keys))
         end
       end

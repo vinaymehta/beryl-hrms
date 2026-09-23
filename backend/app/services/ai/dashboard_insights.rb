@@ -34,8 +34,8 @@ module Ai
       Ai::AuditLogger.record(operation: "dashboard_insights", status: "failed", company: company, error: e)
       {
         executive_summary: "Recruitment dashboard analytics updated with current database figures.",
-        top_strengths: ["Candidate processing pipeline active and operational."],
-        actionable_recommendations: ["Review new candidates pending human verification."],
+        top_strengths: [ "Candidate processing pipeline active and operational." ],
+        actionable_recommendations: [ "Review new candidates pending human verification." ],
         generated_at: Time.current.iso8601
       }
     end

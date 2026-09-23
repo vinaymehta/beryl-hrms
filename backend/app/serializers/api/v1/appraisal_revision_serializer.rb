@@ -8,6 +8,11 @@ module Api
                  :summary, :achievements, :strengths, :improvement_areas,
                  :training_needs, :next_period_goals
 
+      # Answers to the template's own fields. Keys are the workbook's, so this
+      # is passed through rather than re-cased — the wizard looks them up by
+      # the same key the template structure advertises.
+      attribute :responses, &:responses
+
       attribute :label, &:label
       attribute :author_name do |revision|
         revision.author_employee&.full_name || revision.author_user&.full_name

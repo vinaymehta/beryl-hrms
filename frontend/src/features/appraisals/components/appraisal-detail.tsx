@@ -175,10 +175,15 @@ export function AppraisalDetail({ appraisalId, onBack }: { appraisalId: string; 
           reviewer gets the single-page form, because they work with the
           self-appraisal open beside them and splitting that across steps would
           only break the comparison. */}
+      {/* Deliberately NOT wrapped in a Section: the wizard opens with its own
+          title, deadline and stepper, and a "Your self-appraisal" card header
+          above that was simply a second heading for the same thing. */}
       {viewer.canSubmitSelf && (
-        <Section icon={PencilLineIcon} title="Your self-appraisal">
-          <SelfAppraisalWizard appraisal={appraisal} />
-        </Section>
+        <Card>
+          <CardContent className="p-4 sm:p-5">
+            <SelfAppraisalWizard appraisal={appraisal} />
+          </CardContent>
+        </Card>
       )}
 
       {viewer.canSubmitReview && (

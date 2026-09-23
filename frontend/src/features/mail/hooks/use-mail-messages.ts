@@ -3,7 +3,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { mailApi } from "@/features/mail/api"
-import type { MailFolder } from "@/types/mail"
+import type { MailFolder, MailMessageDetail, MailMessageSummary } from "@/types/mail"
+import type { PaginatedResponse } from "@/types/api"
 
 /** How often the Mail page re-checks Zoho for new mail. The message list
  *  and the stats/KPI cards poll on the SAME interval on purpose: they
@@ -108,18 +109,21 @@ export function useMarkMailRead() {
       mailApi.messages.markRead(connectionId, messageId, read),
     onMutate: async ({ connectionId, messageId, read = true }) => {
       // Optimistically update message in lists
-      queryClient.setQueriesData({ queryKey: ["mail", "messages"] }, (old: any) => {
-        if (!old?.data) return old
-        return {
-          ...old,
-          data: old.data.map((msg: any) => (msg.id === messageId ? { ...msg, isRead: read } : msg)),
+      queryClient.setQueriesData<PaginatedResponse<MailMessageSummary>>(
+        { queryKey: ["mail", "messages"] },
+        (old) => {
+          if (!old?.data) return old
+          return {
+            ...old,
+            data: old.data.map((msg) => (msg.id === messageId ? { ...msg, isRead: read } : msg)),
+          }
         }
-      })
+      )
       // Optimistically update single message cache
-      queryClient.setQueryData(["mail", "message", connectionId, messageId], (old: any) => {
-        if (!old) return old
-        return { ...old, isRead: read }
-      })
+      queryClient.setQueryData<MailMessageDetail>(
+        ["mail", "message", connectionId, messageId],
+        (old) => (old ? { ...old, isRead: read } : old)
+      )
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["mail", "messages"] })

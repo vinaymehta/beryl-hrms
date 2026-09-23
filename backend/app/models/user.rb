@@ -32,6 +32,18 @@ class User < ApplicationRecord
     email_verified_at.present?
   end
 
+  # The inverse of #permission?: everyone who holds a permission, rather than
+  # whether one person holds it. Needed by notifications addressed to a duty
+  # ("whoever may release this") rather than to a named individual — the
+  # appraisal workflow's reviewers are snapshotted on the appraisal, but its
+  # HR steps are not, so they can only be found this way.
+  scope :with_permission, ->(key) {
+    where(status: :active)
+      .where(id: UserRole.joins(role: { role_permissions: :permission })
+                         .where(permissions: { key: key.to_s })
+                         .select(:user_id))
+  }
+
   # Fresh (non-memoized) lookup — general purpose. The hot request path uses
   # Current.permissions instead, which memoizes this once per request.
   def permission_keys

@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { recruitmentApi } from "./api"
-import type { CandidateDetail, CandidateStatus, DuplicateStatus, JobStatus, MatchStatus } from "@/types/recruitment"
+import type { CandidateDetail, CandidateStatus, DuplicateStatus, Job, JobStatus, MatchStatus } from "@/types/recruitment"
 
 export function useRecruitmentStats() {
   return useQuery({
@@ -287,7 +287,7 @@ export function useJobMutations() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
+    mutationFn: ({ id, data }: { id: string; data: Partial<Job> }) =>
       recruitmentApi.jobs.update(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["recruitment", "jobs"] })

@@ -21,12 +21,17 @@ module Appraisals
 
     # @param answers [Array<Hash>] {question_id:, rating:, comment:}
     # @param narrative [Hash] summary/achievements/strengths/... free-text blocks
-    def initialize(appraisal:, stage:, author_user:, answers: [], narrative: {})
+    # @param responses [Hash] answers to the TEMPLATE's own free-text fields,
+    #   keyed by the workbook field key. Separate from `narrative` because
+    #   those six are fixed columns and these are whatever the imported
+    #   spreadsheet defined — see the `responses` migration.
+    def initialize(appraisal:, stage:, author_user:, answers: [], narrative: {}, responses: {})
       @appraisal = appraisal
       @stage = stage.to_s
       @author_user = author_user
       @answers = Array(answers)
       @narrative = narrative || {}
+      @responses = responses || {}
     end
 
     def call
@@ -38,6 +43,7 @@ module Appraisals
           stage: @stage,
           author_user: @author_user,
           author_employee: @author_user&.employee_record,
+          responses: template_responses,
           **narrative_attributes
         )
 
@@ -62,6 +68,23 @@ module Appraisals
         return if expected.to_s == @stage
 
         raise Error, "A #{@stage.humanize.downcase} can't be submitted while the appraisal is #{@appraisal.status.humanize.downcase}"
+      end
+
+      # Only keys the CYCLE'S FROZEN template actually defines are stored, for
+      # the same reason #build_answers checks question ids: a field that isn't
+      # on this appraisal's form has no business being answered on it.
+      def template_responses
+        keys = template_field_keys
+        return {} if keys.empty?
+
+        @responses.to_h { |key, value| [ key.to_s, value ] }.slice(*keys)
+      end
+
+      def template_field_keys
+        structure = @appraisal.appraisal_cycle.appraisal_template.structure || {}
+        Array(structure["wizardSections"] || structure["wizard_sections"])
+          .flat_map { |section| Array(section["fields"]).map { |field| field["key"].to_s } }
+          .compact_blank
       end
 
       def narrative_attributes

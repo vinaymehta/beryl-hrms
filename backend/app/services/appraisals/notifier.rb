@@ -55,6 +55,31 @@ module Appraisals
       )
     end
 
+    # The final review is in and the appraisal is sitting at the discussion
+    # step. Nobody is named on the appraisal for what comes next — releasing it
+    # is an HR duty, not a snapshotted reviewer slot — so this is addressed to
+    # whoever holds the permission. Without it an appraisal reaches the end of
+    # its review chain and waits silently for someone to notice.
+    def self.ready_for_release(appraisal, except_user: nil)
+      deliver_to_permission_holders(
+        appraisal, "appraisals.release", except_user: except_user,
+        category: "appraisal.ready_for_release",
+        title: "An appraisal is ready to release",
+        body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}. The final review is complete."
+      )
+    end
+
+    # Same reasoning for the optional compensation step: it is gated on a
+    # permission, so the people who can act on it are found by that permission.
+    def self.compensation_approval_pending(appraisal, except_user: nil)
+      deliver_to_permission_holders(
+        appraisal, "appraisals.manage_compensation", except_user: except_user,
+        category: "appraisal.compensation_approval_pending",
+        title: "An appraisal is waiting for compensation approval",
+        body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}."
+      )
+    end
+
     def self.returned_for_correction(appraisal, note)
       deliver_to_employee(
         appraisal,
@@ -82,8 +107,11 @@ module Appraisals
       )
     end
 
+    # Everyone who reviewed it, including the secondary — they authored a
+    # version of this appraisal, so leaving them out of its closing beat was an
+    # oversight rather than a rule.
     def self.acknowledged(appraisal)
-      %i[final primary].filter_map { |role| recipient_for(appraisal, role) }.uniq.each do |recipient|
+      %i[final secondary primary].filter_map { |role| recipient_for(appraisal, role) }.uniq.each do |recipient|
         deliver_to_employee_record(
           appraisal, recipient,
           category: "appraisal.acknowledged",
@@ -119,6 +147,23 @@ module Appraisals
       )
     end
 
-    private_class_method :deliver_to_employee, :deliver_to_employee_record
+    # The actor is skipped: telling somebody that the thing they just did is now
+    # waiting for them is noise, and HR acting as their own final reviewer is
+    # ordinary in a small company.
+    def self.deliver_to_permission_holders(appraisal, permission, except_user: nil, **kwargs)
+      recipients = User.where(company_id: appraisal.company_id).with_permission(permission)
+      recipients = recipients.where.not(id: except_user.id) if except_user
+
+      recipients.find_each do |user|
+        ::Notifications::Deliver.call(
+          user: user,
+          action_url: "/appraisals/#{appraisal.id}",
+          notifiable: appraisal,
+          **kwargs
+        )
+      end
+    end
+
+    private_class_method :deliver_to_employee, :deliver_to_employee_record, :deliver_to_permission_holders
   end
 end

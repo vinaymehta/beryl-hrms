@@ -51,7 +51,7 @@ module Api
         ActiveRecord::Base.transaction do
           ::Appraisals::SubmitRevision.call(
             appraisal: appraisal, stage: :self_appraisal, author_user: Current.user,
-            answers: answer_params, narrative: narrative_params
+            answers: answer_params, narrative: narrative_params, responses: response_params
           )
           # The draft has served its purpose; leaving it would reopen the
           # half-finished text next time the employee looks at the appraisal.
@@ -77,6 +77,7 @@ module Api
           self_appraisal_draft: {
             "answers" => answer_params.map { |answer| answer.transform_keys(&:to_s) },
             "narrative" => narrative_params.transform_keys(&:to_s),
+            "responses" => response_params,
             "step" => params[:step].presence&.to_i
           },
           self_appraisal_draft_saved_at: Time.current
@@ -93,7 +94,7 @@ module Api
         ActiveRecord::Base.transaction do
           ::Appraisals::SubmitRevision.call(
             appraisal: appraisal, stage: appraisal.status, author_user: Current.user,
-            answers: answer_params, narrative: narrative_params
+            answers: answer_params, narrative: narrative_params, responses: response_params
           )
           ::Appraisals::Workflow.new(
             appraisal: appraisal, to: next_status_after_review(appraisal), actor: Current.user, notes: params[:notes]
@@ -277,6 +278,14 @@ module Api
           Array(params[:answers]).map do |answer|
             answer.permit(:question_id, :rating, :comment).to_h.symbolize_keys
           end
+        end
+
+        # Free-form by necessity: the keys are whatever the imported workbook
+        # defined, so they can't be listed here. SubmitRevision narrows them to
+        # the keys the cycle's frozen template actually carries, which is the
+        # check that matters.
+        def response_params
+          params[:responses].respond_to?(:to_unsafe_h) ? params[:responses].to_unsafe_h : {}
         end
 
         def narrative_params

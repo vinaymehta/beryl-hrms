@@ -344,6 +344,118 @@ RSpec.describe "Api::V1::Appraisals", type: :request do
       expect(bodies).not_to include("Not for them")
     end
 
+    # Regression: the subject's clause used to require released_at, so an
+    # employee saw NO comment at all before release — not a manager's
+    # employee_visible one, and not even the comment they had just written
+    # themselves. `management_only` stays the boundary; release does not.
+    describe "comment visibility for the employee, before release" do
+      # One appraisal mid-review, carrying one comment of each kind from the
+      # primary reviewer plus one the employee wrote.
+      def appraisal_with_comments
+        setup = running_cycle
+        appraisal = setup[:appraisal]
+
+        login("subject@acme.test")
+        submit_self(appraisal, setup[:template])
+
+        login("primary@acme.test")
+        post "/api/v1/appraisals/#{appraisal.id}/add_comment",
+             params: { body: "Shared with them", visibility: "employee_visible" }.to_json, headers: json_headers
+        post "/api/v1/appraisals/#{appraisal.id}/add_comment",
+             params: { body: "Internal note", visibility: "management_only" }.to_json, headers: json_headers
+
+        login("subject@acme.test")
+        post "/api/v1/appraisals/#{appraisal.id}/add_comment",
+             params: { body: "My own comment" }.to_json, headers: json_headers
+
+        setup
+      end
+
+      def comment_bodies = body["comments"].map { |c| c["body"] }
+
+      it "shows the employee a manager's employee-visible comment" do
+        setup = appraisal_with_comments
+
+        login("subject@acme.test")
+        get "/api/v1/appraisals/#{setup[:appraisal].id}"
+
+        expect(in_tenant { setup[:appraisal].reload.released_at }).to be_nil
+        expect(comment_bodies).to include("Shared with them")
+      end
+
+      it "hides a management-only comment from the employee" do
+        setup = appraisal_with_comments
+
+        login("subject@acme.test")
+        get "/api/v1/appraisals/#{setup[:appraisal].id}"
+
+        expect(comment_bodies).not_to include("Internal note")
+        expect(body["comments"].map { |c| c["visibility"] }.uniq).to eq([ "employee_visible" ])
+      end
+
+      it "shows the employee the comment they submitted themselves" do
+        setup = appraisal_with_comments
+
+        login("subject@acme.test")
+        get "/api/v1/appraisals/#{setup[:appraisal].id}"
+
+        expect(comment_bodies).to include("My own comment")
+      end
+
+      # The bug as reported: the comment was accepted and then vanished.
+      it "returns the employee's own comment in the create response itself" do
+        setup = running_cycle
+        login("subject@acme.test")
+        submit_self(setup[:appraisal], setup[:template])
+
+        post "/api/v1/appraisals/#{setup[:appraisal].id}/add_comment",
+             params: { body: "Straight back to me" }.to_json, headers: json_headers
+
+        expect(response).to have_http_status(:created)
+        expect(comment_bodies).to include("Straight back to me")
+      end
+
+      it "saves an employee's comment as employee_visible however they ask" do
+        setup = running_cycle
+        login("subject@acme.test")
+        submit_self(setup[:appraisal], setup[:template])
+
+        post "/api/v1/appraisals/#{setup[:appraisal].id}/add_comment",
+             params: { body: "Not yours to hide", visibility: "management_only" }.to_json, headers: json_headers
+
+        expect(in_tenant { setup[:appraisal].comments.last.visibility }).to eq("employee_visible")
+      end
+
+      it "still gives management-only comments to HR/Admin" do
+        setup = appraisal_with_comments
+
+        login_admin
+        get "/api/v1/appraisals/#{setup[:appraisal].id}"
+
+        expect(comment_bodies).to include("Internal note", "Shared with them", "My own comment")
+      end
+
+      it "still gives management-only comments to an assigned reviewer" do
+        setup = appraisal_with_comments
+
+        login("primary@acme.test")
+        get "/api/v1/appraisals/#{setup[:appraisal].id}"
+
+        expect(comment_bodies).to include("Internal note", "Shared with them", "My own comment")
+      end
+
+      # Being an employee somewhere does not make you an audience everywhere.
+      it "shows an unrelated employee nothing, own-authored clause included" do
+        setup = appraisal_with_comments
+        staff(email: "stranger@acme.test", first_name: "Sam", last_name: "Stranger")
+
+        login("stranger@acme.test")
+        get "/api/v1/appraisals/#{setup[:appraisal].id}"
+
+        expect(response).to have_http_status(:not_found)
+      end
+    end
+
     it "opens the final version to the employee only after release" do
       setup = running_cycle
       appraisal = setup[:appraisal]

@@ -23,6 +23,7 @@ import { useMailMessage, useMarkMailRead, useSendMailMessage } from "@/features/
 import { mailApi } from "@/features/mail/api"
 import { recruitmentApi } from "@/features/recruitment/api"
 import type { MailAttachment, MailMessageSummary } from "@/types/mail"
+import { errorMessage } from "@/lib/errors"
 
 function formatBytes(bytes: number) {
   if (!bytes || bytes <= 0) return "0 B"
@@ -106,8 +107,8 @@ export function MessageReadingPane({
         fileName: att.name,
       })
       toast.success(`"${att.name}" sent to Recruitment AI processing pipeline!`)
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to import resume")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to import resume"))
     } finally {
       setImportingId(null)
     }
@@ -167,8 +168,8 @@ export function MessageReadingPane({
       setQuickReply("")
       setReplyCc("")
       setReplyBcc("")
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to send reply")
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to send reply"))
     }
   }
 

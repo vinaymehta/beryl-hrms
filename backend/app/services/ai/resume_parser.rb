@@ -105,7 +105,7 @@ module Ai
     def extract_boolean_scalar(field)
       return nil if field.nil?
       val = field.is_a?(Hash) ? field["value"] : field
-      return nil unless [true, false].include?(val)
+      return nil unless [ true, false ].include?(val)
       val
     end
 

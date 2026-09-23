@@ -33,7 +33,7 @@ RSpec.describe Ai::Provider do
     end
     let(:job) do
       ActsAsTenant.with_tenant(company) do
-        create(:job, company: company, title: "Senior Backend Engineer", min_experience: 4, required_skills: ["Ruby on Rails"])
+        create(:job, company: company, title: "Senior Backend Engineer", min_experience: 4, required_skills: [ "Ruby on Rails" ])
       end
     end
 

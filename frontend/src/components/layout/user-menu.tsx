@@ -1,6 +1,6 @@
 "use client"
 
-import { LogOutIcon, SettingsIcon } from "lucide-react"
+import { CircleUserIcon, LogOutIcon, SettingsIcon } from "lucide-react"
 import Link from "next/link"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -15,8 +15,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useCurrentUser } from "@/features/auth/hooks/use-current-user"
+import { usePermission } from "@/features/auth/hooks/use-permission"
 import { useLogout } from "@/features/auth/hooks/use-auth-mutations"
-import { roleBadgeClasses } from "@/constants/permissions"
+import { PEOPLE_MANAGEMENT_PERMISSIONS, roleBadgeClasses } from "@/constants/permissions"
 import { cn } from "cn"
 
 function initials(firstName: string, lastName: string) {
@@ -25,6 +26,7 @@ function initials(firstName: string, lastName: string) {
 
 export function UserMenu() {
   const { user } = useCurrentUser()
+  const managesPeople = usePermission(PEOPLE_MANAGEMENT_PERMISSIONS)
   const logout = useLogout()
 
   if (!user) return null
@@ -54,6 +56,15 @@ export function UserMenu() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
+          {/* Matches the sidebar rule: only a login with an employee record,
+              and not HR/Admin, who open their own record from the Employees
+              directory instead. */}
+          {user.employeeId && !managesPeople && (
+            <DropdownMenuItem render={<Link href="/profile" />}>
+              <CircleUserIcon className="mr-2 size-4" />
+              My Profile
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem render={<Link href="/settings" />}>
             <SettingsIcon className="mr-2 size-4" />
             Settings

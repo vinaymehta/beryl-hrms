@@ -118,6 +118,12 @@ Rails.application.routes.draw do
         collection { patch :mark_all_read }
       end
 
+      # Read-only: the audit trail is written by Audit::Record and never
+      # edited or deleted through the API.
+      resources :audit_logs, only: %i[ index show ] do
+        collection { get :actions }
+      end
+
       # Read-only list, for the Employee form's role picker — see RolePolicy.
       resources :roles, only: %i[ index ]
       resources :departments, only: %i[ index show create update destroy ]

@@ -9,11 +9,7 @@ import {
   appraisalTemplatesApi,
   notificationsApi,
 } from "@/features/appraisals/api"
-import { ApiError } from "@/types/api"
-
-function errorMessage(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.message : fallback
-}
+import { errorMessage } from "@/lib/errors"
 
 /** Every appraisal action returns the refreshed detail, so one invalidation set serves them all. */
 function useAppraisalAction<TArgs>(
@@ -25,7 +21,14 @@ function useAppraisalAction<TArgs>(
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn,
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Seed the detail cache from the response the action already returned,
+      // rather than waiting on the refetch the invalidation triggers. It is
+      // the same payload either way, so this only changes WHEN it lands — and
+      // for a comment that matters: the author should see their own comment
+      // appear as they post it, not a moment later.
+      if (data) queryClient.setQueryData(["appraisals", id], data)
+
       queryClient.invalidateQueries({ queryKey: ["appraisals"] })
       queryClient.invalidateQueries({ queryKey: ["appraisals", id] })
       queryClient.invalidateQueries({ queryKey: ["notifications"] })
@@ -229,5 +232,19 @@ export function useMarkNotificationsRead() {
   return useMutation({
     mutationFn: () => notificationsApi.markAllRead(),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+  })
+}
+
+/**
+ * Marks ONE notification read — what opening it should mean. Failure is
+ * swallowed on purpose: the click's real job is to follow the link, and a
+ * navigation must not be interrupted by a toast about a read receipt.
+ */
+export function useMarkNotificationRead() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => notificationsApi.markRead(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+    onError: () => {},
   })
 }

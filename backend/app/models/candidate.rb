@@ -166,7 +166,7 @@ class Candidate < ApplicationRecord
   end
 
   def name
-    full_name.presence || [first_name, last_name].compact.join(" ").presence || "Unnamed Candidate"
+    full_name.presence || [ first_name, last_name ].compact.join(" ").presence || "Unnamed Candidate"
   end
 
   private

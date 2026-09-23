@@ -23,13 +23,17 @@ export default function DashboardPage() {
   // their details and their documents are the whole of what they can do, and
   // landing on a headcount they have no part in is just a wrong front door.
   //
+  // To /profile, never to /employees/<their id>: their own record should not
+  // be something they reach by id, or the id is there in the address bar to
+  // be edited into somebody else's.
+  //
   // A login with no employee record of its own (an admin account, say) has
   // nowhere else to go, so it stays here.
   const redirectToOwnRecord = !isLoading && !!user && !managesPeople && !!user.employeeId
 
   useEffect(() => {
-    if (redirectToOwnRecord) router.replace(`/employees/${user!.employeeId}`)
-  }, [redirectToOwnRecord, router, user])
+    if (redirectToOwnRecord) router.replace("/profile")
+  }, [redirectToOwnRecord, router])
 
   const { data: summary, isLoading: isSummaryLoading } = useDashboardSummary({ enabled: !redirectToOwnRecord })
 

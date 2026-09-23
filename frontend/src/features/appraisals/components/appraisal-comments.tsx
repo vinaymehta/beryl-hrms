@@ -77,7 +77,14 @@ export function AppraisalComments({ appraisal }: { appraisal: AppraisalDetail })
               Management only — not shown to the employee
             </Label>
           ) : (
-            <span className="text-xs text-muted-foreground">Your comment is visible to management.</span>
+            // Was "visible to management", which read as though the employee
+            // was posting into somewhere they couldn't see. Their own comment
+            // is saved employee_visible (AppraisalsController#add_comment
+            // refuses to let them mark it otherwise), so it is visible to
+            // them too — and now actually shows up in the list below.
+            <span className="text-xs text-muted-foreground">
+              Your comment is visible to you and to management.
+            </span>
           )}
           <Button
             type="submit"

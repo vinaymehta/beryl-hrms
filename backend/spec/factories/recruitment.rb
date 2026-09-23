@@ -25,8 +25,8 @@ FactoryBot.define do
     company
     title { "Full Stack Engineer" }
     min_experience { 3.0 }
-    required_skills { ["React", "Ruby on Rails"] }
-    required_qualifications { ["B.Tech", "MCA"] }
+    required_skills { [ "React", "Ruby on Rails" ] }
+    required_qualifications { [ "B.Tech", "MCA" ] }
     description { "Looking for experienced engineer" }
     status { :open }
   end
@@ -39,7 +39,7 @@ FactoryBot.define do
     skills_score { 90 }
     experience_score { 80 }
     qualification_score { 85 }
-    strong_matches { ["4+ years experience", "Strong React & Rails skills"] }
+    strong_matches { [ "4+ years experience", "Strong React & Rails skills" ] }
     potential_gaps { [] }
     ai_explanation { "Strong candidate with relevant experience." }
     status { :suggested }

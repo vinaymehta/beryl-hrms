@@ -24,6 +24,7 @@ class AppraisalTemplate < ApplicationRecord
 
   validates :name, presence: true
   validate :category_weights_total_one_hundred, if: -> { active? && categories.any? }
+  validate :every_category_has_a_lens, if: -> { active? && categories.any? }
 
   validate :refuse_edit_once_in_use, on: :update
 
@@ -47,7 +48,7 @@ class AppraisalTemplate < ApplicationRecord
   # every appraisal already answered against this one exactly as it was.
   def build_next_version(attrs = {})
     copy = self.class.new(
-      attributes.slice("company_id", "name", "description")
+      attributes.slice("company_id", "name", "description", "structure")
         .merge("lineage_id" => lineage_id || id, "status" => "draft")
         .merge(attrs.stringify_keys)
     )
@@ -70,6 +71,21 @@ class AppraisalTemplate < ApplicationRecord
   end
 
   private
+    # A template can sit in draft with perspectives still to be decided — an
+    # imported workbook arrives that way by design. Running a cycle against one
+    # cannot, because the perspective is what the lens rollup and calibration
+    # are computed over.
+    def every_category_has_a_lens
+      missing = categories.reject(&:marked_for_destruction?).select { |category| category.lens.blank? }
+      return if missing.empty?
+
+      errors.add(
+        :categories,
+        "need a performance perspective before this template can be activated " \
+        "(#{missing.map(&:name).to_sentence})"
+      )
+    end
+
     def assign_lineage_and_version
       return if lineage_id.blank?
 

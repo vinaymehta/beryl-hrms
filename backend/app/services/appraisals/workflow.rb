@@ -70,6 +70,11 @@ module Appraisals
         when "primary_review" then Notifier.review_pending(@appraisal, role: :primary)
         when "secondary_review" then Notifier.review_pending(@appraisal, role: :secondary)
         when "final_review" then Notifier.review_pending(@appraisal, role: :final)
+        # Past the reviewer chain. Nobody is named on the appraisal for these
+        # two steps, so they are announced to whoever holds the permission —
+        # otherwise the appraisal finishes its reviews and then waits in silence.
+        when "appraisal_discussion" then Notifier.ready_for_release(@appraisal, except_user: @actor)
+        when "compensation_approval" then Notifier.compensation_approval_pending(@appraisal, except_user: @actor)
         when "released"
           Notifier.released(@appraisal)
           Notifier.acknowledgement_required(@appraisal)

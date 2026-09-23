@@ -14,7 +14,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useNotifications } from "@/features/appraisals/hooks/use-appraisals"
-import { useMarkNotificationsRead } from "@/features/appraisals/hooks/use-appraisal-mutations"
+import {
+  useMarkNotificationsRead,
+  useMarkNotificationRead,
+} from "@/features/appraisals/hooks/use-appraisal-mutations"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
 
@@ -27,6 +30,7 @@ export function NotificationBell() {
   const canView = usePermission(PERMISSIONS.notificationsView)
   const { data } = useNotifications(canView)
   const markAllRead = useMarkNotificationsRead()
+  const markRead = useMarkNotificationRead()
 
   const notifications = data?.data ?? []
   const unreadCount = data?.meta.unreadCount ?? 0
@@ -90,12 +94,26 @@ export function NotificationBell() {
                 </div>
               )
 
+              // Opening a notification is what marks it read. Without this the
+              // only way to clear the badge is "Mark all read", which forces a
+              // choice between losing track of the unopened ones and living
+              // with a badge that never goes down.
+              const open = () => {
+                if (!notification.readAt) markRead.mutate(notification.id)
+              }
+
               return (
                 <li key={notification.id} className="rounded-md">
                   {notification.actionUrl ? (
-                    <Link href={notification.actionUrl}>{content}</Link>
-                  ) : (
+                    <Link href={notification.actionUrl} onClick={open}>
+                      {content}
+                    </Link>
+                  ) : notification.readAt ? (
                     content
+                  ) : (
+                    <button type="button" onClick={open} className="w-full text-left">
+                      {content}
+                    </button>
                   )}
                 </li>
               )

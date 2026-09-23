@@ -42,6 +42,11 @@ module Authentication
     end
 
     def start_new_session_for(user)
+      # The one place every session in the app begins, so the one honest place
+      # to stamp this. `touch` rather than `update!`: this is bookkeeping and
+      # must never be able to fail a login on an unrelated validation.
+      user.touch(:last_login_at)
+
       user.sessions.create!(user_agent: request.user_agent, ip_address: request.remote_ip).tap do |session|
         Current.session = session
         cookies.signed.permanent[:session_id] = {

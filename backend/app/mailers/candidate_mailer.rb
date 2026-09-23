@@ -26,5 +26,4 @@ class CandidateMailer < ApplicationMailer
 
     mail(to: candidate.email, subject: "Book your interview slot")
   end
-
 end
