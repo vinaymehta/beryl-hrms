@@ -27,7 +27,11 @@ module Api
               email: user.email_address,
               first_name: user.first_name,
               last_name: user.last_name,
-              company_name: user.company&.name
+              company_name: user.company&.name,
+              # Whether Admin ticked "force password update". It decides which
+              # of two things this link does: ask them to choose a password,
+              # or simply let them in.
+              must_set_password: user.must_change_password?
             }.transform_keys { |key| key.to_s.camelize(:lower) })
           end
         end
@@ -40,7 +44,24 @@ module Api
         # the account is fully set up and there is nothing left to prompt for.
         def create
           with_invited_user do |user|
-            unless user.update(password: params[:password], password_confirmation: params[:password_confirmation])
+            # Two ways to spend an invitation, chosen by what Admin asked for.
+            #
+            #   forced  — they must choose a password here, and the link is
+            #             not accepted without one.
+            #   not     — the link itself is the proof of identity (it was
+            #             emailed to them and works once), so it just signs
+            #             them in. They can set a password later from
+            #             Settings, and Forgot password is their way back in
+            #             until they do.
+            if user.must_change_password?
+              if params[:password].blank?
+                next render json: { errors: [ { code: "password_required", message: "Choose a password to finish setting up your account." } ] },
+                            status: :unprocessable_content
+              end
+            end
+
+            if params[:password].present? &&
+               !user.update(password: params[:password], password_confirmation: params[:password_confirmation])
               next render json: { errors: [ { code: "unprocessable", message: user.errors.full_messages.to_sentence } ] },
                           status: :unprocessable_content
             end
@@ -54,7 +75,9 @@ module Api
             user.update!(
               invitation_accepted_at: Time.current,
               status: :active,
-              email_verified_at: user.email_verified_at || Time.current
+              email_verified_at: user.email_verified_at || Time.current,
+              # They have just chosen one, so nothing is outstanding.
+              must_change_password: false
             )
 
             # Nothing should survive from before the password existed.

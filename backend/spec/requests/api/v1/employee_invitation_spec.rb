@@ -194,14 +194,16 @@ RSpec.describe "Employee invitation and password setup", type: :request do
       expect(response).to have_http_status(:ok)
       expect(body).to eq(
         "email" => "noor@acme.test", "firstName" => "Noor",
-        "lastName" => "Haddad", "companyName" => "Invite Corp"
+        "lastName" => "Haddad", "companyName" => "Invite Corp",
+        # Whether the page should ask for a password or just sign them in.
+        "mustSetPassword" => false
       )
     end
 
     it "leaks nothing else about the account" do
       get "/api/v1/auth/invitation", params: { token: emailed_invitation_token }
 
-      expect(body.keys).to match_array(%w[email firstName lastName companyName])
+      expect(body.keys).to match_array(%w[email firstName lastName companyName mustSetPassword])
     end
 
     it "is refused when the token is nonsense" do

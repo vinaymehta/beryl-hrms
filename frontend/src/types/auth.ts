@@ -40,6 +40,11 @@ export interface InvitationSummary {
   firstName: string
   lastName: string
   companyName: string | null
+  /**
+   * Admin ticked "force password update". It decides what this link does:
+   * true asks them to choose a password, false just signs them in.
+   */
+  mustSetPassword: boolean
 }
 
 export interface SessionSummary {

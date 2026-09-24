@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { useQuery } from "@tanstack/react-query"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -37,9 +38,20 @@ import { useAcceptInvitation } from "@/features/auth/hooks/use-auth-mutations"
  * email. And it turns an expired invitation into a plain sentence up front
  * instead of a failure after they have chosen and typed a password twice.
  *
- * No password is ever supplied to this page. The employee chooses one here and
- * it is the first this account has had; that is what makes an administrator
- * structurally unable to know it.
+ * No password is ever supplied TO this page. When one is asked for, the
+ * employee chooses it here and it is the first this account has had — which is
+ * what makes an administrator structurally unable to know it.
+ *
+ * Whether it is asked for at all is Admin's call, via "Force password update"
+ * beside the Invite button:
+ *
+ *   ticked    the form below; they cannot get in without choosing one.
+ *   unticked  no form. The link was emailed to them and works once, so it is
+ *             itself the proof of identity — it just signs them in and drops
+ *             them on their profile. They can set a password whenever they
+ *             like from Settings, and until they do, Forgot password is how
+ *             they get back in. The page says so rather than letting them
+ *             find out at the next sign-in.
  */
 export function AcceptInvitationForm({ token }: { token: string }) {
   const acceptInvitation = useAcceptInvitation()
@@ -62,6 +74,23 @@ export function AcceptInvitationForm({ token }: { token: string }) {
       passwordConfirmation: values.passwordConfirmation,
     })
   }
+
+  // No password required: spend the link and let them in, without making them
+  // press a button whose only possible answer is yes.
+  //
+  // The ref guards against firing twice — React runs effects twice in
+  // development's strict mode, and the second call would hit an
+  // already-spent token and show a failure for something that worked.
+  const autoAccepted = useRef(false)
+  const skipsPassword = invitation.data?.mustSetPassword === false
+  useEffect(() => {
+    if (!skipsPassword || autoAccepted.current) return
+    autoAccepted.current = true
+    acceptInvitation.mutate({ token })
+    // acceptInvitation is a stable mutation object; including it would re-run
+    // this on every render of a pending mutation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skipsPassword, token])
 
   if (invitation.isPending) {
     return (
@@ -95,6 +124,31 @@ export function AcceptInvitationForm({ token }: { token: string }) {
           <Button variant="outline" className="w-full" nativeButton={false} render={<Link href="/login" />}>
             Back to sign in
           </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (skipsPassword) {
+    return (
+      <Card>
+        <CardHeader>
+          <span className="mb-1 flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent-foreground text-primary-foreground shadow-sm shadow-primary/30">
+            <MailCheckIcon className="size-5" />
+          </span>
+          <CardTitle className="text-xl">Welcome, {invitation.data.firstName}</CardTitle>
+          <CardDescription>
+            Signing you in to {invitation.data.companyName ?? "your workspace"}…
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <Skeleton className="h-8 w-full" />
+          {/* Said here, once, rather than left to be discovered at the next
+              sign-in: this account has no password yet. */}
+          <p className="text-xs text-muted-foreground">
+            You haven&apos;t set a password yet. You can add one any time from Settings — until
+            then, use &quot;Forgot password&quot; on the sign-in page to get back in.
+          </p>
         </CardContent>
       </Card>
     )

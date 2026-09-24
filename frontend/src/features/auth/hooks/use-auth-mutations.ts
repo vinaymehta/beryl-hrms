@@ -115,13 +115,15 @@ export function useAcceptInvitation() {
       passwordConfirmation,
     }: {
       token: string
-      password: string
-      passwordConfirmation: string
+      password?: string
+      passwordConfirmation?: string
     }) => authApi.acceptInvitation(token, password, passwordConfirmation),
     onSuccess: (user: AuthUser) => {
       queryClient.setQueryData(CURRENT_USER_QUERY_KEY, user)
       toast.success("Welcome. Your account is ready.")
-      router.push("/")
+      // Their own record when they have one — an employee has no reason to
+      // land on a dashboard built for whoever manages them.
+      router.push(user.employeeId ? "/profile" : "/")
     },
     onError: (error) =>
       toast.error(errorMessage(error, "That invitation link is invalid, expired, or already used.")),

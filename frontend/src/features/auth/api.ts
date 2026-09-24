@@ -77,9 +77,14 @@ export const authApi = {
 
   // Spends the invitation: sets the password the employee chose and signs them
   // in, so there is no second prompt to change a password they just picked.
-  acceptInvitation: (token: string, password: string, passwordConfirmation: string) =>
+  // password is omitted entirely when Admin didn't require one — the link is
+  // then the proof of identity and simply signs them in.
+  acceptInvitation: (token: string, password?: string, passwordConfirmation?: string) =>
     apiClient
-      .post<MeResponse>("/auth/accept_invitation", { token, password, passwordConfirmation })
+      .post<MeResponse>(
+        "/auth/accept_invitation",
+        password ? { token, password, passwordConfirmation } : { token }
+      )
       .then(toAuthUser),
 
   sessions: () => apiClient.get<SessionSummary[]>("/auth/sessions"),

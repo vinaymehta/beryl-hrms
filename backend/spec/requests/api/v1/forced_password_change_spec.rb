@@ -103,10 +103,116 @@ RSpec.describe "Forced password change", type: :request do
     end
   end
 
+  # --- What the link does, which is the whole point of the checkbox ---------
+
+  describe "opening the invitation link" do
+    def invitation_token
+      perform_enqueued_jobs
+      text = (ActionMailer::Base.deliveries.last.all_parts.presence || [ ActionMailer::Base.deliveries.last ])
+               .map { |part| part.body.to_s }.join("\n")
+      text[%r{accept-invitation\?token=([^\s"'<]+)}, 1]
+    end
+
+    context "when the admin did NOT force a change" do
+      let!(:employee) { invited_employee(force: false) }
+
+      it "says no password is needed, so the page knows not to ask" do
+        get "/api/v1/auth/invitation", params: { token: invitation_token }
+
+        expect(body["mustSetPassword"]).to be(false)
+      end
+
+      it "signs them straight in without one" do
+        post "/api/v1/auth/accept_invitation",
+             params: { token: invitation_token }.to_json, headers: json_headers
+
+        expect(response).to have_http_status(:created)
+        expect(body.dig("user", "email")).to eq("noor@acme.test")
+        expect(in_tenant { employee.reload.user }).to be_active
+      end
+
+      it "drops them into the app, not onto a change-password screen" do
+        post "/api/v1/auth/accept_invitation",
+             params: { token: invitation_token }.to_json, headers: json_headers
+
+        get "/api/v1/auth/me"
+        expect(body["mustChangePassword"]).to be(false)
+
+        get "/api/v1/employees"
+        expect(response).to have_http_status(:ok)
+      end
+
+      it "still accepts a password if one is offered anyway" do
+        post "/api/v1/auth/accept_invitation",
+             params: { token: invitation_token, password: "chosen-anyway-1", passwordConfirmation: "chosen-anyway-1" }.to_json,
+             headers: json_headers
+
+        expect(response).to have_http_status(:created)
+        expect(in_tenant { employee.reload.user.authenticate("chosen-anyway-1") }).to be_truthy
+      end
+
+      it "spends the link either way" do
+        token = invitation_token
+        post "/api/v1/auth/accept_invitation", params: { token: token }.to_json, headers: json_headers
+        delete "/api/v1/auth/logout"
+
+        post "/api/v1/auth/accept_invitation", params: { token: token }.to_json, headers: json_headers
+        expect(response).to have_http_status(:unprocessable_content)
+      end
+    end
+
+    context "when the admin DID force a change" do
+      let!(:employee) { invited_employee(force: true) }
+
+      it "says a password is needed" do
+        get "/api/v1/auth/invitation", params: { token: invitation_token }
+
+        expect(body["mustSetPassword"]).to be(true)
+      end
+
+      it "refuses to spend the link without one" do
+        post "/api/v1/auth/accept_invitation",
+             params: { token: invitation_token }.to_json, headers: json_headers
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(errors.first["code"]).to eq("password_required")
+        expect(in_tenant { employee.reload.user }).to be_invited
+      end
+
+      it "leaves the link usable after that refusal" do
+        token = invitation_token
+        post "/api/v1/auth/accept_invitation", params: { token: token }.to_json, headers: json_headers
+
+        post "/api/v1/auth/accept_invitation",
+             params: { token: token, password: "now-chosen-1", passwordConfirmation: "now-chosen-1" }.to_json,
+             headers: json_headers
+        expect(response).to have_http_status(:created)
+      end
+
+      it "clears the requirement once they choose one, so they are not asked twice" do
+        post "/api/v1/auth/accept_invitation",
+             params: { token: invitation_token, password: "now-chosen-1", passwordConfirmation: "now-chosen-1" }.to_json,
+             headers: json_headers
+
+        expect(in_tenant { employee.reload.user.must_change_password }).to be(false)
+        get "/api/v1/employees"
+        expect(response).to have_http_status(:ok)
+      end
+    end
+  end
+
   # --- What the flag actually does ------------------------------------------
 
+  # Setting a password AT the invitation link satisfies the requirement, so the
+  # invite flow never lands anybody here. What does is the flag being true on an
+  # account that is already signed in — so that is what these set up. The gate
+  # is the backstop that makes the flag mean something wherever it comes from.
   describe "an employee who owes a password change" do
-    let!(:employee) { accept_invitation(invited_employee(force: true), "first-chosen-pass-1") }
+    let!(:employee) do
+      e = accept_invitation(invited_employee(force: false), "first-chosen-pass-1")
+      in_tenant { e.reload.user.update!(must_change_password: true) }
+      e
+    end
 
     it "can sign in" do
       expect(response).to have_http_status(:created)
