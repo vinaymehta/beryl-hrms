@@ -21,6 +21,25 @@ export interface AuthUser {
   roles: Role[]
   /** Flattened permission keys across all of the user's roles. UI-gating only. */
   permissions: string[]
+  /**
+   * Admin required a new password before this account may use the app. The
+   * API enforces it too — this only decides what is rendered.
+   */
+  mustChangePassword: boolean
+}
+
+/**
+ * What an unclaimed invitation link says about itself.
+ *
+ * Deliberately thin: whoever holds the token already knows the mailbox it was
+ * sent to, so naming the person and the company tells them nothing new — but
+ * nothing beyond that is exposed, because a token is not a login.
+ */
+export interface InvitationSummary {
+  email: string
+  firstName: string
+  lastName: string
+  companyName: string | null
 }
 
 export interface SessionSummary {
@@ -53,4 +72,5 @@ export interface MeResponse {
   company: { id: string; name: string; slug: string }
   roles: Role[]
   permissions: string[]
+  mustChangePassword: boolean
 }

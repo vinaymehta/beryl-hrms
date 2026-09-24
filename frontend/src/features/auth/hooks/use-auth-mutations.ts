@@ -95,10 +95,52 @@ export function useResetPassword() {
   })
 }
 
+/**
+ * Setting a password from an invitation link.
+ *
+ * Straight to the dashboard on success rather than back to /login: the
+ * employee has just chosen this password and the server signed them in, so
+ * asking them to type it again immediately would be pure ceremony. This is
+ * also what satisfies the initial forced-password-change requirement — the
+ * first password IS the change, so nothing further is demanded of them.
+ */
+export function useAcceptInvitation() {
+  const queryClient = useQueryClient()
+  const router = useRouter()
+
+  return useMutation({
+    mutationFn: ({
+      token,
+      password,
+      passwordConfirmation,
+    }: {
+      token: string
+      password: string
+      passwordConfirmation: string
+    }) => authApi.acceptInvitation(token, password, passwordConfirmation),
+    onSuccess: (user: AuthUser) => {
+      queryClient.setQueryData(CURRENT_USER_QUERY_KEY, user)
+      toast.success("Welcome. Your account is ready.")
+      router.push("/")
+    },
+    onError: (error) =>
+      toast.error(errorMessage(error, "That invitation link is invalid, expired, or already used.")),
+  })
+}
+
 export function useChangePassword() {
+  const queryClient = useQueryClient()
+
   return useMutation({
     mutationFn: authApi.changePassword,
-    onSuccess: () => toast.success("Password updated."),
+    onSuccess: () => {
+      // Refetch identity, not just for tidiness: when the change was one the
+      // admin REQUIRED, this is what lifts the block — mustChangePassword is
+      // read from the current user, so a stale copy would leave the person
+      // staring at the same screen after doing exactly what was asked.
+      queryClient.invalidateQueries({ queryKey: CURRENT_USER_QUERY_KEY })
+      toast.success("Password updated.")
+    },
     onError: (error) => toast.error(errorMessage(error, "Couldn't update your password.")),
   })
 }

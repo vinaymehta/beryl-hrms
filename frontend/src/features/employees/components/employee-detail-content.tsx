@@ -46,11 +46,12 @@ import { ManagerHierarchyCard } from "@/features/employees/components/manager-hi
 import { EmployeeRecordTabs } from "@/features/employees/components/employee-record-tabs"
 import { EmployeeLevelBadge } from "@/features/employees/components/employee-level-badge"
 import { EmployeeForm } from "@/features/employees/components/employee-form"
+import { AccountAccess } from "@/features/employees/components/account-access"
 import { useEmployee } from "@/features/employees/hooks/use-employees"
 import { useUpdateEmployee, useDeactivateEmployee, useReactivateEmployee } from "@/features/employees/hooks/use-employee-mutations"
 import { EmployeeDocumentsSection } from "@/features/documents/components/employee-documents-section"
 import { usePermission } from "@/features/auth/hooks/use-permission"
-import { PERMISSIONS, PEOPLE_MANAGEMENT_PERMISSIONS, roleBadgeClasses } from "@/constants/permissions"
+import { PERMISSIONS, PEOPLE_MANAGEMENT_PERMISSIONS } from "@/constants/permissions"
 
 function initials(first: string, last: string) {
   return `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase()
@@ -148,6 +149,9 @@ export function EmployeeDetailContent({
   const reactivateEmployee = useReactivateEmployee()
   const canUpdate = usePermission(PERMISSIONS.employeesUpdate)
   const canDeactivate = usePermission(PERMISSIONS.employeesDelete)
+  // Inviting somebody and resetting their password ride on the same right as
+  // giving them a login in the first place — see EmployeePolicy.
+  const canManageRoles = usePermission(PERMISSIONS.employeesManageRoles)
   const [editOpen, setEditOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
@@ -279,43 +283,7 @@ export function EmployeeDetailContent({
         </SectionCard>
 
         <SectionCard icon={KeyRoundIcon} title="System access">
-          {employee.user ? (
-            <div className="grid gap-4">
-              <div className="grid grid-cols-2 gap-4">
-                <InfoRow label="Work email" value={employee.user.email} icon={MailIcon} />
-                <InfoRow
-                  label="Account"
-                  value={
-                    <Badge
-                      className={
-                        employee.user.status === "active"
-                          ? "bg-success/15 text-success"
-                          : employee.user.status === "invited"
-                            ? "bg-warning/15 text-warning"
-                            : "bg-muted text-muted-foreground"
-                      }
-                    >
-                      {employee.user.status === "invited" ? "Invite sent" : employee.user.status}
-                    </Badge>
-                  }
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <p className="text-xs text-muted-foreground">Roles</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {employee.roles.map((role) => (
-                    <Badge key={role.id} className={roleBadgeClasses(role.slug)}>
-                      {role.name}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <EmptyHint>
-              No login account. Add a work email from Edit to invite them — they set their own password.
-            </EmptyHint>
-          )}
+          <AccountAccess employee={employee} canManage={canManageRoles} />
         </SectionCard>
 
         <SectionCard icon={UserIcon} title="Personal information">

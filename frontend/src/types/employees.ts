@@ -42,11 +42,33 @@ export interface EmployeeSummary {
 }
 
 /** The login account behind an employee record. Null when they have none. */
+/**
+ * What comes back from Invite and Reset password.
+ *
+ * A message naming the address the link went to, and the refreshed employee —
+ * never a token and never a password, because the server has neither to give.
+ */
+export interface AccountActionResult {
+  message: string
+  employee: Employee
+}
+
 export interface EmployeeAccount {
   id: string
   email: string
   status: "invited" | "active" | "disabled"
   emailVerifiedAt: string | null
+  lastLoginAt: string | null
+  /** When the CURRENT invitation was sent; null if one never has been. */
+  invitedAt: string | null
+  /** When the employee finished choosing their own password. */
+  invitationAcceptedAt: string | null
+  /** Invited and waiting — the link is out there and hasn't been used. */
+  invitationPending: boolean
+  /** Account provisioned but never invited; Admin still has to press Invite. */
+  invitationUnsent: boolean
+  /** Admin required a new password before this account may use the app. */
+  mustChangePassword: boolean
 }
 
 /**

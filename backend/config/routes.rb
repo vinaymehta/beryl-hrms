@@ -29,6 +29,10 @@ Rails.application.routes.draw do
         resources :sessions, only: %i[ index destroy ]
         get "me", to: "me#show"
         post "verify_email", to: "email_verifications#create"
+        # The first-login flow for an Admin-invited employee. Unauthenticated
+        # by necessity — see Api::V1::Auth::InvitationsController.
+        get "invitation", to: "invitations#show"
+        post "accept_invitation", to: "invitations#create"
         post "forgot_password", to: "passwords#create"
         post "reset_password", to: "passwords#update"
         patch "change_password", to: "password_changes#update"
@@ -43,7 +47,14 @@ Rails.application.routes.draw do
       get "dashboard/summary", to: "dashboard#summary"
 
       resources :employees, only: %i[ index show create update ] do
-        member { patch :deactivate }
+        member do
+          patch :deactivate
+          # Account access, kept apart from the profile edit above. Neither
+          # sets a password: both send the employee a link and return only
+          # the address it went to.
+          post :invite
+          post :reset_password
+        end
 
         # Phase 1 profile history + Phase 5 continuous performance. All nested
         # under the employee they describe, and all served by the shared

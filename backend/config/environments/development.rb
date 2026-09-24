@@ -36,14 +36,71 @@ Rails.application.configure do
   # reach, so photos silently failed to load.
   config.active_storage.resolve_model_to_route = :rails_storage_proxy
 
-  # Don't care if the mailer can't send.
-  config.action_mailer.raise_delivery_errors = false
+  # Outgoing mail. Three modes, in precedence order:
+  #
+  #   MAIL_TRANSPORT=zoho  — the Zoho Mail API, through the OAuth connection
+  #                          the app already holds. No SMTP credentials needed.
+  #   SMTP_ADDRESS set     — ordinary SMTP.
+  #   neither              — letter_opener, which has been in the Gemfile's
+  #                          development group all along but was never actually
+  #                          wired up, so it never ran.
+  #
+  # Neither used to apply. This block was a bare `raise_delivery_errors = false`,
+  # which left delivery_method at Rails' scaffold default of localhost:25 with
+  # enable_starttls_auto. On a machine running Postfix with a self-signed
+  # certificate that fails in the worst possible way: Ruby verifies the cert,
+  # rejects it ("certificate verify failed (hostname mismatch)"), and drops the
+  # connection after EHLO — before MAIL FROM. So the message was never
+  # submitted, never queued, and, because errors were swallowed, the job
+  # reported success. Mail simply evaporated, silently, for every invitation,
+  # password reset, interview invite and candidate feedback link.
+  if ENV.fetch("MAIL_TRANSPORT", nil) == "zoho"
+    # Out through the Zoho mailbox the app is already connected to — the same
+    # OAuth connection the Mail feature reads and sends with. No second set of
+    # credentials to provision. See Zoho::MailDelivery.
+    config.action_mailer.delivery_method = :zoho
+    config.action_mailer.raise_delivery_errors = true
+  elsif ENV["SMTP_ADDRESS"].present?
+    config.action_mailer.delivery_method = :smtp
+    config.action_mailer.smtp_settings = {
+      address: ENV["SMTP_ADDRESS"],
+      port: ENV.fetch("SMTP_PORT", 587).to_i,
+      user_name: ENV["SMTP_USERNAME"].presence,
+      password: ENV["SMTP_PASSWORD"].presence,
+      authentication: :plain,
+      enable_starttls_auto: true
+    }.compact
+    # Loud, like production. A swallowed delivery error is what made the last
+    # failure take a mail-log dig to find; here it surfaces as a failed job.
+    config.action_mailer.raise_delivery_errors = true
+  else
+    config.action_mailer.delivery_method = :letter_opener
+    config.action_mailer.raise_delivery_errors = false
+  end
+  config.action_mailer.perform_deliveries = true
+
+  # Say which mode is active at boot, so "did that email go anywhere?" is
+  # answered by the startup log rather than by reading /var/log/mail.log.
+  config.after_initialize do
+    Rails.logger.info("[mail] development delivery_method = #{ActionMailer::Base.delivery_method}")
+  end
 
   # Make template changes take effect immediately.
   config.action_mailer.perform_caching = false
 
-  # Set localhost to be used by links generated in mailer templates.
-  config.action_mailer.default_url_options = { host: "localhost", port: 3000 }
+  # Links in mailer templates (invitations, password resets) are built from
+  # FRONTEND_ORIGINS when it is set, falling back to localhost:3000 for pure
+  # local runs where the recipient is also on the same machine.
+  #
+  # To send real mails whose links actually work, set FRONTEND_ORIGINS in .env
+  # to the address the recipient's browser can reach — e.g. your ngrok URL:
+  #   FRONTEND_ORIGINS=https://your-tunnel.ngrok-free.app
+  frontend_uri = FrontendOrigins.primary_uri
+  config.action_mailer.default_url_options = {
+    host: frontend_uri.host,
+    port: frontend_uri.port,
+    protocol: frontend_uri.scheme || "http"
+  }.compact
 
   # Print deprecation notices to the Rails logger.
   config.active_support.deprecation = :log

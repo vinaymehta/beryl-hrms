@@ -72,14 +72,14 @@ gem "faraday-retry"
 gem "pdf-reader", "~> 2.14"
 # Reads the .xlsx self-appraisal upload. Parse-and-preview only — the database
 # stays the system of record; see Appraisals::SelfAppraisalImport.
-gem "roo", "~> 2.10"
+gem "roo", "~> 3.0"
 # roo requires csv, which stopped being a default gem in Ruby 3.4 — without
 # this the whole app fails to boot with "cannot load such file -- csv".
 gem "csv", "~> 3.3"
 # Writes the appraisal workbook employees download (scope §10.1). roo reads
 # spreadsheets; it cannot create them.
 gem "caxlsx", "~> 4.1"
-gem "rubyzip", "~> 2.3"
+gem "rubyzip", "~> 3.4"
 
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem

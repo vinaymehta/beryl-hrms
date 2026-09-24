@@ -65,7 +65,18 @@ module Api
           # Null until this account's first login since the field started
           # being recorded — an account that has never been used and one that
           # predates the stamp look the same, which is the honest reading.
-          lastLoginAt: employee.user.last_login_at
+          lastLoginAt: employee.user.last_login_at,
+          # The invitation state, so the employee list can show "Not invited",
+          # "Invitation sent" or "Active" without the client re-deriving the
+          # rule from three separate fields. No token is exposed here or
+          # anywhere else in the API — the link exists only in the employee's
+          # own mailbox.
+          invitedAt: employee.user.invited_at,
+          invitationAcceptedAt: employee.user.invitation_accepted_at,
+          invitationPending: employee.user.invitation_pending?,
+          invitationUnsent: employee.user.invitation_unsent?,
+          # Admin required a password change; still outstanding.
+          mustChangePassword: employee.user.must_change_password?
         }
       end
 

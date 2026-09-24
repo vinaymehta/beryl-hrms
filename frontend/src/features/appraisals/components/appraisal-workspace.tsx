@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   ArrowLeftIcon, ArrowRightIcon, CalendarDaysIcon, CheckIcon, CloudIcon, GaugeIcon,
-  HistoryIcon, LightbulbIcon, MessageSquareIcon, NetworkIcon, PencilLineIcon, ShieldIcon, TargetIcon,
+  HistoryIcon, MessageSquareIcon, NetworkIcon, PencilLineIcon, ShieldIcon, TargetIcon,
   TriangleAlertIcon, UsersRoundIcon, type LucideIcon,
 } from "lucide-react"
 import { cn } from "cn"
@@ -24,7 +24,7 @@ import { EMPTY_ANSWER, needsEvidence, type AnswerValue } from "@/features/apprai
 import { APPRAISAL_LENSES, NARRATIVE_FIELDS, type NarrativeKey } from "@/features/appraisals/constants"
 import { useSaveSelfAppraisalDraft, useSubmitSelfAppraisal, useSubmitReview } from "@/features/appraisals/hooks/use-appraisal-mutations"
 import type {
-  AppraisalDetail, AppraisalLens, ImportPreviewRow, TemplateField, TemplateWizardSection,
+  AppraisalDetail, AppraisalLens, ImportPreviewResponse, ImportPreviewRow, TemplateField, TemplateWizardSection,
 } from "@/types/appraisals"
 
 type AnswerState = Record<string, AnswerValue>
@@ -190,7 +190,17 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
     else setResponses((prev) => ({ ...prev, [key]: next }))
   }
 
-  function applyImported(rows: ImportPreviewRow[]) {
+  /**
+   * Fill the form in from an uploaded workbook.
+   *
+   * Both halves land, not just the ratings: a filled company workbook carries
+   * the development and final-review prose too, and importing only the numbers
+   * would leave the employee retyping the part that took them longest.
+   *
+   * Still nothing is submitted — this only populates the form, which the
+   * person then reviews and submits through the ordinary path.
+   */
+  function applyImported(rows: ImportPreviewRow[], imported: ImportPreviewResponse[] = []) {
     setAnswers((prev) => {
       const next = { ...prev }
       rows.forEach((row) => {
@@ -198,6 +208,7 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
       })
       return next
     })
+    imported.forEach(({ key, value }) => setFieldValue(key, value))
   }
 
   const answerPayload = useMemo(

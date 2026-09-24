@@ -2,6 +2,8 @@ module Api
   module V1
     class EmployeesController < Api::V1::BaseController
       rescue_from ::Employees::AccountProvisioner::Error, with: :render_unprocessable
+      rescue_from ::Employees::Invite::Error, with: :render_unprocessable
+      rescue_from ::Employees::PasswordReset::Error, with: :render_unprocessable
       rescue_from ::Employee::ManagerHierarchyError, with: :render_unprocessable
 
       # §4's five relationships. One request param per slot: absent means
@@ -112,7 +114,53 @@ module Api
         render_data(Api::V1::EmployeeSerializer.new(employee).as_json)
       end
 
+      # POST /api/v1/employees/:id/invite — send (or re-send) the first-login
+      # invitation. Separate from #create so HR can set a joiner up in advance
+      # and invite them on the day they actually start.
+      def invite
+        employee = policy_scope(Employee).find(params[:id])
+        authorize employee, :manage_account_access?
+
+        result = ::Employees::Invite.call(
+          employee: employee, actor: Current.user, request: request,
+          force_password_change: params.key?(:force_password_change) ? params[:force_password_change] : nil
+        )
+
+        render_data({
+          message: invite_message(result),
+          employee: Api::V1::EmployeeSerializer.new(employee.reload).as_json
+        })
+      end
+
+      # POST /api/v1/employees/:id/reset_password — the admin-facing
+      # "Set/Reset password" action.
+      #
+      # Note what it does not accept: there is no password parameter here, and
+      # no branch anywhere that would let an administrator choose or read one.
+      # It sends the employee a link to their own mailbox and reports only the
+      # address it went to.
+      def reset_password
+        employee = policy_scope(Employee).find(params[:id])
+        authorize employee, :manage_account_access?
+
+        result = ::Employees::PasswordReset.call(employee: employee, actor: Current.user, request: request)
+        message =
+          if result.kind == "invitation"
+            "#{result.sent_to} hasn't set up their account yet, so a fresh invitation was sent instead."
+          else
+            "Password reset link sent to #{result.sent_to}."
+          end
+
+        render_data({ message: message, employee: Api::V1::EmployeeSerializer.new(employee.reload).as_json })
+      end
+
       private
+        def invite_message(result)
+          sent = result.resent ? "Invitation re-sent to" : "Invitation sent to"
+          extra = result.user.must_change_password? ? " They'll be asked to set a new password before they can use the app." : ""
+          "#{sent} #{result.user.email_address}.#{extra}"
+        end
+
         def employee_params
           params.permit(
             :employee_code, :first_name, :last_name, :department_id, :designation_id,

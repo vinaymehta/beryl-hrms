@@ -81,6 +81,8 @@ vi.mock("@/features/employees/hooks/use-employee-mutations", () => ({
   useUpdateEmployee: () => ({ mutate: vi.fn(), isPending: false }),
   useDeactivateEmployee: () => ({ mutate: vi.fn(), isPending: false }),
   useReactivateEmployee: () => ({ mutate: vi.fn(), isPending: false }),
+  useInviteEmployee: () => ({ mutate: vi.fn(), isPending: false }),
+  useResetEmployeePassword: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 vi.mock("@/features/documents/components/employee-documents-section", () => ({

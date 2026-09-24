@@ -287,16 +287,57 @@ export interface AppNotification {
 export interface ImportPreviewRow {
   questionId: string
   prompt: string
+  /** The value that will be filled in: the employee's own column. */
   rating: number | null
   comment: string
+  /** Both columns of the workbook, carried so the preview can show the whole
+   *  document. Only the self pair is ever adopted as the employee's answer. */
+  selfRating?: number | null
+  selfComment?: string | null
+  managerRating?: number | null
+  managerComment?: string | null
   errors: string[]
 }
 
+/** One of the template's own free-text or perspective fields, filled in. */
+export interface ImportPreviewResponse {
+  /** The template's field key. In value position because the API camelises
+   *  property names, which would otherwise rewrite it into something the form
+   *  doesn't recognise. */
+  key: string
+  value: string
+}
+
+/** A label in the workbook that this appraisal's template has no home for. */
+export interface ImportPreviewUnmatched {
+  label: string
+  section: string
+  reason: string
+}
+
+/** A field the form asks for that the uploaded workbook didn't carry. */
+export interface ImportPreviewMissingField {
+  key: string
+  label: string
+  section: string
+}
+
 export interface ImportPreview {
+  /**
+   * "answer_sheet" for the Question ID sheet the Export button produces;
+   * "full_form" for a filled-in copy of the company appraisal workbook.
+   */
+  layout: "answer_sheet" | "full_form"
   rows: ImportPreviewRow[]
   validCount: number
   invalidCount: number
+  /** How many questions the file actually answered. */
+  answeredCount: number
   totalQuestions: number
+  responses: ImportPreviewResponse[]
+  employeeFields: { key: string; label: string; value: string | null }[]
+  unmatched: ImportPreviewUnmatched[]
+  missingFields: ImportPreviewMissingField[]
 }
 
 /**

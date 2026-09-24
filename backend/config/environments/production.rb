@@ -95,7 +95,14 @@ Rails.application.configure do
   # interview invitations, candidate feedback links, password resets — ever
   # left the box. Credentials come from ENV rather than encrypted credentials
   # to match how every other secret in this app is provisioned.
-  config.action_mailer.delivery_method = :smtp
+  #
+  # MAIL_TRANSPORT=zoho sends through the Zoho Mail API instead, using the
+  # OAuth mailbox connected under Settings → Mail — see Zoho::MailDelivery.
+  # Offered here and not only in development because a deployment that uses
+  # Zoho for mail should not have to also provision SMTP credentials for the
+  # same mailbox; leaving this branch out of production would mean the
+  # feature worked locally and silently fell back to SMTP once shipped.
+  config.action_mailer.delivery_method = ENV["MAIL_TRANSPORT"] == "zoho" ? :zoho : :smtp
   config.action_mailer.perform_deliveries = true
   # Deliberately loud. These are transactional mails a candidate is waiting on,
   # so a failure should surface as a retrying Sidekiq job rather than being
@@ -114,11 +121,19 @@ Rails.application.configure do
   # silent failure this block exists to end. Say so once, at boot, rather than
   # letting it be discovered through candidates who never got their email.
   config.after_initialize do
-    if ENV["SMTP_ADDRESS"].blank?
-      Rails.logger.warn("[mail] SMTP_ADDRESS is not set — outgoing mail WILL fail. Set SMTP_ADDRESS/PORT/USERNAME/PASSWORD.")
+    if ENV["SMTP_ADDRESS"].blank? && ENV["MAIL_TRANSPORT"] != "zoho"
+      Rails.logger.warn("[mail] SMTP_ADDRESS is not set — outgoing mail WILL fail. Set SMTP_ADDRESS/PORT/USERNAME/PASSWORD, or MAIL_TRANSPORT=zoho.")
     end
-    if ENV["MAIL_FROM"].blank?
+    if ENV["MAIL_FROM"].blank? && ENV["MAIL_TRANSPORT"] != "zoho"
       Rails.logger.warn("[mail] MAIL_FROM is not set — mail will be sent from no-reply@localhost and is likely to be rejected.")
+    end
+    # The opposite warning for Zoho, and it matters more. MAIL_FROM there is an
+    # OVERRIDE that pins every tenant's outgoing mail to one mailbox; left
+    # unset, each company sends from its own connected mailbox, which is what
+    # a multi-tenant deployment wants.
+    if ENV["MAIL_TRANSPORT"] == "zoho" && ENV["MAIL_FROM"].present?
+      Rails.logger.warn("[mail] MAIL_FROM is set alongside MAIL_TRANSPORT=zoho — EVERY company's mail will " \
+                        "be sent from #{ENV['MAIL_FROM']}. Unset it to send from each company's own mailbox.")
     end
   end
 

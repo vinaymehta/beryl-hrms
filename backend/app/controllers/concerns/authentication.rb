@@ -8,11 +8,20 @@ module Authentication
 
   included do
     before_action :require_authentication
+    before_action :require_password_change_completed
   end
 
   class_methods do
     def allow_unauthenticated_access(**options)
       skip_before_action :require_authentication, **options
+      skip_before_action :require_password_change_completed, **options
+    end
+
+    # For the handful of endpoints that must stay reachable while a forced
+    # password change is outstanding — the change itself, signing out, and
+    # "who am I", which is how the frontend learns to show the change screen.
+    def allow_pending_password_change(**options)
+      skip_before_action :require_password_change_completed, **options
     end
   end
 
@@ -34,6 +43,29 @@ module Authentication
 
       session = Session.find_by(id: cookies.signed[:session_id])
       session unless session.nil? || session.expired?
+    end
+
+    # Admin can require an employee to change their password before using the
+    # app. Enforced here rather than in the frontend router, because a rule
+    # only the client applies is not a rule: the API is reachable directly,
+    # and this one exists precisely for accounts whose credentials are
+    # suspect.
+    def require_password_change_completed
+      # without_tenant for the same reason BaseController#set_current_tenant
+      # needs it, and it is why this can't simply be ordered after that filter:
+      # this runs from ApplicationController, before the subclass has
+      # established a tenant, and Current.user resolves through the
+      # tenant-scoped User table. Reading one boolean off the session's own
+      # user is the narrowest thing that answers the question.
+      pending = ActsAsTenant.without_tenant { Current.user&.must_change_password? }
+      return unless pending
+
+      render json: {
+        errors: [ {
+          code: "password_change_required",
+          message: "You need to choose a new password before continuing."
+        } ]
+      }, status: :forbidden
     end
 
     def render_unauthenticated

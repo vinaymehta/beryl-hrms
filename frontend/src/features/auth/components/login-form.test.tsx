@@ -49,6 +49,7 @@ describe("LoginForm", () => {
       status: "active",
       roles: [],
       permissions: [],
+      mustChangePassword: false,
     })
 
     const user = userEvent.setup()

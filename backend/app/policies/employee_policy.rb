@@ -22,6 +22,15 @@ class EmployeePolicy < ApplicationPolicy
   # read their managers and change nothing about them. Being somebody's manager
   # grants neither key either — a manager assignment is not a system role.
   def manage_roles? = permission?("employees.manage_roles")
+
+  # Inviting someone and resetting their password are the same authority as
+  # giving them a login in the first place, so they ride on the same key
+  # rather than inventing a second one an admin would have to know to grant.
+  #
+  # Nobody gets this over their own record by being an employee: the key isn't
+  # in the Employee role's seeded set, so "reset my own password" stays where
+  # it belongs — Settings → Change password, and Forgot password.
+  def manage_account_access? = manage_roles?
   def manage_reporting_managers? = permission?("employees.manage_reporting_managers")
 
   class Scope < ApplicationPolicy::Scope

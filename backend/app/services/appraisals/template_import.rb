@@ -81,6 +81,22 @@ module Appraisals
       "Employee ID", "Department", "Current Role / Level", "Date of Joining"
     ].freeze
 
+    # A stable identifier for a workbook field, derived from its label.
+    #
+    # This is what an ANSWER is filed against, so it has to survive everything
+    # that isn't a rename: reordering the rows, adding a field above, changing
+    # the surrounding section. It deliberately does NOT survive a rename — a
+    # relabelled field is a different question, and silently carrying old
+    # answers onto it would misattribute them.
+    #
+    # Public and on the class because SelfAppraisalImport reads a FILLED copy
+    # of the same workbook and has to arrive at exactly the same keys to match
+    # its values against the template; two copies of this rule that drifted
+    # apart would file answers under keys nothing reads.
+    def self.field_key(label)
+      label.to_s.downcase.gsub(/[^a-z0-9]+/, "_").gsub(/\A_+|_+\z/, "").presence || "field"
+    end
+
     def self.call(...) = new(...).call
 
     def initialize(file:)
@@ -145,15 +161,22 @@ module Appraisals
         LENS_ALIASES[raw.to_s.strip.downcase.gsub(/\s+/, " ")]
       end
 
-      # A stable identifier for a workbook field, derived from its label.
+      def field_key(label) = self.class.field_key(label)
+
+      # Whether the row's first column is bold, as the workbook's styles say.
       #
-      # This is what an ANSWER is filed against, so it has to survive
-      # everything that isn't a rename: reordering the rows, adding a field
-      # above, changing the surrounding section. It deliberately does NOT
-      # survive a rename — a relabelled field is a different question, and
-      # silently carrying old answers onto it would misattribute them.
-      def field_key(label)
-        label.to_s.downcase.gsub(/[^a-z0-9]+/, "_").gsub(/\A_+|_+\z/, "").presence || "field"
+      # Cached per row because Roo rebuilds the style lookup on every call, and
+      # nil-on-error because styling is a hint: a file we can't read styles
+      # from is read the old way rather than refused.
+      def bold_row?(number)
+        @bold_rows ||= {}
+        return @bold_rows[number] if @bold_rows.key?(number)
+
+        @bold_rows[number] = begin
+          spreadsheet.sheet(0).font(number, 1)&.bold?
+        rescue StandardError
+          nil
+        end
       end
 
       # --- layout detection ---------------------------------------------------
@@ -515,7 +538,24 @@ module Appraisals
       end
 
       # A block of labelled free-text prompts: the label sits on its own row and
-      # the answer space is the blank rows beneath it, up to the next label.
+      # the answer space is the rows beneath it, up to the next label.
+      #
+      # "Which rows are labels" is the whole difficulty, and it only shows up
+      # once somebody fills the form in. In a blank workbook the prompts are
+      # the only populated rows, so anything with text in it is a prompt. In a
+      # completed one the answers are populated too, and reading them the same
+      # way turned five prompts into ten — half of them somebody's prose,
+      # promoted into the template's structure, with the actual answers
+      # attached to nothing.
+      #
+      # The document already distinguishes them the way documents do: the
+      # prompt is bold and the answer underneath is not. That is read here
+      # rather than guessed at from length or wording, both of which are
+      # properties of what was typed rather than of what the form asks.
+      #
+      # If nothing in the block is bold — a CSV, or a workbook built without
+      # styling — the old reading stands, because then every populated row
+      # really is a prompt.
       def parse_labelled_block(kind)
         rows = rows_in(section_range(kind))
         return [] if rows.empty?
@@ -523,12 +563,16 @@ module Appraisals
         banner = banner_rows.key(kind)
         claim(banner) if banner
 
-        fields = []
-        rows.each do |(number, cells)|
-          next if blank_row?(cells)
+        populated = rows.reject { |(_, cells)| blank_row?(cells) }
+        headed = populated.any? { |(number, _)| bold_row?(number) }
 
+        fields = []
+        populated.each do |(number, cells)|
           label = first_cell(cells)
           next if label.blank?
+          # An answer, not a prompt. Left unclaimed here on purpose: the loop
+          # below collects it as the value of the prompt above it.
+          next if headed && !bold_row?(number)
 
           claim(number)
           fields << { key: field_key(label), label: label, value: nil, row: number }

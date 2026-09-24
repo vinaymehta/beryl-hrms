@@ -9,9 +9,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Topbar } from "@/components/layout/topbar"
 import { useCurrentUser } from "@/features/auth/hooks/use-current-user"
+import { RequiredPasswordChange } from "@/features/auth/components/required-password-change"
 
 export function DashboardShell({ children }: { children: ReactNode }) {
-  const { isLoading, isAuthenticated, isUnauthenticated, isError, refetch } = useCurrentUser()
+  const { user, isLoading, isAuthenticated, isUnauthenticated, isError, refetch } = useCurrentUser()
   const router = useRouter()
 
   useEffect(() => {
@@ -55,6 +56,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   }
 
   if (!isAuthenticated) return null
+
+  // Replaces the whole shell rather than redirecting: there is no nav, so
+  // there is nowhere to navigate. The API enforces the same rule
+  // independently — see Authentication#require_password_change_completed.
+  if (user?.mustChangePassword) return <RequiredPasswordChange />
 
   return (
     <div className="flex min-h-svh">

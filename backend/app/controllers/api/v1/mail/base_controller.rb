@@ -29,29 +29,22 @@ module Api
               return nil
             end
 
-            # Proactively refresh token if within 5 minutes of expiring or if expired
-            if connection.refresh_token.present? && (connection.token_expires_at.nil? || connection.token_expires_at <= Time.current + 5.minutes)
-              begin
-                tokens = zoho_client.refresh_access_token(refresh_token: connection.refresh_token)
-                connection.update!(
-                  access_token: tokens[:access_token],
-                  token_expires_at: tokens[:expires_in].to_i.seconds.from_now
-                )
-              rescue => e
-                Rails.logger.warn("Auto-refreshing Zoho access token failed: #{e.message}")
-              end
-            end
+            # Refreshing a nearly-expired token, and resolving Zoho's accountId,
+            # both live in Zoho::Mailbox — outgoing transactional mail needs the
+            # same preparation from a Sidekiq job, where there is no controller,
+            # and a second copy of the refresh rule is one too many.
+            mailbox_for(connection).access_token
 
             connection
           end
 
-          # Zoho requires an accountId (distinct from our own connection id)
-          # for every message-level call — resolved lazily and cached
-          # briefly rather than persisted as a new column on ZohoConnection.
+          def mailbox_for(connection)
+            @mailboxes ||= {}
+            @mailboxes[connection.id] ||= ::Zoho::Mailbox.new(connection, client: zoho_client)
+          end
+
           def account_id_for(connection)
-            Rails.cache.fetch("zoho_account_id/#{connection.id}", expires_in: 1.hour) do
-              zoho_client.fetch_account_id(access_token: connection.access_token)
-            end
+            mailbox_for(connection).account_id
           end
 
           def render_zoho_token_expired

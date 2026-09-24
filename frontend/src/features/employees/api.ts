@@ -1,5 +1,11 @@
 import { apiClient } from "@/lib/api-client"
-import type { Employee, EmployeeListParams, Department, Designation } from "@/types/employees"
+import type {
+  AccountActionResult,
+  Employee,
+  EmployeeListParams,
+  Department,
+  Designation,
+} from "@/types/employees"
 import type { Role } from "@/types/auth"
 import type { EmployeePayload, DepartmentFormValues, DesignationFormValues } from "@/features/employees/schemas"
 
@@ -28,6 +34,24 @@ export const employeesApi = {
   deactivate: (id: string, status: "active" | "inactive" = "inactive") =>
     apiClient.patch<Employee>(`/employees/${id}/deactivate`, { status }),
   reactivate: (id: string) => apiClient.patch<Employee>(`/employees/${id}`, { status: "active" }),
+
+  // Sends (or re-sends) the first-login invitation. Note what isn't here: no
+  // password, in either direction. The employee chooses theirs through the
+  // emailed link, so there is nothing for an administrator to type or read.
+  // `forcePasswordChange` is omitted rather than sent as false when the caller
+  // doesn't care: the backend reads absence as "leave whatever the account
+  // already carries alone", so a plain re-send can't silently waive a
+  // requirement an admin set earlier.
+  invite: (id: string, forcePasswordChange?: boolean) =>
+    apiClient.post<AccountActionResult>(
+      `/employees/${id}/invite`,
+      forcePasswordChange === undefined ? {} : { forcePasswordChange }
+    ),
+
+  // The admin-facing "Set/Reset password" action. Same shape, same absence of
+  // a password: it emails the employee a link to their own mailbox.
+  resetPassword: (id: string) =>
+    apiClient.post<AccountActionResult>(`/employees/${id}/reset_password`, {}),
 }
 
 /**

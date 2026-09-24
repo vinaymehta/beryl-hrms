@@ -160,7 +160,12 @@ RSpec.describe "Api::V1::Recruitment", type: :request do
       get "/api/v1/recruitment/resumes/#{resume.id}/preview"
 
       expect(response.headers["X-Frame-Options"]).to be_nil
-      expect(response.headers["Content-Security-Policy"]).to include("frame-ancestors 'self' http://localhost:3000")
+      # Built from FrontendOrigins rather than a literal: a developer whose
+      # .env lists extra origins (an ngrok tunnel, a staging host) still has a
+      # correct header, and hardcoding one made the suite fail on their
+      # machine for a reason that had nothing to do with the code.
+      expect(response.headers["Content-Security-Policy"])
+        .to include("frame-ancestors 'self' #{FrontendOrigins.all.join(' ')}")
 
       get "/api/v1/recruitment/resumes/#{resume.id}/download"
 

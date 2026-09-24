@@ -85,17 +85,26 @@ RSpec.describe "Api::V1::Employees", type: :request do
       expect(response.parsed_body["data"]["roles"].map { |r| r["slug"] }).to match_array(%w[employee hr])
     end
 
-    it "creates the login with no usable password and emails a setup link" do
+    it "creates the login with no usable password and does not invite yet" do
+      # Creating the record and inviting the person are two separate actions:
+      # HR sets a joiner up ahead of their start date, so no mail goes out
+      # until Admin presses Invite.
       expect {
         create_employee(employeeCode: "PC-104", firstName: "Sam", lastName: "Okoye", workEmail: "sam@acme.test")
-      }.to have_enqueued_mail(UserMailer, :account_setup)
+      }.not_to have_enqueued_mail(UserMailer, :invitation)
 
       user = in_tenant { company.users.find_by!(email_address: "sam@acme.test") }
       # `invited`, not `active`: the account exists but nobody — not the
       # creator, not the API response — holds a password for it.
       expect(user).to be_invited
+      expect(user.invited_at).to be_nil
+      expect(response.parsed_body["data"]["user"]).to include(
+        "status" => "invited", "invitationUnsent" => true, "invitationPending" => false
+      )
       expect(response.parsed_body["data"]["user"].keys)
-        .to match_array(%w[id email status emailVerifiedAt lastLoginAt])
+        .to match_array(%w[id email status emailVerifiedAt lastLoginAt
+                           invitedAt invitationAcceptedAt invitationPending invitationUnsent
+                           mustChangePassword])
     end
 
     it "links an existing account rather than creating a second one" do

@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { employeesApi, departmentsApi, designationsApi } from "@/features/employees/api"
 import { ApiError } from "@/types/api"
 import type { EmployeePayload, DepartmentFormValues, DesignationFormValues } from "@/features/employees/schemas"
+import type { AccountActionResult } from "@/types/employees"
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback
@@ -57,6 +58,42 @@ export function useReactivateEmployee() {
     },
     onError: (error) => toast.error(errorMessage(error, "Couldn't reactivate that employee.")),
   })
+}
+
+/**
+ * Invite, and Set/Reset password.
+ *
+ * One hook for both because they are the same interaction from the admin's
+ * side — press a button, the employee gets a link — and because the success
+ * message has to come from the SERVER rather than be assumed here: pressing
+ * Reset on someone who never finished their invitation re-sends the invitation
+ * instead, and the admin needs to be told that actually happened.
+ */
+function useAccountAction<TArgs>(
+  action: (args: TArgs) => Promise<AccountActionResult>,
+  fallback: string
+) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: action,
+    onSuccess: (result: AccountActionResult) => {
+      queryClient.invalidateQueries({ queryKey: ["employees"] })
+      toast.success(result.message)
+    },
+    onError: (error) => toast.error(errorMessage(error, fallback)),
+  })
+}
+
+export function useInviteEmployee() {
+  return useAccountAction(
+    ({ id, forcePasswordChange }: { id: string; forcePasswordChange?: boolean }) =>
+      employeesApi.invite(id, forcePasswordChange),
+    "Couldn't send that invitation."
+  )
+}
+
+export function useResetEmployeePassword() {
+  return useAccountAction((id: string) => employeesApi.resetPassword(id), "Couldn't send that reset link.")
 }
 
 export function useCreateDepartment() {

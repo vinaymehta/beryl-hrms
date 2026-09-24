@@ -8,8 +8,11 @@ module Employees
   #      User → UserRole → Role tables; Employee carries no role column.
   #   2. Set or return a default password. A new account is created in the
   #      `invited` state with a random secret nobody ever sees, and the person
-  #      chooses their own password through the SAME token flow
-  #      /auth/reset_password already implements (UserMailer#account_setup).
+  #      chooses their own through the invitation link (Employees::Invite).
+  #   2a. Send that invitation. Provisioning the account and inviting the
+  #      person are separate steps on purpose — HR sets a joiner up days
+  #      before their start date, and mail sent at save time is stale by the
+  #      time anybody needs it. Admin presses Invite when they mean it.
   #   3. Decide who is allowed to do any of this — that is
   #      EmployeePolicy#manage_roles?, checked by the controller before this
   #      service is reached.
@@ -20,7 +23,7 @@ module Employees
     # using that same role, with its own definition of what it grants.
     DEFAULT_ROLE_SLUG = "employee".freeze
 
-    Result = Struct.new(:user, :invited, :created, keyword_init: true)
+    Result = Struct.new(:user, :created, keyword_init: true)
 
     class Error < StandardError; end
 
@@ -40,14 +43,12 @@ module Employees
     def call
       reject_email_change
       user = @employee.user || resolve_user
-      return Result.new(user: nil, invited: false, created: false) if user.nil?
+      return Result.new(user: nil, created: false) if user.nil?
 
       @employee.update!(user: user) if @employee.user_id != user.id
       sync_roles(user)
 
-      UserMailer.account_setup(user).deliver_later if @created
-
-      Result.new(user: user, invited: @created, created: @created)
+      Result.new(user: user, created: @created)
     end
 
     private
