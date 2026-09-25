@@ -206,6 +206,10 @@ Rails.application.routes.draw do
             patch :request_feedback
             patch :confirm_duplicate
             patch :dismiss_duplicate
+            # AI-written interview questions. GET reads what is stored; POST
+            # (re)generates, which costs a provider call.
+            get :interview_questions
+            post :interview_questions, action: :generate_interview_questions
           end
         end
 

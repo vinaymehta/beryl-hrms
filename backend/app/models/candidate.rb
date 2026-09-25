@@ -15,6 +15,9 @@ class Candidate < ApplicationRecord
   # picker can only offer real people and the record stays linked if they
   # are later renamed.
   belongs_to :interviewer, class_name: "Employee", optional: true
+  # Which job the stored interview questions were written against, so the panel
+  # can say so — the same resume yields different questions for different roles.
+  belongs_to :interview_questions_job, class_name: "Job", optional: true
 
   # 0-6 are the pre-existing values and keep their numbers — the interview
   # stage is appended rather than renumbered so no stored row changes meaning.

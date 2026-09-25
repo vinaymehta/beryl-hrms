@@ -339,3 +339,26 @@ export type RecruitmentTab =
   | "jobs"
   | "shortlisted"
   | "interviews"
+
+/**
+ * One AI-written interview question, and why the interviewer should care about
+ * the answer.
+ *
+ * `area` is one of five the prompt asks for. It is typed loosely on purpose:
+ * the generator files anything unrecognised under "experience" rather than
+ * rendering an empty group, so the client never has to handle an unknown one,
+ * but nor should it break if the set ever grows.
+ */
+export interface InterviewQuestion {
+  area: "experience" | "technical" | "role_fit" | "behavioural" | "closing"
+  question: string
+  whyItMatters: string | null
+}
+
+export interface InterviewQuestionSet {
+  questions: InterviewQuestion[]
+  /** Null until somebody generates a set. */
+  generatedAt: string | null
+  /** The job the questions were written against, when there was one. */
+  job: { id: string; title: string } | null
+}

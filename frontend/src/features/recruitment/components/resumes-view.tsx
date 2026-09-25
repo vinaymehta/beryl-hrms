@@ -38,9 +38,11 @@ import {
   EyeIcon,
   CalendarClockIcon,
   SendIcon,
+  MessageSquareTextIcon,
   type LucideIcon,
 } from "lucide-react"
 import { recruitmentApi } from "../api"
+import { InterviewQuestionsDialog } from "./interview-questions-dialog"
 import { ResumePreviewModal } from "./resume-preview-modal"
 import type { CandidateResumeSummary } from "@/types/recruitment"
 import { isInInterviewWorkflow } from "@/types/recruitment"
@@ -97,6 +99,8 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
   const [page, setPage] = useState(1)
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null)
   const [previewResume, setPreviewResume] = useState<CandidateResumeSummary | null>(null)
+  // Whose interview questions are open. Null when the dialog is closed.
+  const [questionsFor, setQuestionsFor] = useState<CandidateResumeSummary | null>(null)
   const [pendingDelete, setPendingDelete] = useState<CandidateResumeSummary | null>(null)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [bulkPending, setBulkPending] = useState(false)
@@ -518,6 +522,23 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
                           <EyeIcon className="size-3.5" />
                         </Button>
                       )}
+                      {/* Shortlisted only. Before that the decision is whether
+                          to interview at all, so a button for preparing one
+                          would just be noise on every row. */}
+                      {resume.candidateStatus === "shortlisted" && resume.candidateId && (
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setQuestionsFor(resume)
+                          }}
+                          className="text-muted-foreground hover:text-role-recruitment"
+                          title="AI interview questions"
+                        >
+                          <MessageSquareTextIcon className="size-3.5" />
+                        </Button>
+                      )}
                       {resume.hasFile && (
                         <a
                           href={recruitmentApi.resumes.downloadUrl(resume.id)}
@@ -594,6 +615,16 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
         open={!!previewResume}
         onOpenChange={(open) => !open && setPreviewResume(null)}
       />
+
+      {questionsFor?.candidateId && (
+        <InterviewQuestionsDialog
+          candidateId={questionsFor.candidateId}
+          candidateName={questionsFor.candidateName || questionsFor.fileName}
+          canGenerate={canManage}
+          open
+          onOpenChange={(next) => !next && setQuestionsFor(null)}
+        />
+      )}
 
       <Dialog open={!!pendingDelete} onOpenChange={(open) => !open && setPendingDelete(null)}>
         <DialogContent className="sm:max-w-sm">

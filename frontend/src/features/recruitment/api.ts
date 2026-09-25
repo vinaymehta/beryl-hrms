@@ -16,6 +16,7 @@ import type {
   AiInsightsResponse,
   AiSearchResponse,
   FeedbackForm,
+  InterviewQuestionSet,
 } from "@/types/recruitment"
 
 // The candidate-facing feedback form. Public and token-addressed — kept apart
@@ -106,6 +107,18 @@ export const recruitmentApi = {
     // Calendly confirming it moves them to Interview Scheduled.
     scheduleInterview: (id: string, values: { interviewerId: string }) =>
       apiClient.patch<CandidateDetail>(`/recruitment/candidates/${id}/schedule_interview`, values),
+
+    // Free and instant: returns whatever was generated last, and never calls
+    // the AI. Opening the panel must not cost anything.
+    interviewQuestions: (id: string) =>
+      apiClient.get<InterviewQuestionSet>(`/recruitment/candidates/${id}/interview_questions`),
+
+    // Spends an AI call and replaces the stored set.
+    generateInterviewQuestions: (id: string, jobId?: string) =>
+      apiClient.post<InterviewQuestionSet>(
+        `/recruitment/candidates/${id}/interview_questions`,
+        jobId ? { jobId } : {}
+      ),
 
     // Manual only — nothing sends a feedback request automatically.
     requestFeedback: (id: string) =>

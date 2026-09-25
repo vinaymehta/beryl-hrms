@@ -23,6 +23,12 @@ class CandidatePolicy < ApplicationPolicy
     update?
   end
 
+  # Reading the questions is reading the candidate. GENERATING them spends
+  # money at an AI provider and overwrites what the last interviewer saw, so it
+  # rides on the heavier right.
+  def interview_questions? = show?
+  def generate_interview_questions? = update?
+
   def reject?
     update?
   end

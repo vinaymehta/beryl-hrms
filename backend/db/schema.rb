@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_24_150000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_24_180000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -517,6 +517,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_150000) do
     t.string "industry"
     t.datetime "interview_at"
     t.datetime "interview_link_sent_at"
+    t.jsonb "interview_questions"
+    t.datetime "interview_questions_generated_at"
+    t.bigint "interview_questions_job_id"
     t.bigint "interviewer_id"
     t.string "interviewer_notified_invitee_uri"
     t.jsonb "languages", default: [], null: false
@@ -540,6 +543,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_150000) do
     t.index ["company_id", "status"], name: "index_candidates_on_company_id_and_status"
     t.index ["company_id"], name: "index_candidates_on_company_id"
     t.index ["feedback_token"], name: "index_candidates_on_feedback_token", unique: true
+    t.index ["interview_questions_job_id"], name: "index_candidates_on_interview_questions_job_id"
     t.index ["interviewer_id"], name: "index_candidates_on_interviewer_id"
   end
 
@@ -997,6 +1001,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_150000) do
   add_foreign_key "candidate_skills", "companies"
   add_foreign_key "candidates", "companies"
   add_foreign_key "candidates", "employees", column: "interviewer_id"
+  add_foreign_key "candidates", "jobs", column: "interview_questions_job_id"
   add_foreign_key "departments", "companies"
   add_foreign_key "designations", "companies"
   add_foreign_key "designations", "departments"

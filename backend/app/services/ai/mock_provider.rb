@@ -22,6 +22,12 @@ module Ai
         # so Ai::AtsScorer got a parsed-profile payload with no "ats_score"
         # key, read nil, and every resume scored 0 against the mock provider.
         mock_ats_response(prompt)
+      elsif prompt =~ /interview questions|experienced technical interviewer/i
+        # Its own branch for the same reason ats_score has one: without it an
+        # interview-questions prompt falls through to resume parsing, comes
+        # back with no "questions" key, and the generator reports that the AI
+        # returned nothing usable.
+        mock_interview_questions_response
       elsif prompt =~ /search_parser|natural[- ]language|user search query|search interpretation/i
         mock_search_response(prompt)
       elsif prompt =~ /dashboard_insights|recruitment analytics/i
@@ -32,6 +38,22 @@ module Ai
     end
 
     private
+
+    # Twenty, four per area, matching what the prompt asks for — so a spec can
+    # assert the real shape rather than a stub that happens to be shorter.
+    def mock_interview_questions_response
+      areas = %w[experience technical role_fit behavioural closing]
+      questions = areas.flat_map do |area|
+        (1..4).map do |n|
+          {
+            area: area,
+            question: "Mock #{area.tr('_', ' ')} question #{n}?",
+            why_it_matters: "Shows their depth in #{area.tr('_', ' ')}."
+          }
+        end
+      end
+      { questions: questions }.to_json
+    end
 
     def mock_resume_parsing_response(prompt)
       # Scrape the resume itself, never the instruction template that

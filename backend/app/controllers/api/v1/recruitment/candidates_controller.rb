@@ -2,9 +2,14 @@ module Api
   module V1
     module Recruitment
       class CandidatesController < Api::V1::BaseController
+        # A provider that is down, rate-limited or returning nonsense is a
+        # 422 the caller can retry, not a 500. The message is the generator's
+        # own, which says which of those it was.
+        rescue_from ::Ai::Error, with: :render_unprocessable
         before_action :set_candidate,
                       only: %i[show update destroy shortlist reject status confirm_duplicate dismiss_duplicate
-                               schedule_interview request_feedback]
+                               schedule_interview request_feedback
+                               interview_questions generate_interview_questions]
 
         # GET /api/v1/recruitment/candidates
         def index
@@ -89,6 +94,38 @@ module Api
           authorize @candidate
           @candidate.update!(status: :shortlisted)
           render json: { data: candidate_detail(@candidate) }
+        end
+
+        # GET /api/v1/recruitment/candidates/:id/interview_questions
+        #
+        # Whatever was generated last, or an empty set. Never calls the AI:
+        # opening the panel must be free and instant, and the caller decides
+        # whether to spend a generation.
+        def interview_questions
+          authorize @candidate, :interview_questions?
+          render_data(interview_questions_payload(@candidate))
+        end
+
+        # POST /api/v1/recruitment/candidates/:id/interview_questions
+        #
+        # Generates and stores, replacing any previous set. Synchronous rather
+        # than a background job: somebody is watching a spinner for it, and a
+        # job would mean building polling for a result they are waiting on
+        # anyway.
+        def generate_interview_questions
+          authorize @candidate, :generate_interview_questions?
+
+          job = resolve_question_job
+          questions = ::Ai::InterviewQuestionGenerator.call(candidate: @candidate, job: job)
+
+          @candidate.update!(
+            interview_questions: questions,
+            interview_questions_generated_at: Time.current,
+            interview_questions_job: job
+          )
+          ::Audit::Record.call(action: "candidate.interview_questions_generated", auditable: @candidate, request: request)
+
+          render_data(interview_questions_payload(@candidate.reload), status: :created)
         end
 
         # PATCH /api/v1/recruitment/candidates/:id/reject
@@ -280,6 +317,36 @@ module Api
             criteriaMatchPercentage: latest&.criteria_match_percentage,
             atsScore: latest&.ats_score,
             resumeDate: latest&.created_at&.iso8601
+          }
+        end
+
+        # The job to write questions against: whichever the caller names, else
+        # the candidate's best match. Falls back to nil, which the generator
+        # reads as "no specific role" rather than inventing one.
+        def resolve_question_job
+          if params[:job_id].present?
+            return policy_scope(Job).find_by(id: params[:job_id])
+          end
+
+          @candidate.candidate_job_matches
+                    .order(match_score: :desc)
+                    .first&.job
+        end
+
+        def interview_questions_payload(candidate)
+          {
+            # Camelised by hand: this is a plain Hash out of a JSONB column, so
+            # it never passes through ApplicationSerializer's
+            # `transform_keys :lower_camel` and `why_it_matters` would reach
+            # the client under a name nothing reads.
+            questions: Array(candidate.interview_questions).map { |q|
+              q.to_h.transform_keys { |key| key.to_s.camelize(:lower) }
+            },
+            generatedAt: candidate.interview_questions_generated_at,
+            job: candidate.interview_questions_job && {
+              id: candidate.interview_questions_job.id,
+              title: candidate.interview_questions_job.title
+            }
           }
         end
 
