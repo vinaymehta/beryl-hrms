@@ -271,6 +271,19 @@ export interface AppraisalListParams {
   status?: AppraisalStatus
   employeeId?: string
   scope?: "mine" | "pending"
+  /** 1-based. */
+  page?: number
+  /** Defaults to 10 on the server, capped at 100. */
+  perPage?: number
+  /** Searches employee name, code and email — in SQL, not in the browser. */
+  q?: string
+}
+
+export interface PageMeta {
+  page: number
+  perPage: number
+  totalPages: number
+  totalCount: number
 }
 
 export interface AppNotification {

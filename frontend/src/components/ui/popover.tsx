@@ -8,7 +8,7 @@ import { cn } from "cn"
  * wrap theirs — Portal + Positioner handled here so callers only supply
  * content, and every popover in the app lands with identical geometry.
  *
- * Distinct from `filter-popover.tsx`, which is a fixed-shape *filter* control
+ * Distinct from `filter-panel.tsx`, which is a fixed-shape *filter* control
  * built on top of this idea; this is the general primitive.
  */
 function Popover({ ...props }: PopoverPrimitive.Root.Props) {

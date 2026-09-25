@@ -42,7 +42,16 @@ module Api
           sync_participants(cycle)
         end
         ::Audit::Record.call(action: "appraisal_cycle.updated", auditable: cycle, request: request)
-        render_data(Api::V1::AppraisalCycleSerializer.new(cycle.reload).as_json)
+        render_data(
+          Api::V1::AppraisalCycleSerializer.new(cycle.reload).as_json.merge(
+            "addedCount" => @participant_result&.added&.size.to_i,
+            # Camelised by hand: these are plain Hashes from a service, so they
+            # never pass through the serializer's own key transform.
+            "skipped" => (@participant_result&.skipped || []).map { |entry|
+              entry.transform_keys { |key| key.to_s.camelize(:lower) }
+            }
+          )
+        )
       end
 
       # Instantiates one appraisal per eligible employee and opens their
@@ -57,7 +66,9 @@ module Api
         render_data(
           Api::V1::AppraisalCycleSerializer.new(cycle.reload).as_json.merge(
             "createdCount" => result.created_count,
-            "skipped" => result.skipped
+            "skipped" => result.skipped.map { |entry|
+              entry.transform_keys { |key| key.to_s.camelize(:lower) }
+            }
           )
         )
       end
@@ -90,16 +101,30 @@ module Api
         render_data(Api::V1::AppraisalCycleSerializer.new(cycle.reload).as_json)
       end
 
+      # A started cycle can be deleted too.
+      #
+      # It used to be refused, on the reasoning that appraisals in flight are
+      # history worth keeping. In practice cycles get created wrong — wrong
+      # template, wrong cohort, wrong dates — and "close it instead" leaves a
+      # mistake permanently in everybody's list. The appraisals go with it
+      # (`dependent: :destroy`), which is the honest meaning of deleting the
+      # cycle they belong to.
+      #
+      # What must NOT survive is anything that would go on firing afterwards:
+      # notifications pointing at a cycle that no longer exists, and reminder
+      # jobs that would raise or, worse, quietly mail somebody about it.
       def destroy
         cycle = find_cycle
         authorize cycle
-        if cycle.started?
-          return render json: { errors: [ { code: "unprocessable", message: "A started cycle can't be deleted — close it instead." } ] },
-                        status: :unprocessable_content
-        end
 
+        summary = { appraisals: cycle.appraisals.count, participants: cycle.participants.count }
+        ::Appraisals::CancelCycleNotifications.call(cycle: cycle)
         cycle.destroy!
-        ::Audit::Record.call(action: "appraisal_cycle.deleted", auditable: cycle, request: request)
+
+        ::Audit::Record.call(
+          action: "appraisal_cycle.deleted", auditable: cycle, request: request,
+          before_changes: summary
+        )
         head :no_content
       end
 
@@ -118,15 +143,17 @@ module Api
           )
         end
 
-        # Eligibility comes from real employee records, and is only editable
-        # while the cycle hasn't started — afterwards the appraisals themselves
-        # are the record of who is in it.
+        # Eligibility comes from real employee records, and can now be edited
+        # after a cycle has started as well as before.
+        #
+        # Adding goes through Appraisals::AddParticipants, which creates the
+        # appraisal and notifies the person when the cycle is already running —
+        # the same treatment everyone else got when it started. Removing is
+        # only ever a removal from the eligibility list; an appraisal that
+        # already exists is left alone, because deleting somebody's half-written
+        # self-appraisal is not what "take them off the list" means.
         def sync_participants(cycle)
           return unless params.key?(:eligible_employee_ids)
-
-          if cycle.started?
-            raise ActionController::BadRequest, "Eligibility can't change after a cycle has started"
-          end
 
           desired = Array(params.permit(eligible_employee_ids: [])[:eligible_employee_ids]).compact_blank.map(&:to_i).uniq
           # Scoped through the tenant's own employees, so a foreign id simply
@@ -135,7 +162,10 @@ module Api
 
           current = cycle.participants.pluck(:employee_id)
           cycle.participants.where(employee_id: current - desired).destroy_all
-          (desired - current).each { |employee_id| cycle.participants.create!(employee_id: employee_id) }
+
+          @participant_result = ::Appraisals::AddParticipants.call(
+            cycle: cycle, employee_ids: desired - current, actor: Current.user
+          )
           cycle.participants.reset
         end
     end

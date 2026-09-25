@@ -21,36 +21,13 @@ class User < ApplicationRecord
     email_address
   end
 
-  # How long an invitation link stays usable. Days rather than the 15 minutes
-  # has_secure_password's reset token allows: a reset is something you asked
-  # for seconds ago and are waiting on, an invitation lands in the inbox of
-  # someone who may not be at their desk, and an expiry they routinely miss
-  # just trains everybody to ask for another one.
-  INVITATION_VALID_FOR = 7.days
+  MINIMUM_PASSWORD_LENGTH = 8
 
-  # The first-login link. Single-use and re-issuable, both enforced by what
-  # the payload is made of rather than by a stored flag:
-  #
-  #   password_salt  changes the moment a password is set, so the link that
-  #                  set it stops working — that is what makes it single-use,
-  #                  and it also kills the link if the person is sent a reset
-  #                  in the meantime.
-  #   invited_at     changes every time Admin clicks Invite again, so an
-  #                  older email in the mailbox can't be used instead of the
-  #                  newest one.
-  #
-  # Same ActiveRecord::TokenFor primitive as :email_verification above and as
-  # has_secure_password's own reset token. Nothing is stored: the token is
-  # signed, so there is no plaintext secret in the database to leak.
-  generates_token_for :invitation, expires_in: INVITATION_VALID_FOR do
-    # Microseconds, not seconds: Admin clicking Invite twice in the same second
-    # is an ordinary mis-click, and at whole-second resolution both clicks
-    # produce the SAME token — which would leave the supposedly-superseded link
-    # working. The column stores microseconds, so the value is stable across a
-    # reload.
-    "#{password_salt&.last(10)}/#{invited_at&.utc&.strftime('%Y%m%d%H%M%S%6N')}"
-  end
-
+  # Enforced on the MODEL, not only in the forms that happen to ask for one.
+  # There are several ways a password gets set — registration, a self-service
+  # reset, an administrator issuing one — and a rule living in some of those
+  # screens and not others is a rule with a hole in it.
+  validates :password, length: { minimum: MINIMUM_PASSWORD_LENGTH }, if: -> { password.present? }
   validates :first_name, :last_name, presence: true
   validates :email_address, uniqueness: true
 
@@ -62,19 +39,15 @@ class User < ApplicationRecord
     email_verified_at.present?
   end
 
-  # Invited, sent a link, and hasn't finished setting a password yet.
-  def invitation_pending?
-    invited_at.present? && invitation_accepted_at.nil?
+  # Provisioned by Admin/HR, but nobody has sent them a password yet — so
+  # there is nothing they could sign in with.
+  def credentials_unsent?
+    credentials_sent_at.nil?
   end
 
-  # Created by Admin/HR but never actually sent the email.
-  def invitation_unsent?
-    invited_at.nil? && invitation_accepted_at.nil? && invited?
-  end
-
-  # Whether this account may sign in at all. An invited account holds a random
-  # password nobody has ever seen, so this is belt-and-braces there; for a
-  # disabled one it is the whole control.
+  # Whether this account may sign in at all. An account that has never been
+  # sent a password holds a random secret nobody has ever seen, so this is
+  # belt-and-braces there; for a disabled one it is the whole control.
   def sign_in_allowed?
     active?
   end

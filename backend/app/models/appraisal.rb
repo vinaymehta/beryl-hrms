@@ -42,22 +42,38 @@ class Appraisal < ApplicationRecord
   belongs_to :final_manager, class_name: "Employee", optional: true
   belongs_to :released_by, class_name: "User", optional: true
 
+  # delete_all, not destroy, for the three immutable children.
+  #
+  # Revisions, transitions and score overrides all answer `readonly? =>
+  # persisted?`, which makes `destroy` on them raise ActiveRecord::
+  # ReadOnlyRecord — so `dependent: :destroy` made an appraisal, and therefore
+  # its whole cycle, impossible to delete. Readonly is there to stop the record
+  # being EDITED after the fact, which is a different question from whether the
+  # appraisal it belongs to can be removed; when it goes, they go with it.
+  #
+  # Their own children go too: AppraisalAnswer is readonly for the same reason
+  # and hangs off a revision, so it is deleted explicitly below rather than
+  # left as a row pointing at nothing.
   has_many :revisions,
            -> { order(:version_number) },
            class_name: "AppraisalRevision",
-           dependent: :destroy,
+           dependent: :delete_all,
            inverse_of: :appraisal
   has_many :comments, class_name: "AppraisalComment", dependent: :destroy, inverse_of: :appraisal
   has_many :transitions,
            -> { order(:created_at) },
            class_name: "AppraisalTransition",
-           dependent: :destroy,
+           dependent: :delete_all,
            inverse_of: :appraisal
   has_many :score_overrides,
            -> { order(:created_at) },
            class_name: "AppraisalScoreOverride",
-           dependent: :destroy,
+           dependent: :delete_all,
            inverse_of: :appraisal
+
+  # Runs before the revisions themselves are deleted, so the answers can still
+  # be found by the revisions they belong to.
+  before_destroy :delete_revision_answers, prepend: true
   # Optional 360° feedback (§21). Nothing waits on these.
   has_many :feedback_requests,
            class_name: "AppraisalFeedbackRequest", dependent: :destroy, inverse_of: :appraisal
@@ -68,6 +84,13 @@ class Appraisal < ApplicationRecord
           inverse_of: :appraisal
 
   delegate :secondary_review_enabled?, :appraisal_template, to: :appraisal_cycle
+
+  private
+    def delete_revision_answers
+      AppraisalAnswer.where(appraisal_revision_id: revisions.select(:id)).delete_all
+    end
+
+  public
 
   scope :for_reviewer, ->(employee_id) {
     where(primary_manager_id: employee_id)

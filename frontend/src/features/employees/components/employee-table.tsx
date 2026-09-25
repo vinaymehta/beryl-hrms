@@ -1,6 +1,8 @@
 "use client"
 
-import { UsersIcon, UserPlusIcon, TriangleAlertIcon } from "lucide-react"
+import { UsersIcon, UserPlusIcon, TriangleAlertIcon, ArrowUpIcon, ArrowDownIcon, ChevronsUpDownIcon } from "lucide-react"
+
+import { cn } from "cn"
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
@@ -8,10 +10,55 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmployeeStatusBadge } from "@/features/employees/components/employee-status-badge"
-import { EmployeeLevelBadge } from "@/features/employees/components/employee-level-badge"
 import { roleBadgeClasses } from "@/constants/permissions"
-import type { Employee } from "@/types/employees"
+import type { Employee, EmployeeSortKey } from "@/types/employees"
 import { API_ORIGIN } from "@/lib/api-client"
+
+export interface EmployeeSort {
+  by?: EmployeeSortKey
+  dir: "asc" | "desc"
+}
+
+/**
+ * A column header you can sort by.
+ *
+ * A button inside the <th> rather than a click handler on the <th> itself:
+ * sorting is an action, and an action a keyboard can't reach is not one
+ * everybody has. Clicking the active column flips the direction, which is
+ * what every table does and what people try first.
+ */
+function SortableHead({
+  column,
+  label,
+  sort,
+  onSort,
+  className,
+}: {
+  column: EmployeeSortKey
+  label: string
+  sort: EmployeeSort
+  onSort: (column: EmployeeSortKey) => void
+  className?: string
+}) {
+  const active = sort.by === column
+  const Icon = !active ? ChevronsUpDownIcon : sort.dir === "asc" ? ArrowUpIcon : ArrowDownIcon
+
+  return (
+    <TableHead className={className} aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        onClick={() => onSort(column)}
+        className={cn(
+          "-mx-1 inline-flex items-center gap-1 rounded px-1 py-0.5 transition-colors hover:text-foreground",
+          active ? "text-foreground" : "text-muted-foreground"
+        )}
+      >
+        {label}
+        <Icon className={cn("size-3.5", active ? "opacity-100" : "opacity-40")} />
+      </button>
+    </TableHead>
+  )
+}
 
 function initials(first: string, last: string) {
   return `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase()
@@ -44,10 +91,13 @@ function ManagerChainCell({ employee }: { employee: Employee }) {
       <span className="truncate" title={chain.map((person) => person!.fullName).join(" → ")}>
         {primary?.fullName ?? "—"}
       </span>
+      {/* Only ever shown for a missing 1st level manager now. The levels
+          above it are optional, so flagging their absence would put a warning
+          on records that are correctly filled in. */}
       {!employee.managerHierarchyComplete && (
         <Badge className="h-5 shrink-0 gap-1 bg-warning/15 px-1.5 text-[11px] text-warning">
           <TriangleAlertIcon className="size-3" />
-          Incomplete
+          No manager
         </Badge>
       )}
     </div>
@@ -67,6 +117,8 @@ export function EmployeeTable({
   onRetry,
   onSelectEmployee,
   onAddEmployee,
+  sort,
+  onSort,
 }: {
   employees: Employee[]
   isLoading: boolean
@@ -76,6 +128,8 @@ export function EmployeeTable({
   onRetry?: () => void
   onSelectEmployee: (id: string) => void
   onAddEmployee?: () => void
+  sort: EmployeeSort
+  onSort: (column: EmployeeSortKey) => void
 }) {
   if (isLoading) {
     return (
@@ -141,13 +195,14 @@ export function EmployeeTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Employee</TableHead>
-            <TableHead>Job title</TableHead>
-            <TableHead>Department</TableHead>
-            <TableHead>Level</TableHead>
+            <SortableHead column="name" label="Employee" sort={sort} onSort={onSort} />
+            <SortableHead column="designation" label="Job title" sort={sort} onSort={onSort} />
+            <SortableHead column="department" label="Department" sort={sort} onSort={onSort} />
+            {/* Not sortable: the column shows one name out of a hierarchy the
+                server has no single column for. */}
             <TableHead className="hidden lg:table-cell">Primary manager</TableHead>
             <TableHead className="hidden xl:table-cell">Roles</TableHead>
-            <TableHead>Status</TableHead>
+            <SortableHead column="status" label="Status" sort={sort} onSort={onSort} />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -175,13 +230,6 @@ export function EmployeeTable({
               </TableCell>
               <TableCell className="text-muted-foreground">{employee.designation?.title ?? "—"}</TableCell>
               <TableCell className="text-muted-foreground">{employee.department?.name ?? "—"}</TableCell>
-              <TableCell>
-                {employee.currentLevel ? (
-                  <EmployeeLevelBadge level={employee.currentLevel} />
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </TableCell>
               <TableCell className="hidden max-w-56 text-muted-foreground lg:table-cell">
                 <ManagerChainCell employee={employee} />
               </TableCell>

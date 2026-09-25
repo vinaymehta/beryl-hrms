@@ -19,7 +19,15 @@ module Appraisals
       "primary_review" => %w[secondary_review final_review self_appraisal_open],
       "secondary_review" => %w[final_review primary_review self_appraisal_open],
       "final_review" => %w[appraisal_discussion secondary_review primary_review self_appraisal_open],
-      "appraisal_discussion" => %w[compensation_approval released final_review],
+      # Compensation & Promotion is withdrawn from the workflow. The status
+      # itself is NOT removed from Appraisal — historical appraisals sit in it
+      # and their rows must keep resolving — but nothing can move INTO it any
+      # more, so no new appraisal ever reaches it.
+      #
+      # `compensation_approval` keeps its own exits so an appraisal already
+      # parked there when this shipped can still be finished rather than
+      # stranded.
+      "appraisal_discussion" => %w[released final_review],
       "compensation_approval" => %w[released appraisal_discussion],
       "released" => %w[employee_acknowledged closed],
       "employee_acknowledged" => %w[closed],
@@ -74,7 +82,6 @@ module Appraisals
         # two steps, so they are announced to whoever holds the permission —
         # otherwise the appraisal finishes its reviews and then waits in silence.
         when "appraisal_discussion" then Notifier.ready_for_release(@appraisal, except_user: @actor)
-        when "compensation_approval" then Notifier.compensation_approval_pending(@appraisal, except_user: @actor)
         when "released"
           Notifier.released(@appraisal)
           Notifier.acknowledgement_required(@appraisal)

@@ -28,25 +28,6 @@ export interface AuthUser {
   mustChangePassword: boolean
 }
 
-/**
- * What an unclaimed invitation link says about itself.
- *
- * Deliberately thin: whoever holds the token already knows the mailbox it was
- * sent to, so naming the person and the company tells them nothing new — but
- * nothing beyond that is exposed, because a token is not a login.
- */
-export interface InvitationSummary {
-  email: string
-  firstName: string
-  lastName: string
-  companyName: string | null
-  /**
-   * Admin ticked "force password update". It decides what this link does:
-   * true asks them to choose a password, false just signs them in.
-   */
-  mustSetPassword: boolean
-}
-
 export interface SessionSummary {
   id: string
   ipAddress: string

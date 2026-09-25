@@ -86,6 +86,16 @@ class Employee < ApplicationRecord
            dependent: nil
   has_many :project_managers, through: :project_manager_assignments, source: :manager
 
+  # The reporting line past the third level. Ordered by tier in the association
+  # itself rather than at each call site: an unordered reporting line is wrong
+  # rather than merely untidy, so the ordering belongs where the rows are read.
+  has_many :additional_manager_assignments,
+           -> { where(manager_level: EmployeeManager.manager_levels["additional"]).order(:tier, :id) },
+           class_name: "EmployeeManager",
+           inverse_of: :employee,
+           dependent: nil
+  has_many :additional_managers, through: :additional_manager_assignments, source: :manager
+
   # --- Appraisals -----------------------------------------------------------
   # `appraisals` are this employee's own; the three manager associations are the
   # ones they REVIEW. nullify rather than destroy on the reviewer side: removing
@@ -117,8 +127,62 @@ class Employee < ApplicationRecord
 
   has_one_attached :profile_photo
 
-  validates :employee_code, presence: true, uniqueness: { scope: :company_id }
+  # --- Joining rules --------------------------------------------------------
+  #
+  # Every rule below is scoped to the value ACTUALLY CHANGING, not to the
+  # record. That is deliberate and load-bearing: these are hiring rules
+  # introduced after the fact, and the database is full of people who predate
+  # them — someone hired last year, someone whose stored phone has no country
+  # code. Validating unconditionally would make those records unsaveable, so
+  # correcting an unrelated typo on an old profile would fail on a rule about
+  # their date of birth. A rule that stops you fixing a name is not a rule
+  # worth having.
+
+  # The minimum age at which somebody may be added.
+  MINIMUM_AGE_YEARS = 22
+  # How far ahead a joining date may be set. Beyond this it is a plan, not a
+  # start date, and it is nearly always a typo in the year.
+  MAX_JOINING_DAYS_AHEAD = 30
+
+  GENDERS = %w[male female].freeze
+  WORK_LOCATIONS = %w[Faridabad Delhi Gurgaon].freeze
+
+  # +91 optional, then a ten-digit number starting 6-9, which is every mobile
+  # series India issues. Spaces and dashes are tolerated in what is typed and
+  # stripped before this runs.
+  INDIAN_PHONE = /\A(?:\+?91)?[6-9]\d{9}\z/
+  POSTAL_CODE = /\A\d{6}\z/
+
+  validates :employee_code, presence: true,
+            uniqueness: { scope: :company_id, message: "already in use" }
   validates :first_name, :last_name, presence: true
+
+  validates :gender, inclusion: { in: GENDERS, message: "must be male or female" },
+            allow_blank: true, if: :will_save_change_to_gender?
+  validates :work_location, inclusion: { in: WORK_LOCATIONS, message: "isn't one of the available locations" },
+            allow_blank: true, if: :will_save_change_to_work_location?
+  validates :postal_code, format: { with: POSTAL_CODE, message: "must be exactly 6 digits" },
+            allow_blank: true, if: :will_save_change_to_postal_code?
+  validates :phone, format: { with: INDIAN_PHONE, message: "must be a valid Indian mobile number" },
+            allow_blank: true, if: :will_save_change_to_phone?
+  # The same rule as `phone`, and for the same reason: a number nobody can ring
+  # is worse on an emergency contact than anywhere else on this form.
+  validates :emergency_contact_phone,
+            format: { with: INDIAN_PHONE, message: "must be a valid Indian mobile number" },
+            allow_blank: true, if: :will_save_change_to_emergency_contact_phone?
+  # Checked here as well as in the form because the form is not the only way in
+  # — an import or a direct API call reaches this column too.
+  validates :personal_email, format: { with: URI::MailTo::EMAIL_REGEXP, message: "isn't a valid email address" },
+            allow_blank: true, if: :will_save_change_to_personal_email?
+
+  validate :date_of_birth_meets_minimum_age, if: :will_save_change_to_date_of_birth?
+  validate :date_of_joining_within_window, if: :will_save_change_to_date_of_joining?
+
+  # Typed with spaces, dashes or brackets; stored as digits so two people who
+  # entered the same number the same way are stored the same way.
+  normalizes :phone, with: ->(value) { value.to_s.gsub(/[\s()\-]/, "").presence }
+  normalizes :emergency_contact_phone, with: ->(value) { value.to_s.gsub(/[\s()\-]/, "").presence }
+  normalizes :personal_email, with: ->(value) { value.to_s.strip.downcase.presence }
 
   # §3: "structured history rather than overwriting past values", and §26:
   # historical records must not change when current attributes do. Recorded by
@@ -150,17 +214,31 @@ class Employee < ApplicationRecord
       "secondary" => secondary_manager,
       "final" => final_manager,
       "department_head" => department_head,
-      "project_managers" => project_managers.to_a
+      "project_managers" => project_managers.to_a,
+      "additional_managers" => additional_managers.to_a
     }
   end
 
-  # Primary and Final are both required for a complete hierarchy; Secondary is
-  # optional. Reported rather than enforced as a blanket model validation — see
-  # #enforce_hierarchy_shape! for exactly where the line is drawn and why.
-  # Primary and Final only: the review chain is what a cycle needs. Project
-  # managers and a department head are orthogonal and never block an appraisal.
+  # A 1st level manager, and that is the whole rule.
+  #
+  # It used to require a Final as well. That matched a form which marked both
+  # as required, and stopped doing so when the 2nd and 3rd levels became
+  # optional: the flag would then have reported half the directory
+  # "Incomplete" for leaving out a field the form itself calls optional, and a
+  # warning that fires on correctly-filled records is one people learn to
+  # ignore.
+  #
+  # What is given up by narrowing it: this no longer warns ahead of time about
+  # a review chain with no final step. An appraisal walks primary → secondary
+  # → final, and `final` is the step that releases the result, so an employee
+  # without one has a chain that ends nowhere — but that now surfaces when the
+  # cycle reaches it rather than on the directory beforehand.
+  #
+  # Reported, never enforced — see #enforce_hierarchy_shape! for where the
+  # hard line actually is. Project managers, a department head and the
+  # additional tiers are all orthogonal and never counted here.
   def manager_hierarchy_complete?
-    assigned_manager_id("primary").present? && assigned_manager_id("final").present?
+    assigned_manager_id("primary").present?
   end
 
   def full_name
@@ -189,10 +267,14 @@ class Employee < ApplicationRecord
   # Single-valued levels take an id (or blank to clear); `project_manager`
   # takes an ARRAY of ids and is synced as a set.
   def assign_managers!(assignments)
-    assignments.each do |level, value|
-      level = level.to_s
+    submitted = assignments.to_h { |level, value| [ level.to_s, value ] }
+    submitted.each_key do |level|
       raise ManagerHierarchyError, "#{level} is not a manager level" unless EmployeeManager::LEVELS.include?(level)
+    end
 
+    release_moved_managers(submitted)
+
+    submitted.each do |level, value|
       if EmployeeManager.single_level?(level)
         apply_manager_slot(level, value)
       else
@@ -202,7 +284,7 @@ class Employee < ApplicationRecord
 
     reset_manager_associations
     enforce_hierarchy_shape!
-    record_manager_change(assignments.keys)
+    record_manager_change(submitted.keys)
   end
 
   # Reads the loaded association when it is already in memory, so a
@@ -215,7 +297,34 @@ class Employee < ApplicationRecord
     end
   end
 
+  # The latest date of birth that still makes somebody old enough to be added.
+  # Exposed so the form can cap its calendar with the same number the server
+  # enforces, rather than hard-coding 22 in two places that can drift.
+  def self.minimum_birth_date(today = Date.current)
+    today - MINIMUM_AGE_YEARS.years
+  end
+
   private
+    def date_of_birth_meets_minimum_age
+      return if date_of_birth.blank?
+
+      if date_of_birth > Date.current
+        errors.add(:date_of_birth, "can't be in the future")
+      elsif date_of_birth > self.class.minimum_birth_date
+        errors.add(:date_of_birth, "must be at least #{MINIMUM_AGE_YEARS} years ago")
+      end
+    end
+
+    def date_of_joining_within_window
+      return if date_of_joining.blank?
+
+      if date_of_joining < Date.current
+        errors.add(:date_of_joining, "can't be in the past")
+      elsif date_of_joining > Date.current + MAX_JOINING_DAYS_AHEAD.days
+        errors.add(:date_of_joining, "can't be more than #{MAX_JOINING_DAYS_AHEAD} days from today")
+      end
+    end
+
     def record_joining_event
       employment_events.create!(
         event_type: :joined,
@@ -282,6 +391,17 @@ class Employee < ApplicationRecord
       (desired - current).each do |manager_id|
         manager_assignments.create!(manager_level: level, manager_id: manager_id)
       end
+      renumber_tiers(desired) if level == "additional"
+    end
+
+    # Tier is the row's POSITION in the submitted list, so it is rewritten from
+    # that list every time rather than stamped once at creation: dropping the
+    # 4th-level manager has to promote the 5th, not leave a hole in the chain.
+    def renumber_tiers(desired)
+      manager_assignments_for("additional").each do |assignment|
+        position = desired.index(assignment.manager_id) || desired.size
+        assignment.update_column(:tier, EmployeeManager::FIRST_ADDITIONAL_TIER + position)
+      end
     end
 
     def manager_assignments_for(level)
@@ -289,6 +409,34 @@ class Employee < ApplicationRecord
         manager_assignments.select { |a| a.manager_level == level.to_s }
       else
         manager_assignments.where(manager_level: level).to_a
+      end
+    end
+
+    # Clears the old rows of anybody MOVING between two slots that this same
+    # request is rewriting, before any of the new ones are written.
+    #
+    # Nobody may hold two slots at once (EmployeeManager#manager_holds_only_one_slot)
+    # and the slots are applied one at a time, so swapping the 1st and 3rd
+    # level managers would otherwise fail against the half-applied state — the
+    # first collides with a row this very request is about to delete.
+    #
+    # Deliberately limited to levels the request MENTIONS. Releasing a slot it
+    # said nothing about would quietly move somebody out of a relationship
+    # nobody asked to change; left in place, the one-slot rule refuses the save
+    # and names the slot they already hold, which is the useful answer.
+    def release_moved_managers(submitted)
+      levels = submitted.keys.map { |level| EmployeeManager.manager_levels[level] }
+      desired = submitted.flat_map { |_level, value| Array(value) }.compact_blank.map(&:to_i).uniq
+      return if desired.empty?
+
+      keeping = submitted.to_h do |level, value|
+        [ EmployeeManager.manager_levels[level], Array(value).compact_blank.map(&:to_i) ]
+      end
+
+      manager_assignments.where(manager_id: desired, manager_level: levels).find_each do |assignment|
+        next if keeping[assignment.manager_level_before_type_cast]&.include?(assignment.manager_id)
+
+        assignment.destroy!
       end
     end
 
@@ -315,6 +463,8 @@ class Employee < ApplicationRecord
       end
       association(:project_manager_assignments).reset
       association(:project_managers).reset
+      association(:additional_manager_assignments).reset
+      association(:additional_managers).reset
     end
 
 
@@ -328,12 +478,11 @@ class Employee < ApplicationRecord
     # line is set up.
     #
     # Note what is deliberately NOT enforced here: that a Final is present
-    # whenever a Primary is. Both are required for a COMPLETE hierarchy, and the
-    # form marks them so — but a hard model validation would make the very first
+    # whenever a Primary is. A hard model validation would make the very first
     # employee in a brand-new company impossible to create (there is nobody to
     # pick yet) and would fail unrelated edits on records predating this
-    # feature. Completeness is surfaced instead, via
-    # #manager_hierarchy_complete?, and flagged in the UI.
+    # feature. A Final is not required for completeness either any more — see
+    # #manager_hierarchy_complete?.
     def enforce_hierarchy_shape!
       return if assigned_manager_id("primary").present?
       return if assigned_manager_id("secondary").blank? && assigned_manager_id("final").blank?

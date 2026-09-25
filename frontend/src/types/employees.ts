@@ -14,7 +14,15 @@ export interface Department {
   id: string
   name: string
   description: string | null
+  /**
+   * Always "active" in anything the API returns: the list excludes archived
+   * rows, because deleting archives and a deleted department should not be
+   * offered anywhere. Kept on the type because the column is real.
+   */
   status: "active" | "archived"
+  /** How many people are in it — what a delete would leave without one. */
+  employeeCount: number
+  designationCount: number
 }
 
 export interface Designation {
@@ -43,13 +51,16 @@ export interface EmployeeSummary {
 
 /** The login account behind an employee record. Null when they have none. */
 /**
- * What comes back from Invite and Reset password.
+ * What comes back from sending an employee their sign-in details.
  *
- * A message naming the address the link went to, and the refreshed employee —
- * never a token and never a password, because the server has neither to give.
+ * The password IS returned, once, so the administrator who pressed the button
+ * can read it out to somebody whose mail hasn't arrived. It is never stored
+ * readable and never appears on the employee payload — this response is the
+ * only place it exists outside the email.
  */
 export interface AccountActionResult {
   message: string
+  password: string
   employee: Employee
 }
 
@@ -59,14 +70,10 @@ export interface EmployeeAccount {
   status: "invited" | "active" | "disabled"
   emailVerifiedAt: string | null
   lastLoginAt: string | null
-  /** When the CURRENT invitation was sent; null if one never has been. */
-  invitedAt: string | null
-  /** When the employee finished choosing their own password. */
-  invitationAcceptedAt: string | null
-  /** Invited and waiting — the link is out there and hasn't been used. */
-  invitationPending: boolean
-  /** Account provisioned but never invited; Admin still has to press Invite. */
-  invitationUnsent: boolean
+  /** When their password was last emailed; null if it never has been. */
+  credentialsSentAt: string | null
+  /** Provisioned but never sent a password, so there is nothing to sign in with. */
+  credentialsUnsent: boolean
   /** Admin required a new password before this account may use the app. */
   mustChangePassword: boolean
 }
@@ -97,6 +104,12 @@ export interface ManagerHierarchy {
   departmentHead: EmployeeSummary | null
   /** §4's one plural slot. */
   projectManagers: EmployeeSummary[]
+  /**
+   * The reporting line past the third level, in order — 4th level first. The
+   * review chain stays three slots whatever this holds; these are reporting
+   * lines, not reviewers.
+   */
+  additionalManagers: EmployeeSummary[]
 }
 
 export interface Employee {
@@ -132,6 +145,20 @@ export interface Employee {
   profilePhotoUrl: string | null
 }
 
+/**
+ * Columns the list can be ordered by, mirroring EmployeesController::SORTABLE.
+ * Anything else is ignored by the server rather than trusted into an ORDER BY,
+ * so this type is the honest list of what the headers may offer.
+ */
+export type EmployeeSortKey =
+  | "name"
+  | "employeeCode"
+  | "status"
+  | "dateOfJoining"
+  | "currentLevel"
+  | "department"
+  | "designation"
+
 export interface EmployeeListParams {
   page?: number
   perPage?: number
@@ -140,4 +167,22 @@ export interface EmployeeListParams {
   status?: EmployeeStatus
   currentLevel?: EmployeeLevel
   q?: string
+  /** Sorting happens in SQL across the whole set, never within the page. */
+  sortBy?: EmployeeSortKey
+  sortDir?: "asc" | "desc"
+}
+
+/**
+ * Company-wide preferences.
+ *
+ * `employeeCodeInitial` is the first ID this company issues, e.g. "BOO1";
+ * `nextEmployeeCode` is what the add-employee form would prefill right now,
+ * derived from it and from the codes already in use. Both are null when
+ * nothing is configured, which means "leave the field empty".
+ */
+export interface CompanySettings {
+  employeeCodeInitial: string | null
+  nextEmployeeCode: string | null
+  /** Work emails must end with @<this>. null means no restriction. */
+  workEmailDomain: string | null
 }

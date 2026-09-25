@@ -95,7 +95,7 @@ export function ManagerHierarchyCard({ employee }: { employee: Employee }) {
         <p className="flex items-start gap-1.5 rounded-lg bg-warning/10 px-2.5 py-2 text-xs text-warning">
           <TriangleAlertIcon className="mt-px size-3.5 shrink-0" />
           <span>
-            This reporting line is incomplete — a primary and a final manager are both required.
+            This reporting line is incomplete — a 1st level manager is required.
           </span>
         </p>
       )}

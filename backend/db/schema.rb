@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_24_180000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_25_200000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -549,11 +549,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_180000) do
 
   create_table "companies", force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.string "employee_code_initial"
     t.string "name", null: false
     t.string "slug", null: false
     t.integer "status", default: 0, null: false
     t.string "timezone", default: "UTC", null: false
     t.datetime "updated_at", null: false
+    t.string "work_email_domain"
     t.index ["slug"], name: "index_companies_on_slug", unique: true
   end
 
@@ -678,6 +680,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_180000) do
     t.bigint "employee_id", null: false
     t.bigint "manager_id", null: false
     t.integer "manager_level", null: false
+    t.integer "tier"
     t.datetime "updated_at", null: false
     t.index ["company_id", "manager_id"], name: "index_employee_managers_on_company_and_manager"
     t.index ["company_id"], name: "index_employee_managers_on_company_id"
@@ -801,6 +804,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_180000) do
     t.string "category", null: false
     t.bigint "company_id", null: false
     t.datetime "created_at", null: false
+    t.jsonb "email_context", default: [], null: false
     t.bigint "notifiable_id"
     t.string "notifiable_type"
     t.datetime "read_at"
@@ -893,18 +897,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_180000) do
   create_table "users", force: :cascade do |t|
     t.bigint "company_id", null: false
     t.datetime "created_at", null: false
+    t.datetime "credentials_sent_at"
     t.string "email_address", null: false
     t.datetime "email_verified_at"
     t.string "first_name", null: false
     t.datetime "invitation_accepted_at"
-    t.datetime "invited_at"
     t.datetime "last_login_at"
     t.string "last_name", null: false
     t.boolean "must_change_password", default: false, null: false
     t.string "password_digest", null: false
     t.integer "status", default: 0, null: false
     t.datetime "updated_at", null: false
-    t.index ["company_id", "invited_at"], name: "index_users_pending_invitation", where: "(invitation_accepted_at IS NULL)"
+    t.index ["company_id", "credentials_sent_at"], name: "index_users_on_company_id_and_credentials_sent_at"
     t.index ["company_id", "status"], name: "index_users_on_company_id_and_status"
     t.index ["company_id"], name: "index_users_on_company_id"
     t.index ["email_address"], name: "index_users_on_email_address", unique: true

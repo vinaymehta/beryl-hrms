@@ -22,7 +22,7 @@ import { useCreateEmployee } from "@/features/employees/hooks/use-employee-mutat
 import { useCurrentUser } from "@/features/auth/hooks/use-current-user"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS, PEOPLE_MANAGEMENT_PERMISSIONS } from "@/constants/permissions"
-import type { Employee, EmployeeListParams } from "@/types/employees"
+import type { Employee, EmployeeListParams, EmployeeSortKey } from "@/types/employees"
 
 /** One headline number. Deliberately compact — this is a data tool, not a dashboard. */
 function StatTile({
@@ -56,7 +56,7 @@ function StatTile({
 /**
  * Counted from the CURRENT page of results, and labelled as such — the list
  * endpoint paginates, so claiming these were company-wide totals would be a
- * lie on any company past 25 people. Only `totalCount` comes from the server.
+ * lie on any company past a page. Only `totalCount` comes from the server.
  */
 function pageStats(rows: Employee[]) {
   return {
@@ -82,7 +82,24 @@ export default function EmployeesPage() {
     if (redirectToOwnRecord) router.replace("/profile")
   }, [redirectToOwnRecord, router])
 
-  const [params, setParams] = useState<EmployeeListParams>({ page: 1 })
+  // Ten a page, matching EmployeesController::DEFAULT_PER_PAGE. Sent
+  // explicitly rather than relied on, so the two can't drift apart silently.
+  const [params, setParams] = useState<EmployeeListParams>({ page: 1, perPage: 10 })
+
+  /**
+   * Clicking the active column flips the direction; clicking another one
+   * starts it ascending. Back to page one either way — page 4 of a list sorted
+   * by name is nowhere near page 4 of the same list sorted by status, and
+   * staying put would look like the data changed.
+   */
+  function toggleSort(column: EmployeeSortKey) {
+    setParams((current) => ({
+      ...current,
+      sortBy: column,
+      sortDir: current.sortBy === column && current.sortDir === "asc" ? "desc" : "asc",
+      page: 1,
+    }))
+  }
   const [addOpen, setAddOpen] = useState(false)
   const { data, isLoading, isError, refetch } = useEmployees(params)
   const createEmployee = useCreateEmployee()
@@ -92,7 +109,7 @@ export default function EmployeesPage() {
 
   const rows = data?.data ?? []
   const stats = pageStats(rows)
-  const hasFilters = Boolean(params.q || params.departmentId || params.status || params.currentLevel)
+  const hasFilters = Boolean(params.q || params.departmentId || params.status)
 
   return (
     <div className="grid gap-4">
@@ -147,17 +164,40 @@ export default function EmployeesPage() {
         onRetry={() => refetch()}
         onSelectEmployee={(employeeId) => router.push(`/employees/${employeeId}`)}
         onAddEmployee={canCreate ? () => setAddOpen(true) : undefined}
+        sort={{ by: params.sortBy, dir: params.sortDir ?? "asc" }}
+        onSort={toggleSort}
       />
 
-      {data && data.meta.totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>
-            Page {data.meta.page} of {data.meta.totalPages} · {data.meta.totalCount} employees
+      {/* Always shown, not only past one page: the rows-per-page control is
+          how you get MORE than one page in the first place, so hiding it while
+          there is only one is exactly when it is wanted. */}
+      {data && (
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <label htmlFor="employees-per-page" className="text-xs">
+              Rows per page
+            </label>
+            <select
+              id="employees-per-page"
+              className="h-8 rounded-md border bg-background px-2 text-xs"
+              value={params.perPage ?? 10}
+              onChange={(e) => setParams({ ...params, perPage: Number(e.target.value), page: 1 })}
+            >
+              {[ 10, 25, 50, 100 ].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </div>
+          <span className="text-xs">
+            Page {data.meta.page} of {Math.max(data.meta.totalPages, 1)} · {data.meta.totalCount} employees
           </span>
           <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
+              aria-label="Previous page"
               disabled={data.meta.page <= 1}
               onClick={() => setParams({ ...params, page: data.meta.page - 1 })}
             >
@@ -166,6 +206,7 @@ export default function EmployeesPage() {
             <Button
               variant="outline"
               size="sm"
+              aria-label="Next page"
               disabled={data.meta.page >= data.meta.totalPages}
               onClick={() => setParams({ ...params, page: data.meta.page + 1 })}
             >

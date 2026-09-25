@@ -11,7 +11,6 @@ module Appraisals
   #                        ratings never reach them early.
   #   • comments         — through AppraisalCommentPolicy::Scope, so a
   #                        management_only row is excluded by the QUERY.
-  #   • compensation     — only for appraisals.manage_compensation.
   #   • template         — always the CYCLE's frozen template, never the newest.
   #
   # The `viewer` block tells the UI what it may offer, so the frontend never has
@@ -33,8 +32,6 @@ module Appraisals
         "comments" => Api::V1::AppraisalCommentSerializer.new(visible_comments).as_json,
         "transitions" => Api::V1::AppraisalTransitionSerializer.new(@appraisal.transitions.to_a).as_json,
         "scoreOverrides" => Api::V1::AppraisalScoreOverrideSerializer.new(@appraisal.score_overrides.to_a).as_json,
-        "compensation" => compensation_payload,
-        "designationOptions" => designation_options,
         "selfAppraisalDraft" => self_appraisal_draft,
         # The subject's own compact record, for the page header (job title,
         # department, employee code). Same serializer the reporting line
@@ -56,7 +53,30 @@ module Appraisals
         draft = @appraisal.self_appraisal_draft
         return nil if draft.blank?
 
-        draft.merge("savedAt" => @appraisal.self_appraisal_draft_saved_at)
+        # Camelised on the way OUT, because it was underscored on the way in.
+        #
+        # Incoming JSON keys are underscored globally (config/initializers/
+        # json_key_transform.rb), so a draft saved from the form is stored as
+        # question_id / improvement_areas. Handed back as-is it no longer
+        # matched the form that wrote it: `questionId` read as undefined, and
+        # the string "undefined" then went out as a question id on submit —
+        # "Question undefined does not belong to this appraisal's template".
+        # The narrative failed more quietly still, simply not reloading.
+        #
+        # `responses` is deliberately left alone. Its keys are workbook field
+        # keys defined by whoever built the spreadsheet, not attribute names,
+        # and camelising them would rename the fields themselves.
+        {
+          "answers" => Array(draft["answers"]).map { |answer| camelize_keys(answer) },
+          "narrative" => camelize_keys(draft["narrative"] || {}),
+          "responses" => draft["responses"] || {},
+          "step" => draft["step"],
+          "savedAt" => @appraisal.self_appraisal_draft_saved_at
+        }
+      end
+
+      def camelize_keys(hash)
+        hash.to_h { |key, value| [ key.to_s.camelize(:lower), value ] }
       end
 
       def frozen_template
@@ -115,22 +135,7 @@ module Appraisals
           .to_a
       end
 
-      def compensation_payload
-        return nil unless @policy.view_compensation?
-        return nil if @appraisal.compensation_decision.nil?
 
-        Api::V1::AppraisalCompensationDecisionSerializer.new(@appraisal.compensation_decision).as_json
-      end
-
-      # The designations a promotion can propose. Only sent to someone who may
-      # actually record one, so the picker never leaks to other viewers.
-      def designation_options
-        return [] unless @policy.manage_compensation?
-
-        Designation.where(company_id: @appraisal.company_id, status: :active)
-                   .order(:title)
-                   .map { |designation| { "id" => designation.id, "title" => designation.title } }
-      end
 
       # Names only — the reviewer chain is not sensitive, and the employee is
       # explicitly allowed to see who their managers are.
@@ -162,7 +167,6 @@ module Appraisals
           "canOverrideScore" => @policy.override_score?,
           "canRelease" => @policy.release?,
           "canAcknowledge" => @policy.acknowledge?,
-          "canManageCompensation" => @policy.manage_compensation?,
           "canSetManagementOnlyComment" => AppraisalCommentPolicy.new(@user, @appraisal).may_set_management_only?,
           "visibleRevisionStages" => @policy.visible_revision_stages
         }

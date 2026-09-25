@@ -31,8 +31,6 @@ Rails.application.routes.draw do
         post "verify_email", to: "email_verifications#create"
         # The first-login flow for an Admin-invited employee. Unauthenticated
         # by necessity — see Api::V1::Auth::InvitationsController.
-        get "invitation", to: "invitations#show"
-        post "accept_invitation", to: "invitations#create"
         post "forgot_password", to: "passwords#create"
         post "reset_password", to: "passwords#update"
         patch "change_password", to: "password_changes#update"
@@ -47,6 +45,9 @@ Rails.application.routes.draw do
       get "dashboard/summary", to: "dashboard#summary"
 
       resources :employees, only: %i[ index show create update ] do
+        # The code to prefill the add-employee form with. A suggestion, not a
+        # reservation — see Employees::NextCode.
+        collection { get :next_code }
         member do
           patch :deactivate
           # Account access, kept apart from the profile edit above. Neither
@@ -111,7 +112,6 @@ Rails.application.routes.draw do
           patch :override_score
           patch :release
           patch :acknowledge
-          patch :compensation
           post :add_comment
           # Parse-and-preview only; nothing is saved until the employee submits.
           post :import_preview
@@ -134,6 +134,11 @@ Rails.application.routes.draw do
       resources :audit_logs, only: %i[ index show ] do
         collection { get :actions }
       end
+
+      # Company-wide preferences (the employee-code pattern). Singular: there
+      # is one per company, and it is the Company row itself.
+      get "company_settings", to: "company_settings#show"
+      patch "company_settings", to: "company_settings#update"
 
       # Read-only list, for the Employee form's role picker — see RolePolicy.
       resources :roles, only: %i[ index ]

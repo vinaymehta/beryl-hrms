@@ -1,16 +1,29 @@
 "use client"
 
 import { useState } from "react"
-import { PlusIcon, PlayIcon, PencilIcon, CalendarClockIcon, UsersIcon } from "lucide-react"
+import { PlusIcon, PlayIcon, PencilIcon, Trash2Icon, CalendarClockIcon, UsersIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { CycleStatusBadge } from "@/features/appraisals/components/appraisal-badges"
 import { CycleFormDialog } from "@/features/appraisals/components/cycle-form-dialog"
 import { useAppraisalCycles, useAppraisalCycle } from "@/features/appraisals/hooks/use-appraisals"
-import { useStartAppraisalCycle, useCloseAppraisalCycle } from "@/features/appraisals/hooks/use-appraisal-mutations"
+import {
+  useStartAppraisalCycle,
+  useCloseAppraisalCycle,
+  useDeleteAppraisalCycle,
+} from "@/features/appraisals/hooks/use-appraisal-mutations"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
 import { APPRAISAL_STATUSES } from "@/features/appraisals/constants"
@@ -42,6 +55,28 @@ function ProgressBar({ cycle }: { cycle: AppraisalCycle }) {
   )
 }
 
+/**
+ * Editing and deleting are for a cycle that has not begun.
+ *
+ * Once it is running, people are writing self-appraisals against it and
+ * reviewers are working to its deadlines; changing the template or the dates
+ * underneath them, or removing it outright, would invalidate work already
+ * done. Once it is closed it is a record, and records are not edited.
+ *
+ * The API will still delete a started cycle — that capability exists for a
+ * cycle created wrongly — but it is not something to offer behind an ordinary
+ * button.
+ */
+function locked(cycle: AppraisalCycle) {
+  return cycle.status === "active" || cycle.status === "closed"
+}
+
+function lockReason(cycle: AppraisalCycle) {
+  if (cycle.status === "active") return "This cycle is running — close it first"
+  if (cycle.status === "closed") return "A closed cycle is a record and can't be changed"
+  return null
+}
+
 export function AppraisalCyclesView({ onOpenCycle }: { onOpenCycle: (cycleId: string) => void }) {
   const [formOpen, setFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -50,6 +85,8 @@ export function AppraisalCyclesView({ onOpenCycle }: { onOpenCycle: (cycleId: st
   const { data: cycles, isLoading, isError, refetch } = useAppraisalCycles()
   const { data: editingCycle } = useAppraisalCycle(editingId)
   const startCycle = useStartAppraisalCycle()
+  const deleteCycle = useDeleteAppraisalCycle()
+  const [deleting, setDeleting] = useState<AppraisalCycle | null>(null)
   const closeCycle = useCloseAppraisalCycle()
 
   function openNew() {
@@ -144,28 +181,43 @@ export function AppraisalCyclesView({ onOpenCycle }: { onOpenCycle: (cycleId: st
 
                 {canManage && (
                   <div className="flex flex-wrap gap-2 border-t pt-3">
+                    {/* Edit and Delete are always SHOWN and conditionally
+                        disabled, rather than appearing and disappearing. A
+                        control that vanishes leaves people hunting for it and
+                        never says why it is gone; a disabled one with a reason
+                        on hover answers the question in place. */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5"
+                      disabled={locked(cycle)}
+                      title={lockReason(cycle) ?? `Edit ${cycle.name}`}
+                      onClick={() => {
+                        setEditingId(cycle.id)
+                        setFormOpen(true)
+                      }}
+                    >
+                      <PencilIcon className="size-3.5" /> Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 text-muted-foreground hover:text-destructive"
+                      disabled={locked(cycle) || deleteCycle.isPending}
+                      title={lockReason(cycle) ?? `Delete ${cycle.name}`}
+                      onClick={() => setDeleting(cycle)}
+                    >
+                      <Trash2Icon className="size-3.5" /> Delete
+                    </Button>
                     {!cycle.started && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1.5"
-                          onClick={() => {
-                            setEditingId(cycle.id)
-                            setFormOpen(true)
-                          }}
-                        >
-                          <PencilIcon className="size-3.5" /> Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          className="gap-1.5 bg-role-hr text-role-hr-foreground hover:bg-role-hr/90"
-                          disabled={startCycle.isPending || cycle.eligibleCount === 0}
-                          onClick={() => startCycle.mutate(cycle.id)}
-                        >
-                          <PlayIcon className="size-3.5" /> Start
-                        </Button>
-                      </>
+                      <Button
+                        size="sm"
+                        className="gap-1.5 bg-role-hr text-role-hr-foreground hover:bg-role-hr/90"
+                        disabled={startCycle.isPending || cycle.eligibleCount === 0}
+                        onClick={() => startCycle.mutate(cycle.id)}
+                      >
+                        <PlayIcon className="size-3.5" /> Start
+                      </Button>
                     )}
                     {cycle.status === "active" && (
                       <Button
@@ -184,6 +236,32 @@ export function AppraisalCyclesView({ onOpenCycle }: { onOpenCycle: (cycleId: st
           ))}
         </div>
       )}
+
+      <Dialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {deleting?.name}?</DialogTitle>
+            <DialogDescription>
+              {deleting?.eligibleCount
+                ? `${deleting.eligibleCount} ${deleting.eligibleCount === 1 ? "employee is" : "employees are"} on this cycle's list. Nothing has been appraised yet, so nothing is lost — but the cycle and its list go.`
+                : "The cycle and its employee list will be removed."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline">Cancel</Button>} />
+            <Button
+              variant="destructive"
+              disabled={deleteCycle.isPending}
+              onClick={() =>
+                deleting &&
+                deleteCycle.mutate(deleting.id, { onSuccess: () => setDeleting(null) })
+              }
+            >
+              {deleteCycle.isPending ? "Deleting…" : "Delete cycle"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <CycleFormDialog
         open={formOpen}

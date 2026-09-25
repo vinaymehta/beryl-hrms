@@ -2,12 +2,23 @@ module Api
   module V1
     class AppraisalTemplatesController < Api::V1::BaseController
       rescue_from ::Appraisals::TemplateImport::Error, with: :render_unprocessable
+      # Archived templates are hidden unless asked for by name.
+      #
+      # #destroy archives rather than deletes, because a cycle that ran against
+      # a template must keep resolving to it — but from the builder's point of
+      # view a deleted template is gone, and leaving it in the list means
+      # offering a template nobody may use. `?status=archived` still reaches
+      # them, so nothing is unreachable.
       def index
         authorize AppraisalTemplate
         templates = policy_scope(AppraisalTemplate)
                       .includes(categories: :questions)
                       .order(:name, :version)
-        templates = templates.where(status: params[:status]) if params[:status].present?
+        templates = if params[:status].present?
+          templates.where(status: params[:status])
+        else
+          templates.where.not(status: :archived)
+        end
         render_data(Api::V1::AppraisalTemplateSerializer.new(templates).as_json)
       end
 
@@ -76,9 +87,23 @@ module Api
         render_data(Api::V1::AppraisalTemplateSerializer.new(template.reload).as_json)
       end
 
+      # Archives rather than destroys: appraisal cycles reference the template
+      # they ran against, and deleting the row would leave those pointing at
+      # nothing. A template a cycle has actually used is refused outright —
+      # hiding it would silently change what a historical cycle reports.
       def destroy
         template = find_template
         authorize template
+
+        if template.appraisal_cycles.exists?
+          return render json: {
+            errors: [ {
+              code: "unprocessable",
+              message: "This template has been used by a cycle and can't be deleted. Create a new version instead."
+            } ]
+          }, status: :unprocessable_content
+        end
+
         template.update!(status: :archived)
         ::Audit::Record.call(action: "appraisal_template.archived", auditable: template, request: request)
         head :no_content

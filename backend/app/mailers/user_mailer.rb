@@ -10,20 +10,23 @@ class UserMailer < ApplicationMailer
     mail(to: user.email_address, subject: "Reset your password")
   end
 
-  # The first-login invitation an Admin/HR-created employee receives.
+  # The sign-in details an Admin/HR-created employee receives.
   #
-  # Its own :invitation token rather than the 15-minute password_reset one this
-  # used to borrow. The two look alike but are not the same operation: a reset
-  # is answered within minutes by someone sitting at the form, an invitation is
-  # opened whenever the new joiner next reads their mail. Sharing the short
-  # expiry meant most invitations were dead on arrival. See User's
-  # :invitation generator for how the link is made single-use.
-  def invitation(user)
+  # The password is IN this mail, in plain text, because that is the flow: no
+  # link, no setup page, just something to type into the ordinary sign-in
+  # form. The password is passed in rather than read off the user, because it
+  # cannot be read off the user — only its digest is stored, and this is the
+  # single moment at which the plaintext exists to be sent.
+  #
+  # Nothing about the account is in the subject line, which is the part that
+  # shows on a lock screen.
+  def credentials(user, password)
     @user = user
+    @password = password
     @company_name = user.company&.name
-    @expires_in = distance_of_time_in_words(User::INVITATION_VALID_FOR)
-    @url = "#{frontend_base_url}/accept-invitation?token=#{user.generate_token_for(:invitation)}"
-    mail(to: user.email_address, subject: "You've been invited to #{@company_name.presence || 'the HR portal'}")
+    @must_change = user.must_change_password?
+    @sign_in_url = "#{frontend_base_url}/login"
+    mail(to: user.email_address, subject: "Your sign-in details for #{@company_name.presence || 'the HR portal'}")
   end
 
   def email_verification(user)

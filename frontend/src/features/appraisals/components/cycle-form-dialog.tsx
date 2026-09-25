@@ -29,7 +29,6 @@ const EMPTY = {
   primaryReviewDeadline: "",
   secondaryReviewDeadline: "",
   finalizationDeadline: "",
-  compensationEffectiveDate: "",
 }
 
 /**
@@ -53,7 +52,6 @@ function initialValues(cycle?: AppraisalCycleDetail) {
     primaryReviewDeadline: cycle.primaryReviewDeadline ?? "",
     secondaryReviewDeadline: cycle.secondaryReviewDeadline ?? "",
     finalizationDeadline: cycle.finalizationDeadline ?? "",
-    compensationEffectiveDate: cycle.compensationEffectiveDate ?? "",
   }
 }
 
@@ -205,7 +203,6 @@ function CycleForm({
               {field("primaryReviewDeadline", "Primary review", "date")}
               {secondaryEnabled && field("secondaryReviewDeadline", "Secondary review", "date")}
               {field("finalizationDeadline", "Finalization", "date")}
-              {field("compensationEffectiveDate", "Compensation effective", "date")}
             </div>
             <Label className="flex items-center gap-2 text-sm font-normal">
               <Checkbox checked={secondaryEnabled} onCheckedChange={(next) => setSecondaryEnabled(Boolean(next))} />

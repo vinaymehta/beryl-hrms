@@ -1,0 +1,21 @@
+Hi <%= @user.first_name %>,
+
+<%= @notification.title %>
+
+<% if @notification.body.present? -%>
+<%= @notification.body %>
+
+<% end -%>
+<% @context.each do |label, value| -%>
+<%= label %>: <%= value %>
+<% end -%>
+<% if @context.any? -%>
+
+<% end -%>
+<% if @url -%>
+Open it here:
+<%= @url %>
+
+<% end -%>
+--
+You're receiving this because you have an account with <%= @user.company&.name.presence || "this workspace" %>.

@@ -125,14 +125,6 @@ export function useAddAppraisalComment(id: string) {
   )
 }
 
-export function useSaveCompensation(id: string) {
-  return useAppraisalAction(
-    id,
-    (values: unknown) => appraisalsApi.compensation(id, values),
-    "Compensation decision saved.",
-    "Couldn't save that decision."
-  )
-}
 
 // --- Cycles -----------------------------------------------------------------
 
@@ -191,6 +183,14 @@ export function useCloseAppraisalCycle() {
   return useCycleAction((id: string) => appraisalCyclesApi.close(id), "Cycle closed.", "Couldn't close that cycle.")
 }
 
+export function useDeleteAppraisalCycle() {
+  return useCycleAction(
+    (id: string) => appraisalCyclesApi.remove(id),
+    "Cycle deleted.",
+    "Couldn't delete that cycle."
+  )
+}
+
 export function useCreateAppraisalTemplate() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -200,6 +200,30 @@ export function useCreateAppraisalTemplate() {
       toast.success("Template created.")
     },
     onError: (error) => toast.error(errorMessage(error, "Couldn't create that template.")),
+  })
+}
+
+export function useUpdateAppraisalTemplate(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (values: unknown) => appraisalTemplatesApi.update(id, values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appraisal-templates"] })
+      toast.success("Template updated.")
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't update that template.")),
+  })
+}
+
+export function useDeleteTemplate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => appraisalTemplatesApi.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appraisal-templates"] })
+      toast.success("Template deleted.")
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't delete that template.")),
   })
 }
 

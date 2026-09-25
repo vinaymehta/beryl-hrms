@@ -15,8 +15,11 @@ module Appraisals
     end
 
     def call
+      # compensation_approval stays in the list although nothing enters it any
+      # more: an appraisal already parked there when the step was withdrawn
+      # must still be releasable rather than stranded.
       unless %w[appraisal_discussion compensation_approval].include?(@appraisal.status)
-        raise Error, "An appraisal can only be released after the discussion or compensation step"
+        raise Error, "An appraisal can only be released after the discussion step"
       end
       raise Error, "This appraisal has no final review to release" if @appraisal.revision_for(:final_review).nil?
 

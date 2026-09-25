@@ -1,9 +1,0 @@
-<p>Hi <%= @user.first_name %>,</p>
-
-<p>You have been invited to join<%= " #{@company_name}" if @company_name.present? %> on the HR portal. Click the link below to choose your own password and sign in for the first time.</p>
-
-<p><%= link_to "Set your password", @url %></p>
-
-<p>This link works once and expires in <%= @expires_in %>. If it has already expired, ask your administrator to send you a new invitation, or use "Forgot password" on the sign-in page.</p>
-
-<p>If you weren't expecting this invitation, you can ignore this email — nothing happens until the link is opened.</p>

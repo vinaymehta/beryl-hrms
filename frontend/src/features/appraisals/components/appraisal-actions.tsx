@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { CheckCircle2Icon, SendIcon, UndoIcon, SlidersHorizontalIcon, BadgeCheckIcon } from "lucide-react"
+import { CheckCircle2Icon, SendIcon, UndoIcon, SlidersHorizontalIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -42,14 +42,12 @@ export function AppraisalActions({ appraisal }: { appraisal: AppraisalDetail }) 
   const release = useReleaseAppraisal(appraisal.id)
   const acknowledge = useAcknowledgeAppraisal(appraisal.id)
 
-  const canMoveToCompensation = viewer.canAdvance && status === "appraisal_discussion"
   const canClose = viewer.isAdministrator && status === "employee_acknowledged"
   const anyAction =
     viewer.canReturnForCorrection ||
     viewer.canOverrideScore ||
     viewer.canRelease ||
     viewer.canAcknowledge ||
-    canMoveToCompensation ||
     canClose
 
   if (!anyAction) return null
@@ -68,17 +66,9 @@ export function AppraisalActions({ appraisal }: { appraisal: AppraisalDetail }) 
         </Button>
       )}
 
-      {canMoveToCompensation && (
-        <Button
-          variant="outline"
-          className="gap-1.5"
-          disabled={advance.isPending}
-          onClick={() => advance.mutate({ to: "compensation_approval" })}
-        >
-          <BadgeCheckIcon className="size-4" /> Send to compensation
-        </Button>
-      )}
 
+      {/* compensation_approval stays accepted although nothing enters it any
+          more: an appraisal already parked there must still be releasable. */}
       {viewer.canRelease && (status === "appraisal_discussion" || status === "compensation_approval") && (
         <Button
           className="gap-1.5 bg-role-hr text-role-hr-foreground shadow-2xs hover:bg-role-hr/90"

@@ -4,7 +4,7 @@ module Api
       attributes :id, :employee_code, :first_name, :last_name, :status, :date_of_joining,
                  :date_of_birth, :gender, :phone, :personal_email,
                  :address_line1, :address_line2, :city, :state, :postal_code, :country,
-                 :emergency_contact_name, :emergency_contact_phone,
+                 :emergency_contact_name, :emergency_contact_phone, :work_location,
                  :user_id, :department_id, :designation_id,
                  # Career level (Intern → Manager). Null for employees whose
                  # level hasn't been recorded; NOT the same thing as the RBAC
@@ -42,9 +42,9 @@ module Api
         end
       end
 
-      # Primary and Final are both required; Secondary is optional. Surfaced so
-      # the UI can flag an unfinished hierarchy without re-deriving the rule —
-      # see Employee#manager_hierarchy_complete?.
+      # True once a 1st level manager is assigned; every level above that is
+      # optional. Surfaced so the UI can flag an unfinished reporting line
+      # without re-deriving the rule — see Employee#manager_hierarchy_complete?.
       attribute :manager_hierarchy_complete, &:manager_hierarchy_complete?
 
       # The linked login account, if there is one: not every employee has a
@@ -67,14 +67,12 @@ module Api
           # predates the stamp look the same, which is the honest reading.
           lastLoginAt: employee.user.last_login_at,
           # The invitation state, so the employee list can show "Not invited",
-          # "Invitation sent" or "Active" without the client re-deriving the
-          # rule from three separate fields. No token is exposed here or
-          # anywhere else in the API — the link exists only in the employee's
-          # own mailbox.
-          invitedAt: employee.user.invited_at,
-          invitationAcceptedAt: employee.user.invitation_accepted_at,
-          invitationPending: employee.user.invitation_pending?,
-          invitationUnsent: employee.user.invitation_unsent?,
+          # "Password sent" or "No password yet" without the client
+          # re-deriving the rule. The password itself is of course not here:
+          # only its digest is stored, and the plaintext existed for exactly
+          # as long as it took to put it in an email.
+          credentialsSentAt: employee.user.credentials_sent_at,
+          credentialsUnsent: employee.user.credentials_unsent?,
           # Admin required a password change; still outstanding.
           mustChangePassword: employee.user.must_change_password?
         }

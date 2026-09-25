@@ -1,7 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { useForm } from "react-hook-form"
+import { useEffect, useMemo, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { useForm, type FieldErrors } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
   UserIcon,
@@ -13,12 +14,17 @@ import {
   KeyRoundIcon,
   InfoIcon,
   LockIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  XIcon,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "cn"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -28,12 +34,24 @@ import {
   Form,
   FormControl,
   FormField,
+  FormDescription,
   FormItem,
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { employeeFormSchema, type EmployeeFormValues, type EmployeePayload } from "@/features/employees/schemas"
+import {
+  buildEmployeeFormSchema,
+  maxBirthDateIso,
+  maxJoiningIso,
+  todayIso,
+  MAX_JOINING_DAYS_AHEAD,
+  WORK_LOCATIONS,
+  type EmployeeFormValues,
+  type EmployeePayload,
+} from "@/features/employees/schemas"
+import { companySettingsApi, employeesApi } from "@/features/employees/api"
+import { generatePassword } from "@/features/employees/generate-password"
 import {
   useDepartments,
   useDesignations,
@@ -41,17 +59,69 @@ import {
   useRoles,
 } from "@/features/employees/hooks/use-employees"
 import {
-  EMPLOYEE_LEVELS,
   GENDER_OPTIONS,
   DEFAULT_EMPLOYEE_ROLE_SLUG,
   MANAGER_LEVELS,
   ADDITIONAL_MANAGER_RELATIONSHIPS,
   EMPLOYMENT_TYPES,
+  OTHER_CITY,
 } from "@/features/employees/constants"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS, roleBadgeClasses } from "@/constants/permissions"
 import { API_ORIGIN } from "@/lib/api-client"
 import type { Employee, EmployeeSummary, ReviewChainLevel } from "@/types/employees"
+import { Country, State, City } from "country-state-city"
+
+/** Base UI's Select wants {value,label} items; WORK_LOCATIONS is a plain list. */
+const WORK_LOCATION_OPTIONS = WORK_LOCATIONS.map((value) => ({ value, label: value }))
+
+/**
+ * Country → State → City, from the `country-state-city` dataset.
+ *
+ * NAMES are stored, not ISO codes: the three columns are free text and were
+ * free text before these dropdowns existed, so every address already on file
+ * holds a name. Writing codes would make the new rows unreadable next to the
+ * old ones. The codes are looked up on the way in instead.
+ */
+const COUNTRIES = Country.getAllCountries()
+
+function isoForCountry(name: string) {
+  return COUNTRIES.find((c) => c.name === name)?.isoCode ?? null
+}
+
+function statesOf(countryName: string) {
+  const iso = isoForCountry(countryName)
+  return iso ? State.getStatesOfCountry(iso) : []
+}
+
+function citiesOf(countryName: string, stateName: string) {
+  const countryIso = isoForCountry(countryName)
+  if (!countryIso) return []
+  const stateIso = State.getStatesOfCountry(countryIso).find((st) => st.name === stateName)?.isoCode
+  return stateIso ? City.getCitiesOfState(countryIso, stateIso) : []
+}
+
+/** "1st", "2nd", "3rd", "4th"… for the reporting-level labels. */
+function ordinal(n: number) {
+  const suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th"
+  return `${n}${suffix}`
+}
+
+/** The ✕ beside every optional reporting level. */
+function RemoveLevelButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="mt-0.5 shrink-0 text-muted-foreground hover:text-destructive"
+      aria-label={`Remove ${label}`}
+      onClick={onClick}
+    >
+      <XIcon className="size-4" />
+    </Button>
+  )
+}
 
 function initialsOf(name: string) {
   return name
@@ -352,6 +422,29 @@ export function EmployeeForm({
 }) {
   const { data: departments } = useDepartments()
 
+  // The next employee ID, from the pattern set in Settings → Other → Initial
+  // ID. Only for a NEW employee: an existing one already has a code, and
+  // suggesting a different one would invite renumbering somebody by accident.
+  //
+  // A suggestion, never a reservation — the field stays editable, nothing is
+  // consumed by asking, and the database's uniqueness constraint is still what
+  // decides. So a stale value here costs a validation error, not a duplicate.
+  const { data: suggestedCode } = useQuery({
+    queryKey: ["employees", "next-code"],
+    queryFn: employeesApi.nextCode,
+    enabled: !employee,
+    staleTime: 0,
+  })
+
+  // The company's work-email domain, so the form can refuse a wrong address
+  // with the same sentence the server would. Read-only here — it is set in
+  // Settings, and the server decides regardless of what this says.
+  const { data: companySettings } = useQuery({
+    queryKey: ["company-settings"],
+    queryFn: companySettingsApi.get,
+  })
+  const workEmailDomain = companySettings?.workEmailDomain ?? null
+
   // Two independent gates, both permission keys rather than role checks — an
   // HR admin who is later given only one of them sees exactly that one. They
   // also gate the FETCHES below: the endpoints behind them are closed to a
@@ -367,7 +460,9 @@ export function EmployeeForm({
   )
 
   const form = useForm<EmployeeFormValues>({
-    resolver: zodResolver(employeeFormSchema),
+    // Built per mode: the joining-date and age windows are hiring rules and
+    // must not fire on somebody who is already here — see the schema.
+    resolver: zodResolver(buildEmployeeFormSchema({ isNew: !employee })),
     defaultValues: {
       firstName: employee?.firstName ?? "",
       lastName: employee?.lastName ?? "",
@@ -381,22 +476,32 @@ export function EmployeeForm({
       designationId: employee?.designation?.id != null ? String(employee.designation.id) : "",
       currentLevel: employee?.currentLevel ?? "",
       employmentType: employee?.employmentType ?? "",
-      workLocation: employee?.workLocation ?? "",
+      // Faridabad is the head office, so it is the answer for most new hires.
+      workLocation: (employee?.workLocation as EmployeeFormValues["workLocation"]) ?? "Faridabad",
       primaryManagerId: managerIdOf(employee, "primary"),
       secondaryManagerId: managerIdOf(employee, "secondary"),
       finalManagerId: managerIdOf(employee, "final"),
-      departmentHeadId: managerIdOf(employee, "departmentHead"),
       projectManagerIds: employee?.managerHierarchy?.projectManagers?.map((m) => String(m.id)) ?? [],
+      // Already in reporting order from the API (tier ascending), and the
+      // order is the meaning, so it is kept exactly as it arrives.
+      additionalManagerIds:
+        employee?.managerHierarchy?.additionalManagers?.map((m) => String(m.id)) ?? [],
       workEmail: employee?.user?.email ?? "",
       roleIds: employee?.roles.map((r) => String(r.id)) ?? [],
-      dateOfJoining: employee?.dateOfJoining ?? "",
+      // Generated up front for a new joiner, so the field is correct before
+      // anybody touches it. Empty on an edit, where a value would mean
+      // resetting a password nobody asked to reset.
+      password: employee ? "" : generatePassword(),
+      // Today, because the overwhelmingly common case is somebody starting now.
+      dateOfJoining: employee?.dateOfJoining ?? todayIso(),
       dateOfBirth: employee?.dateOfBirth ?? "",
-      gender: employee?.gender ?? "",
+      gender: (employee?.gender as EmployeeFormValues["gender"]) ?? "male",
       phone: employee?.phone ?? "",
       personalEmail: employee?.personalEmail ?? "",
       addressLine1: employee?.addressLine1 ?? "",
       addressLine2: employee?.addressLine2 ?? "",
       city: employee?.city ?? "",
+      cityOther: "",
       state: employee?.state ?? "",
       postalCode: employee?.postalCode ?? "",
       country: employee?.country ?? "",
@@ -404,6 +509,21 @@ export function EmployeeForm({
       emergencyContactPhone: employee?.emergencyContactPhone ?? "",
     },
   })
+
+  // Prefill the ID once the suggestion arrives.
+  //
+  // In an effect rather than in defaultValues because the value is fetched:
+  // the form is built before the request resolves, and react-hook-form only
+  // reads defaultValues once. Guarded on the field being untouched and empty
+  // so a slow response can never overwrite something already typed.
+  const suggestion = suggestedCode?.employeeCode
+  useEffect(() => {
+    if (employee || !suggestion) return
+    if (form.getValues("employeeCode")) return
+    if (form.formState.dirtyFields.employeeCode) return
+
+    form.setValue("employeeCode", suggestion)
+  }, [employee, suggestion, form])
 
   const departmentId = form.watch("departmentId")
   const { data: designations } = useDesignations(departmentId || undefined)
@@ -473,23 +593,176 @@ export function EmployeeForm({
   )
 
   /**
+   * How much of the fixed review chain is on screen.
+   *
+   * Only the 1st level is mandatory, so only it is shown to begin with; "Add
+   * manager" reveals the 2nd and then the 3rd, and after that starts appending
+   * `additional` rows. An employee being edited shows however many slots they
+   * already have filled, so nothing they have is hidden.
+   */
+  const [visibleChainSlots, setVisibleChainSlots] = useState(() => {
+    const filled = MANAGER_LEVELS.reduce(
+      (count, level, index) => (managerIdOf(employee, level.value) ? index + 1 : count),
+      1
+    )
+    return Math.min(Math.max(filled, 1), MANAGER_LEVELS.length)
+  })
+  const additionalManagerIds = form.watch("additionalManagerIds")
+
+  function addManagerLevel() {
+    if (visibleChainSlots < MANAGER_LEVELS.length) {
+      setVisibleChainSlots(visibleChainSlots + 1)
+      return
+    }
+    form.setValue("additionalManagerIds", [...additionalManagerIds, ""])
+  }
+
+  function setAdditionalManager(index: number, value: string) {
+    const next = [...additionalManagerIds]
+    next[index] = value
+    form.setValue("additionalManagerIds", next)
+  }
+
+  // Removing the 4th level promotes the 5th rather than leaving a gap — the
+  // position in this array IS the reporting tier, both here and on the server.
+  function removeAdditionalManager(index: number) {
+    form.setValue(
+      "additionalManagerIds",
+      additionalManagerIds.filter((_, i) => i !== index)
+    )
+  }
+
+  /**
+   * Removing the 2nd or 3rd level, which are fixed slots rather than a list.
+   *
+   * Everything below shifts up, so the chain stays contiguous: drop the 2nd
+   * and whoever was 3rd becomes 2nd. Leaving a filled 3rd above an empty 2nd
+   * would read as a reporting line with a hole in it, and the appraisal
+   * workflow walks these three in order.
+   */
+  function removeChainSlot(index: number) {
+    const ids = MANAGER_LEVELS.map((level) => form.watch(`${level.value}ManagerId` as const) || "")
+    ids.splice(index, 1)
+    ids.push("")
+    MANAGER_LEVELS.forEach((level, i) => {
+      form.setValue(`${level.value}ManagerId` as const, ids[i], { shouldValidate: true })
+    })
+    setVisibleChainSlots(Math.max(visibleChainSlots - 1, 1))
+  }
+
+  // Country → State → City option lists. Each depends on the one above it, so
+  // they are derived from the watched values rather than held in state — there
+  // is no version of these lists that isn't a function of the current choice.
+  const selectedCountry = form.watch("country") ?? ""
+  const selectedState = form.watch("state") ?? ""
+  const selectedCity = form.watch("city") ?? ""
+
+  const countryOptions = useMemo(
+    () => COUNTRIES.map((c) => ({ value: c.name, label: c.name })),
+    []
+  )
+  const stateOptions = useMemo(
+    () => statesOf(selectedCountry).map((st) => ({ value: st.name, label: st.name })),
+    [selectedCountry]
+  )
+  const cityOptions = useMemo(
+    () => [
+      ...citiesOf(selectedCountry, selectedState).map((c) => ({ value: c.name, label: c.name })),
+      // Always last, and always offered: the dataset is large but not complete,
+      // and an address nobody can enter is worse than a free-text box.
+      { value: OTHER_CITY, label: "Other (type it in)" },
+    ],
+    [selectedCountry, selectedState]
+  )
+
+  /**
+   * The people already holding a slot, so the other slots stop offering them.
+   *
+   * Nobody may hold two slots for the same employee — EmployeeManager refuses
+   * it, and a reporting line naming the same person as both 1st and 3rd level
+   * would have their appraisal reviewed twice by one reviewer. Taking them out
+   * of the remaining dropdowns is how that reads as "already assigned" rather
+   * than as a save that fails after the fact.
+   */
+  const takenManagerIds = [
+    form.watch("primaryManagerId"),
+    form.watch("secondaryManagerId"),
+    form.watch("finalManagerId"),
+    ...form.watch("projectManagerIds"),
+    ...additionalManagerIds,
+  ].filter(Boolean)
+
+  /** `managerOptions` minus everyone else's slot, keeping this slot's own. */
+  function optionsFor(currentValue: string | string[]) {
+    const keep = new Set(Array.isArray(currentValue) ? currentValue : [currentValue])
+    return managerOptions.filter((o) => keep.has(o.value) || !takenManagerIds.includes(o.value))
+  }
+
+  /**
+   * Says why a save didn't happen.
+   *
+   * Without this, a failed validation on a field that is scrolled out of view
+   * — or on one whose FormMessage was never wired up — makes the Save button
+   * look broken: react-hook-form simply declines to call the submit handler
+   * and nothing appears anywhere. The offending field is named, focused and
+   * scrolled to, so "nothing happened" can't be the whole story.
+   */
+  function reportInvalid(errors: FieldErrors<EmployeeFormValues>) {
+    const [ name, error ] = Object.entries(errors)[0] ?? []
+    const message = (error as { message?: string } | undefined)?.message
+
+    toast.error(message ?? "Some details still need fixing before this can be saved.")
+    if (name) {
+      form.setFocus(name as keyof EmployeeFormValues)
+      document
+        .querySelector(`[name="${name}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" })
+    }
+  }
+
+  /**
    * Drops every field this viewer may not set before the request is built. An
    * omitted key means "leave it alone" to the API; a present one they aren't
    * allowed to send would be a 403 for the whole save.
    */
   function handleSubmit(values: EmployeeFormValues) {
+    // Checked here rather than in the zod schema because the domain is fetched
+    // — the schema is built before it arrives, and a rule that isn't known yet
+    // can't be compiled into it. Worded identically to
+    // Employees::AccountProvisioner#reject_foreign_domain.
+    if (workEmailDomain && values.workEmail && !values.workEmail.toLowerCase().endsWith(`@${workEmailDomain.toLowerCase()}`)) {
+      form.setError("workEmail", { message: `Work email must end with @${workEmailDomain}` })
+      return
+    }
+
+    // Mandatory on a NEW employee only. Applying it to an edit too would make
+    // every legacy record without one unsaveable — you could not correct a
+    // surname until you had also found somebody a manager — and the rule is
+    // about who is being hired, not about who is already here.
+    if (!employee && canManageManagers && !values.primaryManagerId) {
+      form.setError("primaryManagerId", { message: "A 1st level manager is required" })
+      return
+    }
+
     const {
       currentLevel,
       primaryManagerId,
       secondaryManagerId,
       finalManagerId,
-      departmentHeadId,
       projectManagerIds,
+      additionalManagerIds,
+      cityOther,
       roleIds,
       workEmail,
+      password,
       ...rest
     } = values
-    const payload: EmployeePayload = { ...rest, currentLevel: currentLevel || null }
+    const payload: EmployeePayload = {
+      ...rest,
+      currentLevel: currentLevel || null,
+      // "Other" is a prompt to type one, not a city anybody lives in.
+      city: rest.city === OTHER_CITY ? cityOther?.trim() || null : rest.city,
+    }
 
     if (canManageManagers) {
       // "" means "nobody in this slot", which the API expects as an explicit
@@ -497,12 +770,22 @@ export function EmployeeForm({
       payload.primaryManagerId = primaryManagerId || null
       payload.secondaryManagerId = secondaryManagerId || null
       payload.finalManagerId = finalManagerId || null
-      payload.departmentHeadId = departmentHeadId || null
       payload.projectManagerIds = projectManagerIds
+      // Blank rows are slots somebody added and left empty; they are dropped
+      // rather than sent, so an empty box never becomes a reporting tier.
+      payload.additionalManagerIds = additionalManagerIds.filter(Boolean)
     }
     if (canManageRoles) {
       payload.roleIds = roleIds
       payload.workEmail = workEmail
+      // Only sent when actually filled in. An empty string would still be a
+      // present key; omitting it leaves the server to generate one, which is
+      // what an admin who cleared the field is asking for.
+      // No "require a change" control here — that lives beside the Send
+      // button on the employee's own page, where an admin is deciding about
+      // an account that already exists. Omitting it lets the server apply its
+      // default, which is to require one.
+      if (password) payload.password = password
     }
 
     onSubmit(payload)
@@ -510,7 +793,7 @@ export function EmployeeForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="grid gap-4" noValidate id="employee-form">
+      <form onSubmit={form.handleSubmit(handleSubmit, reportInvalid)} className="grid gap-4" noValidate id="employee-form">
         <fieldset disabled={isPending} className="grid gap-4">
           <FormSection
             icon={UserIcon}
@@ -553,8 +836,16 @@ export function EmployeeForm({
                   <FormItem>
                     <FormLabel>Employee ID</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="e.g. ACM-007" />
+                      <Input {...field} placeholder={suggestedCode?.employeeCode ?? "e.g. ACM-007"} />
                     </FormControl>
+                    {/* Said out loud rather than left as a silently-filled
+                        field: somebody who did not set the pattern should know
+                        where the value came from before they save it. */}
+                    {!employee && suggestedCode?.employeeCode && (
+                      <FormDescription>
+                        Suggested from your Initial ID setting. Edit it if you need something else.
+                      </FormDescription>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -566,9 +857,16 @@ export function EmployeeForm({
                   <FormItem>
                     <FormLabel>Date of birth</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} />
+                      {/* The calendar itself stops at the 22nd birthday, so a
+                          date that would be refused can't be picked at all.
+                          The zod rule still runs — `max` is advisory in a
+                          typed-in date, and the server decides regardless. */}
+                      {/* Capped for a NEW hire only. On an existing record the
+                          cap would make their own stored date unpickable. */}
+                      <Input type="date" max={employee ? undefined : maxBirthDateIso()} {...field} />
                     </FormControl>
                     <FormMessage />
+                    {!employee && <FieldHint>Employees must be at least 22 years old.</FieldHint>}
                   </FormItem>
                 )}
               />
@@ -582,8 +880,11 @@ export function EmployeeForm({
                   // picked trips its controlled/uncontrolled warning. `null`
                   // matches the component's own `defaultValue = null` convention
                   // for "empty," keeping it controlled from the very first render.
-                  value={form.watch("gender") || null}
-                  onValueChange={(v) => form.setValue("gender", v ?? "")}
+                  // Never cleared back to empty: the server accepts only male
+                  // or female, so "nothing selected" is not a state this field
+                  // can be saved in.
+                  value={form.watch("gender")}
+                  onValueChange={(v) => v && form.setValue("gender", v as EmployeeFormValues["gender"])}
                 >
                   <SelectTrigger id="employee-gender" className="h-9 w-full">
                     <SelectValue placeholder="Select gender" />
@@ -655,28 +956,6 @@ export function EmployeeForm({
 
             <div className="grid gap-3.5 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <Label htmlFor="employee-level">Current role / level</Label>
-                <Select
-                  items={EMPLOYEE_LEVELS}
-                  value={form.watch("currentLevel") || null}
-                  onValueChange={(v) =>
-                    form.setValue("currentLevel", (v as EmployeeFormValues["currentLevel"]) ?? "")
-                  }
-                >
-                  <SelectTrigger id="employee-level" className="h-9 w-full">
-                    <SelectValue placeholder="Select level" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EMPLOYEE_LEVELS.map((level) => (
-                      <SelectItem key={level.value} value={level.value}>
-                        {level.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FieldHint>Seniority on the career ladder — separate from system roles.</FieldHint>
-              </div>
-              <div className="grid gap-1.5">
                 <Label htmlFor="employee-employment-type">Employment type</Label>
                 <Select
                   items={EMPLOYMENT_TYPES}
@@ -695,19 +974,28 @@ export function EmployeeForm({
                   </SelectContent>
                 </Select>
               </div>
-              <FormField
-                control={form.control}
-                name="workLocation"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Work location</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="e.g. Jaipur" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid gap-1.5">
+                <Label htmlFor="employee-work-location">Work location</Label>
+                <Select
+                  items={WORK_LOCATION_OPTIONS}
+                  value={form.watch("workLocation")}
+                  onValueChange={(v) =>
+                    v && form.setValue("workLocation", v as EmployeeFormValues["workLocation"])
+                  }
+                >
+                  <SelectTrigger id="employee-work-location" className="h-9 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {WORK_LOCATIONS.map((location) => (
+                      <SelectItem key={location} value={location}>
+                        {location}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldHint>Faridabad is the head office and the default.</FieldHint>
+              </div>
               <FormField
                 control={form.control}
                 name="dateOfJoining"
@@ -715,9 +1003,19 @@ export function EmployeeForm({
                   <FormItem>
                     <FormLabel>Date of joining</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} />
+                      <Input
+                        type="date"
+                        min={employee ? undefined : todayIso()}
+                        max={employee ? undefined : maxJoiningIso()}
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
+                    {!employee && (
+                      <FieldHint>
+                        Today, or any date in the next {MAX_JOINING_DAYS_AHEAD} days.
+                      </FieldHint>
+                    )}
                   </FormItem>
                 )}
               />
@@ -732,36 +1030,92 @@ export function EmployeeForm({
             {canManageManagers ? (
               <>
                 <ol className="grid gap-4.5">
+                  {/* The first three are the review chain and keep their fixed
+                      slots — the appraisal workflow reads them by name. Levels
+                      beyond them are added on demand below; they are reporting
+                      lines, not reviewers, and nothing in an appraisal reads
+                      them. */}
                   {MANAGER_LEVELS.map((level, index) => {
                     const fieldName = `${level.value}ManagerId` as const
                     const error = form.formState.errors[fieldName]
+                    // Only the 1st level is offered up front. The 2nd and 3rd
+                    // appear as they are added, so an employee with one manager
+                    // isn't shown two empty boxes they are expected to fill.
+                    if (index >= visibleChainSlots) return null
 
                     return (
                       <ChainRow
                         key={level.value}
                         index={index}
-                        isLast={index === MANAGER_LEVELS.length - 1}
+                        isLast={index === visibleChainSlots - 1 && additionalManagerIds.length === 0}
                         label={level.label}
                         required={level.required}
                         hint={level.hint}
                       >
-                        <ManagerSlotField
-                          id={`employee-${level.value}-manager`}
-                          label={level.label}
-                          options={managerOptions}
-                          value={form.watch(fieldName) || ""}
-                          onChange={(next) => form.setValue(fieldName, next, { shouldValidate: true })}
-                          onSearchChange={setManagerSearch}
-                          isLoading={managersLoading}
-                          error={error?.message ? String(error.message) : undefined}
-                        />
+                        <div className="flex items-start gap-2">
+                          <div className="min-w-0 flex-1">
+                            <ManagerSlotField
+                              id={`employee-${level.value}-manager`}
+                              label={level.label}
+                              options={optionsFor(form.watch(fieldName) || "")}
+                              value={form.watch(fieldName) || ""}
+                              onChange={(next) => form.setValue(fieldName, next, { shouldValidate: true })}
+                              onSearchChange={setManagerSearch}
+                              isLoading={managersLoading}
+                              error={error?.message ? String(error.message) : undefined}
+                            />
+                          </div>
+                          {/* Every level but the first can be taken away. */}
+                          {index > 0 && (
+                            <RemoveLevelButton label={level.label} onClick={() => removeChainSlot(index)} />
+                          )}
+                        </div>
                         {error?.message && (
                           <p className="text-xs text-destructive">{String(error.message)}</p>
                         )}
                       </ChainRow>
                     )
                   })}
+                  {additionalManagerIds.map((value, index) => (
+                    <ChainRow
+                      key={`additional-${index}`}
+                      index={MANAGER_LEVELS.length + index}
+                      isLast={index === additionalManagerIds.length - 1}
+                      label={`${ordinal(MANAGER_LEVELS.length + index + 1)} Level Manager`}
+                      required={false}
+                      hint="Further up the reporting line — not part of the appraisal review chain"
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <ManagerSlotField
+                            id={`employee-additional-manager-${index}`}
+                            label={`${ordinal(MANAGER_LEVELS.length + index + 1)} Level Manager`}
+                            options={optionsFor(value)}
+                            value={value}
+                            onChange={(next) => setAdditionalManager(index, next)}
+                            onSearchChange={setManagerSearch}
+                            isLoading={managersLoading}
+                          />
+                        </div>
+                        <RemoveLevelButton
+                          label={`${ordinal(MANAGER_LEVELS.length + index + 1)} Level Manager`}
+                          onClick={() => removeAdditionalManager(index)}
+                        />
+                      </div>
+                    </ChainRow>
+                  ))}
                 </ol>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="justify-self-start"
+                  onClick={addManagerLevel}
+                >
+                  <PlusIcon className="size-4" />
+                  Add manager
+                </Button>
                 <div className="grid gap-4.5 border-t pt-4">
                   {/* Rendered OUTSIDE the numbered chain on purpose: §4 lists
                       these alongside the review line, not inside it, and the UI
@@ -777,7 +1131,7 @@ export function EmployeeForm({
                         <MultiSelect
                           id={`employee-${relationship.value}`}
                           aria-label={relationship.label}
-                          options={managerOptions}
+                          options={optionsFor(form.watch("projectManagerIds"))}
                           value={form.watch("projectManagerIds")}
                           onChange={(next) => form.setValue("projectManagerIds", next)}
                           onSearchChange={setManagerSearch}
@@ -786,21 +1140,7 @@ export function EmployeeForm({
                           searchPlaceholder="Search active employees…"
                           emptyMessage="No active employees match that search."
                         />
-                      ) : (
-                        <SearchSelect
-                          id={`employee-${relationship.value}`}
-                          aria-label={relationship.label}
-                          options={managerOptions}
-                          value={form.watch("departmentHeadId") || null}
-                          onChange={(next) => form.setValue("departmentHeadId", next ?? "")}
-                          onSearchChange={setManagerSearch}
-                          isLoading={managersLoading}
-                          clearable
-                          placeholder="Select a department head"
-                          searchPlaceholder="Search active employees…"
-                          emptyMessage="No active employees match that search."
-                        />
-                      )}
+                      ) : null}
                       <FieldHint>{relationship.hint}</FieldHint>
                     </div>
                   ))}
@@ -851,6 +1191,33 @@ export function EmployeeForm({
                       </ChainRow>
                     )
                   })}
+                  {(employee?.managerHierarchy?.additionalManagers ?? []).map((person, index) => (
+                    <ChainRow
+                      key={person.id}
+                      index={MANAGER_LEVELS.length + index}
+                      isLast={index === (employee?.managerHierarchy?.additionalManagers.length ?? 0) - 1}
+                      label={`${ordinal(MANAGER_LEVELS.length + index + 1)} Level Manager`}
+                      required={false}
+                      hint="Further up the reporting line — not part of the appraisal review chain"
+                    >
+                      <div className="flex items-center gap-2.5 rounded-lg border p-2.5">
+                        <Avatar size="sm">
+                          {person.profilePhotoUrl && (
+                            <AvatarImage src={photoUrl(person.profilePhotoUrl)} alt={person.fullName} />
+                          )}
+                          <AvatarFallback className="bg-role-hr/12 text-[10px] text-role-hr">
+                            {initialsOf(person.fullName)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{person.fullName}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {person.designationTitle ?? person.employeeCode}
+                          </p>
+                        </div>
+                      </div>
+                    </ChainRow>
+                  ))}
                 </ol>
                 <div className="grid gap-3 border-t pt-4">
                   <p className="text-xs font-semibold text-muted-foreground">
@@ -859,7 +1226,7 @@ export function EmployeeForm({
                   {ADDITIONAL_MANAGER_RELATIONSHIPS.map((relationship) => {
                     const people = relationship.multiple
                       ? (employee?.managerHierarchy?.projectManagers ?? [])
-                      : [ employee?.managerHierarchy?.departmentHead ].filter(Boolean)
+                      : []
 
                     return (
                       <div key={relationship.value} className="grid gap-1.5">
@@ -911,26 +1278,79 @@ export function EmployeeForm({
                     <FormItem>
                       <FormLabel>Work email</FormLabel>
                       <FormControl>
-                        {/* Read-only once an account exists: moving a login to
-                            a new address is an identity change, and the API
-                            refuses it from this endpoint. */}
+                        {/* Editable at any time, including after an account
+                            exists. Changing it renames that same account
+                            rather than making a second one, so everything
+                            attached to the person follows them — but it is
+                            their LOGIN, so the new address starts unverified
+                            and they sign in with it from then on. */}
                         <Input
                           type="email"
                           {...field}
-                          readOnly={Boolean(employee?.user)}
-                          className={employee?.user ? "bg-muted/50 text-muted-foreground" : undefined}
-                          placeholder="priya@company.com"
+                          placeholder={workEmailDomain ? `priya@${workEmailDomain}` : "priya@company.com"}
                         />
                       </FormControl>
                       <FormMessage />
                       <FieldHint>
                         {employee?.user
-                          ? "The address this employee signs in with. It can't be changed from here."
-                          : "Leave blank if this employee needs no login. Otherwise they get an email to set their own password — no password is ever set here."}
+                          ? `The address this employee signs in with. Changing it renames their account — they'll sign in with the new one, and it will need verifying again.${workEmailDomain ? ` Must end with @${workEmailDomain}.` : ""}`
+                          : workEmailDomain
+                            ? `Must end with @${workEmailDomain}. Leave blank if this employee needs no login — otherwise they get an email to set their own password, and no password is ever set here.`
+                            : "Leave blank if this employee needs no login. Otherwise they get an email to set their own password — no password is ever set here."}
                       </FieldHint>
                     </FormItem>
                   )}
                 />
+
+                {/* The password this employee will be emailed.
+                    
+                    On a NEW employee it is prefilled with a generated one: a
+                    blank field invites somebody to type "Welcome123", and the
+                    generated value is both stronger than what anyone would
+                    choose and already correct, so the fast path and the safe
+                    path are the same path.
+                    
+                    On an EDIT it starts empty, and that difference is
+                    load-bearing — a prefilled value here would quietly reset
+                    the person's password every time anyone corrected their
+                    phone number. Empty means "leave it alone"; type or
+                    generate one to actually change it. */}
+                <div className="grid gap-2.5 rounded-lg border border-dashed p-3">
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{employee ? "New password" : "Password"}</FormLabel>
+                        {/* Capped rather than stretched. A generated password
+                            is 19 characters, so a field the width of the form
+                            is mostly empty box — and the Generate button ends
+                            up marooned at the far edge. */}
+                        <div className="flex items-start gap-2">
+                          <div className="min-w-0 max-w-72 flex-1">
+                            <FormControl>
+                              <PasswordInput
+                                {...field}
+                                autoComplete="new-password"
+                                placeholder={employee ? "Leave blank to keep the current one" : undefined}
+                              />
+                            </FormControl>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={() => form.setValue("password", generatePassword())}
+                          >
+                            <RefreshCwIcon className="size-3.5" /> Generate
+                          </Button>
+                        </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
                 <div className="grid gap-1.5">
                   <Label htmlFor="employee-roles">Roles</Label>
@@ -986,9 +1406,10 @@ export function EmployeeForm({
                   <FormItem>
                     <FormLabel>Phone</FormLabel>
                     <FormControl>
-                      <Input type="tel" {...field} />
+                      <Input type="tel" {...field} placeholder="98765 43210" />
                     </FormControl>
                     <FormMessage />
+                    <FieldHint>Indian mobile number, with or without +91.</FieldHint>
                   </FormItem>
                 )}
               />
@@ -1036,32 +1457,78 @@ export function EmployeeForm({
               )}
             />
             <div className="grid gap-3.5 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="city"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>City</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+              {/* Country first, then State, then City: each list is derived
+                  from the one above it, so choosing out of order would offer
+                  nothing. Changing a level clears the levels below rather than
+                  leaving a city that no longer belongs to its state. */}
+              <div className="grid gap-1.5">
+                <Label htmlFor="employee-country">Country</Label>
+                <SearchSelect
+                  id="employee-country"
+                  aria-label="Country"
+                  options={countryOptions}
+                  value={form.watch("country") || null}
+                  onChange={(next) => {
+                    form.setValue("country", next ?? "")
+                    form.setValue("state", "")
+                    form.setValue("city", "")
+                    form.setValue("cityOther", "")
+                  }}
+                  clearable
+                  placeholder="Select a country"
+                  searchPlaceholder="Search countries…"
+                  emptyMessage="No country matches that search."
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="employee-state">State</Label>
+                <SearchSelect
+                  id="employee-state"
+                  aria-label="State"
+                  options={stateOptions}
+                  value={form.watch("state") || null}
+                  onChange={(next) => {
+                    form.setValue("state", next ?? "")
+                    form.setValue("city", "")
+                    form.setValue("cityOther", "")
+                  }}
+                  clearable
+                  placeholder={selectedCountry ? "Select a state" : "Choose a country first"}
+                  searchPlaceholder="Search states…"
+                  emptyMessage="No state matches that search."
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="employee-city">City</Label>
+                <SearchSelect
+                  id="employee-city"
+                  aria-label="City"
+                  options={cityOptions}
+                  value={form.watch("city") || null}
+                  onChange={(next) => {
+                    form.setValue("city", next ?? "")
+                    if (next !== OTHER_CITY) form.setValue("cityOther", "")
+                  }}
+                  clearable
+                  placeholder={selectedState ? "Select a city" : "Choose a state first"}
+                  searchPlaceholder="Search cities…"
+                  emptyMessage="No city matches that search."
+                />
+                {selectedCity === OTHER_CITY && (
+                  <FormField
+                    control={form.control}
+                    name="cityOther"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Input {...field} placeholder="Type the city name" aria-label="City name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 )}
-              />
-              <FormField
-                control={form.control}
-                name="state"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>State</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              </div>
               <FormField
                 control={form.control}
                 name="postalCode"
@@ -1069,20 +1536,12 @@ export function EmployeeForm({
                   <FormItem>
                     <FormLabel>Postal code</FormLabel>
                     <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="country"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Country</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
+                      <Input
+                        {...field}
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="6 digits"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1117,9 +1576,10 @@ export function EmployeeForm({
                   <FormItem>
                     <FormLabel>Contact phone</FormLabel>
                     <FormControl>
-                      <Input type="tel" {...field} />
+                      <Input type="tel" {...field} placeholder="98765 43210" />
                     </FormControl>
                     <FormMessage />
+                    <FieldHint>Indian mobile number, with or without +91.</FieldHint>
                   </FormItem>
                 )}
               />

@@ -12,7 +12,8 @@ module Appraisals
         appraisal,
         category: "appraisal.self_appraisal_opened",
         title: "Your self-appraisal is open",
-        body: "#{appraisal.appraisal_cycle.name} — complete and submit your self-appraisal#{deadline_phrase(appraisal.appraisal_cycle.employee_submission_deadline)}."
+        body: "#{appraisal.appraisal_cycle.name} — complete and submit your self-appraisal#{deadline_phrase(appraisal.appraisal_cycle.employee_submission_deadline)}.",
+        email_context: context_for(appraisal, action: "Complete and submit your self-appraisal", stage: "Self-appraisal")
       )
     end
 
@@ -21,7 +22,8 @@ module Appraisals
         appraisal,
         category: "appraisal.submission_due",
         title: "Your self-appraisal is due soon",
-        body: "#{appraisal.appraisal_cycle.name} — your self-appraisal is still to be submitted#{deadline_phrase(appraisal.appraisal_cycle.employee_submission_deadline)}."
+        body: "#{appraisal.appraisal_cycle.name} — your self-appraisal is still to be submitted#{deadline_phrase(appraisal.appraisal_cycle.employee_submission_deadline)}.",
+        email_context: context_for(appraisal, action: "Submit your self-appraisal", stage: "Self-appraisal")
       )
     end
 
@@ -40,7 +42,8 @@ module Appraisals
         appraisal, recipient,
         category: "appraisal.overdue",
         title: "Appraisal action overdue",
-        body: body
+        body: body,
+        email_context: context_for(appraisal, action: "This is past its deadline", stage: role.to_s.humanize)
       )
     end
 
@@ -51,7 +54,8 @@ module Appraisals
         appraisal, recipient,
         category: "appraisal.review_pending",
         title: "An appraisal is waiting for your review",
-        body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}. You are the #{role} reviewer."
+        body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}. You are the #{role} reviewer.",
+        email_context: context_for(appraisal, action: "Review and submit your assessment", stage: "#{role.to_s.humanize} review")
       )
     end
 
@@ -65,18 +69,8 @@ module Appraisals
         appraisal, "appraisals.release", except_user: except_user,
         category: "appraisal.ready_for_release",
         title: "An appraisal is ready to release",
-        body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}. The final review is complete."
-      )
-    end
-
-    # Same reasoning for the optional compensation step: it is gated on a
-    # permission, so the people who can act on it are found by that permission.
-    def self.compensation_approval_pending(appraisal, except_user: nil)
-      deliver_to_permission_holders(
-        appraisal, "appraisals.manage_compensation", except_user: except_user,
-        category: "appraisal.compensation_approval_pending",
-        title: "An appraisal is waiting for compensation approval",
-        body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}."
+        body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}. The final review is complete.",
+        email_context: context_for(appraisal, action: "Release the appraisal to the employee", stage: "Ready to release")
       )
     end
 
@@ -85,7 +79,8 @@ module Appraisals
         appraisal,
         category: "appraisal.returned",
         title: "Your appraisal was returned for correction",
-        body: note.presence || "Your appraisal has been reopened — please review and resubmit."
+        body: note.presence || "Your appraisal has been reopened — please review and resubmit.",
+        email_context: context_for(appraisal, action: "Review the feedback and resubmit", stage: "Returned for correction")
       )
     end
 
@@ -94,7 +89,8 @@ module Appraisals
         appraisal,
         category: "appraisal.released",
         title: "Your appraisal has been released",
-        body: "#{appraisal.appraisal_cycle.name} — your final appraisal is now available to read and acknowledge."
+        body: "#{appraisal.appraisal_cycle.name} — your final appraisal is now available to read and acknowledge.",
+        email_context: context_for(appraisal, action: "Read and acknowledge your appraisal", stage: "Released")
       )
     end
 
@@ -103,7 +99,8 @@ module Appraisals
         appraisal,
         category: "appraisal.acknowledgement_required",
         title: "Acknowledgement required",
-        body: "Please read and acknowledge your released appraisal for #{appraisal.appraisal_cycle.name}."
+        body: "Please read and acknowledge your released appraisal for #{appraisal.appraisal_cycle.name}.",
+        email_context: context_for(appraisal, action: "Acknowledge your appraisal", stage: "Released")
       )
     end
 
@@ -116,7 +113,8 @@ module Appraisals
           appraisal, recipient,
           category: "appraisal.acknowledged",
           title: "Appraisal acknowledged",
-          body: "#{appraisal.employee.full_name} has acknowledged their appraisal."
+          body: "#{appraisal.employee.full_name} has acknowledged their appraisal.",
+          email_context: context_for(appraisal, action: "No action needed — for your information", stage: "Acknowledged")
         )
       end
     end
@@ -132,6 +130,23 @@ module Appraisals
 
     def self.deadline_phrase(date)
       date.present? ? " by #{date.strftime('%-d %b %Y')}" : ""
+    end
+
+    # The labelled lines the email carries under the message.
+    #
+    # Deliberately nothing sensitive: the cycle, who it is about, what stage it
+    # is at and what is being asked. No ratings, no scores, no review
+    # commentary — an appraisal's content stays behind the login, and mail is
+    # the one channel whose audience we do not control.
+    def self.context_for(appraisal, action:, stage: nil)
+      cycle = appraisal.appraisal_cycle
+      [
+        [ "Employee", appraisal.employee.full_name ],
+        [ "Appraisal cycle", cycle.name ],
+        stage.present? ? [ "Stage", stage ] : nil,
+        [ "Action required", action ],
+        cycle.employee_submission_deadline.present? ? [ "Deadline", cycle.employee_submission_deadline.strftime("%-d %b %Y") ] : nil
+      ].compact
     end
 
     def self.deliver_to_employee(appraisal, **kwargs)
@@ -164,6 +179,7 @@ module Appraisals
       end
     end
 
-    private_class_method :deliver_to_employee, :deliver_to_employee_record, :deliver_to_permission_holders
+    private_class_method :deliver_to_employee, :deliver_to_employee_record,
+                         :deliver_to_permission_holders
   end
 end

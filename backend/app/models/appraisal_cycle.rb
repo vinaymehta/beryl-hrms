@@ -25,7 +25,11 @@ class AppraisalCycle < ApplicationRecord
   validate :period_and_deadlines_in_order
   validate :template_is_usable, on: :create
 
-  scope :newest_first, -> { order(starts_on: :desc, created_at: :desc) }
+  # Newest CREATED first, deliberately not by start date. A cycle drafted this
+  # morning for next quarter belongs at the top of the list its author is
+  # looking at; ordering by starts_on buried it beneath cycles that began
+  # earlier but were set up long ago.
+  scope :newest_first, -> { order(created_at: :desc, id: :desc) }
 
   def started? = started_at.present?
 

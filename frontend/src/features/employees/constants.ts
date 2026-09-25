@@ -9,6 +9,14 @@ import type { EmployeeLevel, ManagerLevel, ReviewChainLevel } from "@/types/empl
  * see a class assembled at runtime from a token, so `bg-${x}/15` would ship
  * unstyled. Same constraint the role badges work under (constants/permissions.ts).
  */
+/**
+ * The career ladder, kept as the labels for the `current_level` column.
+ *
+ * No longer shown on the employee form, the directory or the profile — the
+ * field was taken out of all three. The column and its values are untouched,
+ * so anything already recorded still reads back, and the appraisal side still
+ * reports a level where it has one.
+ */
 export const EMPLOYEE_LEVELS: {
   value: EmployeeLevel
   label: string
@@ -26,12 +34,24 @@ export const EMPLOYEE_LEVEL_LABELS: Record<EmployeeLevel, string> = Object.fromE
   EMPLOYEE_LEVELS.map((level) => [level.value, level.label])
 ) as Record<EmployeeLevel, string>
 
+/**
+ * Male and female only, matching Employee::GENDERS on the server. Narrowed
+ * from a four-option list: the server now refuses anything else, so offering
+ * "Other" or "Prefer not to say" would only produce a rejected save. Rows
+ * already holding one of the old values keep it — the validation is scoped to
+ * the field actually changing.
+ */
 export const GENDER_OPTIONS = [
   { value: "male", label: "Male" },
   { value: "female", label: "Female" },
-  { value: "other", label: "Other" },
-  { value: "prefer_not_to_say", label: "Prefer not to say" },
 ]
+
+/**
+ * The city list is generated, and no generated list has every place on it.
+ * Picking this reveals a free-text box, and what gets typed there is what is
+ * saved — the sentinel itself never reaches the API.
+ */
+export const OTHER_CITY = "__other__"
 
 /**
  * Always granted to a newly provisioned employee account by the backend
@@ -56,6 +76,15 @@ export const DEFAULT_EMPLOYEE_ROLE_SLUG = "employee"
  * wrong trade. What IS hard-enforced, on both sides, is that no manager can be
  * assigned without a Primary.
  */
+/**
+ * The fixed three-slot review chain, labelled by reporting level.
+ *
+ * The labels are ordinals ("1st Level Manager") and the values are the roles
+ * the appraisal workflow reads (primary/secondary/final) — the same three
+ * people under two names. Only the first is mandatory; the rest are added on
+ * demand, and anything past the third goes in as an `additional` tier that no
+ * appraisal reads.
+ */
 export const MANAGER_LEVELS: {
   value: ReviewChainLevel
   label: string
@@ -66,23 +95,26 @@ export const MANAGER_LEVELS: {
 }[] = [
   {
     value: "primary",
-    label: "Primary Manager",
-    hint: "The employee's direct reporting manager or tech lead",
+    label: "1st Level Manager",
+    hint: "The employee's direct reporting manager or tech lead — also their first appraisal reviewer",
     required: true,
     className: "bg-role-hr/15 text-role-hr",
   },
   {
     value: "secondary",
-    label: "Secondary Manager",
-    hint: "For cross-project or shared-reporting situations",
+    label: "2nd Level Manager",
+    hint: "For cross-project or shared-reporting situations — the second appraisal reviewer",
     required: false,
     className: "bg-muted text-muted-foreground",
   },
   {
     value: "final",
-    label: "Final Manager",
-    hint: "Normally the CEO or department head",
-    required: true,
+    label: "3rd Level Manager",
+    hint: "Normally the CEO or department head — the final appraisal reviewer",
+    // Optional, like every level but the first. Plenty of small companies
+    // have a one-person reporting line, and a chain without a final reviewer
+    // no longer counts as incomplete — see Employee#manager_hierarchy_complete?.
+    required: false,
     className: "bg-role-admin/15 text-role-admin",
   },
 ]
@@ -92,8 +124,15 @@ export const MANAGER_LEVELS: {
  * they are NOT rungs of the review chain, and the UI must not imply they are.
  * Neither is read by the appraisal workflow.
  */
+/**
+ * Relationships outside the review chain.
+ *
+ * Department Head was removed from the Add Employee form — the column, the
+ * enum value and every assignment already made are untouched, so historical
+ * hierarchies still read correctly; there is simply no longer a field for it.
+ */
 export const ADDITIONAL_MANAGER_RELATIONSHIPS: {
-  value: Extract<ManagerLevel, "project_manager" | "department_head">
+  value: Extract<ManagerLevel, "project_manager">
   label: string
   hint: string
   /** True for the one slot that holds several people. */
@@ -106,13 +145,6 @@ export const ADDITIONAL_MANAGER_RELATIONSHIPS: {
     hint: "One per project — an employee may have several at once",
     multiple: true,
     className: "bg-info/15 text-info",
-  },
-  {
-    value: "department_head",
-    label: "Department Head",
-    hint: "Separate from the Final Reviewer, and not automatically the same person",
-    multiple: false,
-    className: "bg-role-admin/15 text-role-admin",
   },
 ]
 

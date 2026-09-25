@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { FilterPopover } from "@/components/ui/filter-popover"
+import { FilterPanel } from "@/components/ui/filter-panel"
+import { Label } from "@/components/ui/label"
 import {
   Dialog,
   DialogContent,
@@ -252,10 +253,11 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
             />
           </div>
 
-          <FilterPopover
+          <FilterPanel
             activeCount={activeFilterCount}
             onReset={resetFilters}
             ariaLabel="Filter resumes"
+            title="Filter resumes"
             accentClassName="border-role-recruitment text-role-recruitment bg-role-recruitment/5"
             badgeClassName="bg-role-recruitment text-role-recruitment-foreground"
           >
@@ -273,19 +275,22 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
               }}
             />
 
-            <Select items={SORT_OPTIONS} value={sortBy} onValueChange={(v) => { setSortBy(v || ""); setPage(1) }}>
-              <SelectTrigger aria-label="Sort resumes" className="h-8 w-40 text-xs">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                {SORT_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FilterPopover>
+            <div className="grid gap-1.5">
+              <Label htmlFor="resumes-sort">Sort by</Label>
+              <Select items={SORT_OPTIONS} value={sortBy} onValueChange={(v) => { setSortBy(v || ""); setPage(1) }}>
+                <SelectTrigger id="resumes-sort" aria-label="Sort resumes" className="h-9 w-full">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SORT_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </FilterPanel>
         </div>
 
         {/* Status Tabs — active pill uses the same semantic color as its

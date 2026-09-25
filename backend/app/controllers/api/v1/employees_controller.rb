@@ -2,8 +2,7 @@ module Api
   module V1
     class EmployeesController < Api::V1::BaseController
       rescue_from ::Employees::AccountProvisioner::Error, with: :render_unprocessable
-      rescue_from ::Employees::Invite::Error, with: :render_unprocessable
-      rescue_from ::Employees::PasswordReset::Error, with: :render_unprocessable
+      rescue_from ::Employees::IssueCredentials::Error, with: :render_unprocessable
       rescue_from ::Employee::ManagerHierarchyError, with: :render_unprocessable
 
       # §4's five relationships. One request param per slot: absent means
@@ -19,7 +18,19 @@ module Api
         "department_head" => :department_head_id
       }.freeze
 
-      MULTI_MANAGER_PARAMS = { "project_manager" => :project_manager_ids }.freeze
+      # `additional_manager_ids` is ORDERED — position in the array is the
+      # reporting tier (4th level, 5th level, …), so it is never sorted or
+      # deduplicated on the way through.
+      # Ten rows a page unless asked otherwise, and never more than a hundred:
+      # `?perPage=` is user input that sizes a query, so it is clamped rather
+      # than trusted.
+      DEFAULT_PER_PAGE = 10
+      MAX_PER_PAGE = 100
+
+      MULTI_MANAGER_PARAMS = {
+        "project_manager" => :project_manager_ids,
+        "additional" => :additional_manager_ids
+      }.freeze
 
       def index
         authorize Employee
@@ -36,7 +47,7 @@ module Api
           q = "%#{params[:q]}%"
           scope = scope.where("first_name ILIKE :q OR last_name ILIKE :q OR employee_code ILIKE :q", q: q)
         end
-        scope = scope.order(:last_name)
+        scope = sorted(scope)
 
         # Hand-rolled offset pagination, not Pagy: the installed Pagy
         # version (43.6.2) turned out to be a ground-up API rewrite with no
@@ -45,7 +56,7 @@ module Api
         # not worth guessing at an unfamiliar gem surface for. Revisit if a
         # real reason to depend on Pagy specifically comes up later.
         page = [ params[:page].to_i, 1 ].max
-        per_page = (params[:perPage].presence || 25).to_i.clamp(1, 100)
+        per_page = (params[:perPage].presence || DEFAULT_PER_PAGE).to_i.clamp(1, MAX_PER_PAGE)
         total_count = scope.count
         records = scope.limit(per_page).offset((page - 1) * per_page)
 
@@ -53,6 +64,12 @@ module Api
           data: Api::V1::EmployeeSerializer.new(records).as_json,
           meta: { page: page, perPage: per_page, totalPages: (total_count / per_page.to_f).ceil, totalCount: total_count }
         }
+      end
+
+      # GET /api/v1/employees/next_code
+      def next_code
+        authorize Employee, :create?
+        render_data({ employeeCode: ::Employees::NextCode.call(company: current_company) })
       end
 
       def show
@@ -114,51 +131,93 @@ module Api
         render_data(Api::V1::EmployeeSerializer.new(employee).as_json)
       end
 
-      # POST /api/v1/employees/:id/invite — send (or re-send) the first-login
-      # invitation. Separate from #create so HR can set a joiner up in advance
-      # and invite them on the day they actually start.
+      # POST /api/v1/employees/:id/invite — email this employee a password.
+      #
+      # Kept at the same route as the old "invite" action, because it occupies
+      # the same place in the workflow: HR sets a joiner up in advance and
+      # presses this on the day they actually start. What it sends is no longer
+      # a link but the password itself.
       def invite
-        employee = policy_scope(Employee).find(params[:id])
-        authorize employee, :manage_account_access?
-
-        result = ::Employees::Invite.call(
-          employee: employee, actor: Current.user, request: request,
-          force_password_change: params.key?(:force_password_change) ? params[:force_password_change] : nil
-        )
-
-        render_data({
-          message: invite_message(result),
-          employee: Api::V1::EmployeeSerializer.new(employee.reload).as_json
-        })
+        issue_credentials(resend: false)
       end
 
-      # POST /api/v1/employees/:id/reset_password — the admin-facing
-      # "Set/Reset password" action.
+      # POST /api/v1/employees/:id/reset_password — email them a NEW one.
       #
-      # Note what it does not accept: there is no password parameter here, and
-      # no branch anywhere that would let an administrator choose or read one.
-      # It sends the employee a link to their own mailbox and reports only the
-      # address it went to.
+      # The same operation as #invite now that there is no link. Both generate
+      # a password, send it, and invalidate whatever came before; they differ
+      # only in what the response says, because "here are your details" and
+      # "your password has been reset" are different things to read.
       def reset_password
-        employee = policy_scope(Employee).find(params[:id])
-        authorize employee, :manage_account_access?
-
-        result = ::Employees::PasswordReset.call(employee: employee, actor: Current.user, request: request)
-        message =
-          if result.kind == "invitation"
-            "#{result.sent_to} hasn't set up their account yet, so a fresh invitation was sent instead."
-          else
-            "Password reset link sent to #{result.sent_to}."
-          end
-
-        render_data({ message: message, employee: Api::V1::EmployeeSerializer.new(employee.reload).as_json })
+        issue_credentials(resend: true)
       end
 
       private
-        def invite_message(result)
-          sent = result.resent ? "Invitation re-sent to" : "Invitation sent to"
-          extra = result.user.must_change_password? ? " They'll be asked to set a new password before they can use the app." : ""
-          "#{sent} #{result.user.email_address}.#{extra}"
+        # Which columns may be sorted on, and how each is expressed in SQL.
+        #
+        # An allowlist rather than interpolating whatever arrives: `?sortBy=` is
+        # user input going into an ORDER BY, and the list is also the honest
+        # answer to "what can this be sorted by" — a column that isn't here
+        # simply isn't offered.
+        SORTABLE = {
+          "name" => "employees.first_name, employees.last_name",
+          "employeeCode" => "employees.employee_code",
+          "status" => "employees.status",
+          "dateOfJoining" => "employees.date_of_joining",
+          "currentLevel" => "employees.current_level",
+          "department" => "departments.name",
+          "designation" => "designations.title"
+        }.freeze
+
+        def sorted(scope)
+          column = SORTABLE[params[:sortBy].to_s]
+          # Last name is the order a staff directory is read in; it stays the
+          # default so an unsorted list is still in a sensible order.
+          return scope.order(:last_name, :first_name) if column.nil?
+
+          direction = params[:sortDir].to_s.casecmp("desc").zero? ? "DESC" : "ASC"
+          # LEFT JOIN so somebody with no department still appears when sorting
+          # by one, rather than vanishing from the list.
+          scope = scope.left_joins(:department) if column.start_with?("departments.")
+          scope = scope.left_joins(:designation) if column.start_with?("designations.")
+
+          # NULLS LAST in both directions: a blank is an absence, and an absence
+          # is never the most interesting row.
+          scope.order(Arel.sql(column.split(", ").map { |c| "#{c} #{direction} NULLS LAST" }.join(", ")))
+        end
+
+        def issue_credentials(resend:)
+          employee = policy_scope(Employee).find(params[:id])
+          authorize employee, :manage_account_access?
+
+          result = ::Employees::IssueCredentials.call(
+            employee: employee, actor: Current.user, request: request,
+            # Optional. The admin may type one, or leave it for the server to
+            # generate — which is what the Generate button does, and what the
+            # field is prefilled with.
+            password: params[:password],
+            force_password_change: params.key?(:force_password_change) ? params[:force_password_change] : nil
+          )
+
+          render_data({
+            message: credentials_message(result, resend: resend),
+            # Shown to the administrator once, on screen, so they can read it
+            # out to somebody whose mail has not arrived. It is not stored
+            # anywhere readable and is not part of the employee payload below.
+            password: result.password,
+            employee: Api::V1::EmployeeSerializer.new(employee.reload).as_json
+          })
+        end
+
+        def credentials_message(result, resend:)
+          lead =
+            if resend
+              "A new password has been emailed to #{result.user.email_address}. Their previous one no longer works."
+            else
+              "Sign-in details have been emailed to #{result.user.email_address}."
+            end
+          return "#{lead} They'll be asked to choose their own the first time they sign in." if result.user.must_change_password?
+
+          lead
         end
 
         def employee_params
@@ -192,13 +251,28 @@ module Api
         end
 
         def apply_account_and_roles(employee)
-          return unless params.key?(:work_email) || params.key?(:role_ids)
+          return unless params.key?(:work_email) || params.key?(:role_ids) || params[:password].present?
 
           authorize employee, :manage_roles?
           ::Employees::AccountProvisioner.call(
             employee: employee,
             email: params[:work_email],
             role_ids: params.key?(:role_ids) ? Array(params.permit(role_ids: [])[:role_ids]) : nil
+          )
+
+          # A password on the form goes through the same service as the Send
+          # button, rather than being written straight onto the user. Setting
+          # one and telling its owner are not two decisions: a password nobody
+          # was sent is a password nobody can use, and doing it here by hand
+          # would skip the email, the session purge and the audit entry that
+          # IssueCredentials exists to guarantee.
+          return if params[:password].blank?
+          return if employee.reload.user.nil?
+
+          ::Employees::IssueCredentials.call(
+            employee: employee, actor: Current.user, request: request,
+            password: params[:password],
+            force_password_change: params.key?(:require_password_change) ? params[:require_password_change] : true
           )
         end
     end

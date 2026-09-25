@@ -1,6 +1,7 @@
 import { apiClient } from "@/lib/api-client"
 import type {
   AccountActionResult,
+  CompanySettings,
   Employee,
   EmployeeListParams,
   Department,
@@ -20,6 +21,19 @@ function toQuery(params: Record<string, string | number | undefined>): string {
   return `?${new URLSearchParams(entries as [string, string][]).toString()}`
 }
 
+interface CredentialOptions {
+  password?: string
+  forcePasswordChange?: boolean
+}
+
+/** Drops the keys the caller didn't set, so absence keeps meaning "unchanged". */
+function credentialBody({ password, forcePasswordChange }: CredentialOptions) {
+  return {
+    ...(password ? { password } : {}),
+    ...(forcePasswordChange === undefined ? {} : { forcePasswordChange }),
+  }
+}
+
 export const employeesApi = {
   list: (params: EmployeeListParams = {}) =>
     apiClient.getPaginated<{ data: Employee[]; meta: { page: number; perPage: number; totalPages: number; totalCount: number } }>(
@@ -35,23 +49,34 @@ export const employeesApi = {
     apiClient.patch<Employee>(`/employees/${id}/deactivate`, { status }),
   reactivate: (id: string) => apiClient.patch<Employee>(`/employees/${id}`, { status: "active" }),
 
-  // Sends (or re-sends) the first-login invitation. Note what isn't here: no
-  // password, in either direction. The employee chooses theirs through the
-  // emailed link, so there is nothing for an administrator to type or read.
-  // `forcePasswordChange` is omitted rather than sent as false when the caller
-  // doesn't care: the backend reads absence as "leave whatever the account
-  // already carries alone", so a plain re-send can't silently waive a
+  // Emails the employee their sign-in details for the first time.
+  //
+  // `password` is omitted to let the server generate one, which is the normal
+  // case — the field on screen is prefilled with a generated value, and an
+  // admin who clears it gets a fresh one rather than an empty password.
+  //
+  // `forcePasswordChange` is likewise omitted rather than sent as false when
+  // the caller doesn't care: the backend reads absence as "leave whatever the
+  // account already carries alone", so a plain re-send can't silently waive a
   // requirement an admin set earlier.
-  invite: (id: string, forcePasswordChange?: boolean) =>
-    apiClient.post<AccountActionResult>(
-      `/employees/${id}/invite`,
-      forcePasswordChange === undefined ? {} : { forcePasswordChange }
-    ),
+  invite: (id: string, options: CredentialOptions = {}) =>
+    apiClient.post<AccountActionResult>(`/employees/${id}/invite`, credentialBody(options)),
 
-  // The admin-facing "Set/Reset password" action. Same shape, same absence of
-  // a password: it emails the employee a link to their own mailbox.
-  resetPassword: (id: string) =>
-    apiClient.post<AccountActionResult>(`/employees/${id}/reset_password`, {}),
+  // Issues a NEW password and emails that. The same operation as invite now
+  // that there is no link — they differ only in what the response says.
+  resetPassword: (id: string, options: CredentialOptions = {}) =>
+    apiClient.post<AccountActionResult>(`/employees/${id}/reset_password`, credentialBody(options)),
+
+  // The code to prefill the add-employee form with. A suggestion the user can
+  // overwrite, not a reservation — nothing is consumed by asking.
+  nextCode: () => apiClient.get<{ employeeCode: string | null }>("/employees/next_code"),
+}
+
+/** Company-wide preferences. One row per company — the Company itself. */
+export const companySettingsApi = {
+  get: () => apiClient.get<CompanySettings>("/company_settings"),
+  update: (values: { employeeCodeInitial: string }) =>
+    apiClient.patch<CompanySettings>("/company_settings", values),
 }
 
 /**
@@ -68,7 +93,10 @@ export const departmentsApi = {
   create: (values: DepartmentFormValues) => apiClient.post<Department>("/departments", values),
   update: (id: string, values: Partial<DepartmentFormValues>) =>
     apiClient.patch<Department>(`/departments/${id}`, values),
-  archive: (id: string) => apiClient.patch<Department>(`/departments/${id}`, { status: "archived" }),
+  // DELETE, not a status patch. The backend archives rather than destroying —
+  // employees who were once in the department keep their history — but the
+  // list excludes archived rows, so from here it is a delete.
+  remove: (id: string) => apiClient.delete<void>(`/departments/${id}`),
 }
 
 export const designationsApi = {

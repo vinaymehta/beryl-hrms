@@ -2,7 +2,6 @@ import type { LucideIcon } from "lucide-react"
 import {
   LayoutDashboardIcon,
   UsersIcon,
-  Building2Icon,
   ClockIcon,
   CalendarDaysIcon,
   FileTextIcon,
@@ -56,7 +55,10 @@ const ALL_NAV_ITEMS: (NavItem & { hidden?: boolean })[] = [
   // app/(dashboard)/page.tsx.
   { label: "Dashboard", href: "/", icon: LayoutDashboardIcon, permission: PEOPLE_MANAGEMENT_PERMISSIONS },
   { label: "Employees", href: "/employees", icon: UsersIcon, permission: PEOPLE_MANAGEMENT_PERMISSIONS },
-  { label: "Departments", href: "/departments", icon: Building2Icon, permission: PERMISSIONS.departmentsView },
+  // Departments moved INTO Settings (Settings → Department), so it is no
+  // longer a top-level destination. Two doors onto the same screen is exactly
+  // what the settings reorganisation was for. The /departments route still
+  // exists and redirects, for anything already linking to it.
   { label: "Attendance", href: "/attendance", icon: ClockIcon, permission: PERMISSIONS.attendanceView, hidden: HIDDEN_FEATURES.attendance },
   { label: "Leave", href: "/leave", icon: CalendarDaysIcon, permission: PERMISSIONS.leaveView, hidden: HIDDEN_FEATURES.leave },
   { label: "Documents", href: "/documents", icon: FileTextIcon, permission: PERMISSIONS.documentsView, hidden: HIDDEN_FEATURES.documents },

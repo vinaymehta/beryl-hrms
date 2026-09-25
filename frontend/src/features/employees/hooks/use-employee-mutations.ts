@@ -61,14 +61,22 @@ export function useReactivateEmployee() {
 }
 
 /**
- * Invite, and Set/Reset password.
+ * Sending an employee their sign-in details, first time or again.
  *
- * One hook for both because they are the same interaction from the admin's
- * side — press a button, the employee gets a link — and because the success
- * message has to come from the SERVER rather than be assumed here: pressing
- * Reset on someone who never finished their invitation re-sends the invitation
- * instead, and the admin needs to be told that actually happened.
+ * One hook for both because they are now literally the same operation: a
+ * password is generated (or taken from the admin), emailed, and whatever came
+ * before it stops working. The success message still comes from the SERVER
+ * rather than being assumed here, because what it should say depends on state
+ * this side doesn't own — whether they'll be forced to change it, and whether
+ * this replaced an existing password.
  */
+interface AccountActionArgs {
+  id: string
+  /** Omitted to let the server generate one. */
+  password?: string
+  forcePasswordChange?: boolean
+}
+
 function useAccountAction<TArgs>(
   action: (args: TArgs) => Promise<AccountActionResult>,
   fallback: string
@@ -86,14 +94,18 @@ function useAccountAction<TArgs>(
 
 export function useInviteEmployee() {
   return useAccountAction(
-    ({ id, forcePasswordChange }: { id: string; forcePasswordChange?: boolean }) =>
-      employeesApi.invite(id, forcePasswordChange),
-    "Couldn't send that invitation."
+    ({ id, password, forcePasswordChange }: AccountActionArgs) =>
+      employeesApi.invite(id, { password, forcePasswordChange }),
+    "Couldn't send those sign-in details."
   )
 }
 
 export function useResetEmployeePassword() {
-  return useAccountAction((id: string) => employeesApi.resetPassword(id), "Couldn't send that reset link.")
+  return useAccountAction(
+    ({ id, password, forcePasswordChange }: AccountActionArgs) =>
+      employeesApi.resetPassword(id, { password, forcePasswordChange }),
+    "Couldn't send that new password."
+  )
 }
 
 export function useCreateDepartment() {
@@ -105,6 +117,35 @@ export function useCreateDepartment() {
       toast.success("Department created.")
     },
     onError: (error) => toast.error(errorMessage(error, "Couldn't create that department.")),
+  })
+}
+
+export function useUpdateDepartment() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, values }: { id: string; values: Partial<DepartmentFormValues> }) =>
+      departmentsApi.update(id, values),
+    onSuccess: () => {
+      // Employees carry their department, so a rename has to reach that list
+      // too rather than leaving the old name showing until a reload.
+      queryClient.invalidateQueries({ queryKey: ["departments"] })
+      queryClient.invalidateQueries({ queryKey: ["employees"] })
+      toast.success("Department updated.")
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't update that department.")),
+  })
+}
+
+export function useDeleteDepartment() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => departmentsApi.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["departments"] })
+      queryClient.invalidateQueries({ queryKey: ["employees"] })
+      toast.success("Department deleted.")
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't delete that department.")),
   })
 }
 

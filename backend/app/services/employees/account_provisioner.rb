@@ -8,11 +8,13 @@ module Employees
   #      User → UserRole → Role tables; Employee carries no role column.
   #   2. Set or return a default password. A new account is created in the
   #      `invited` state with a random secret nobody ever sees, and the person
-  #      chooses their own through the invitation link (Employees::Invite).
-  #   2a. Send that invitation. Provisioning the account and inviting the
-  #      person are separate steps on purpose — HR sets a joiner up days
-  #      before their start date, and mail sent at save time is stale by the
-  #      time anybody needs it. Admin presses Invite when they mean it.
+  #      is emailed one by Employees::IssueCredentials.
+  #      An account provisioned with no password is deliberately usable by
+  #      nobody: HR often sets a joiner up days before their start date, and a
+  #      password mailed at save time has been sitting in an inbox for a week
+  #      by the time it is first used. The controller composes the two when the
+  #      form carries a password, and leaves the account dormant when it
+  #      doesn't.
   #   3. Decide who is allowed to do any of this — that is
   #      EmployeePolicy#manage_roles?, checked by the controller before this
   #      service is reached.
@@ -41,8 +43,8 @@ module Employees
     end
 
     def call
-      reject_email_change
-      user = @employee.user || resolve_user
+      reject_foreign_domain
+      user = @employee.user ? rename_existing_account : resolve_user
       return Result.new(user: nil, created: false) if user.nil?
 
       @employee.update!(user: user) if @employee.user_id != user.id
@@ -52,16 +54,47 @@ module Employees
     end
 
     private
-      # Moving an existing account to a different sign-in address is an
-      # identity change, not an employee-profile edit: it invalidates email
-      # verification and any outstanding links, and would orphan the old user
-      # row. Refused here rather than silently ignored, so a client that sends
-      # it learns the field did nothing.
-      def reject_email_change
-        return if @employee.user.nil? || @email.blank?
-        return if @email == @employee.user.email_address
+      # Changing the sign-in address of an account that already exists.
+      #
+      # This used to be refused outright. It is a real identity change — the
+      # address IS the login — but refusing it meant a typo in somebody's work
+      # email could never be corrected, and people do change name and domain.
+      # So it is allowed, and the consequences are handled here rather than
+      # left implicit:
+      #
+      #   • the SAME user row is renamed, so their sessions, roles, appraisals
+      #     and history all follow them rather than being orphaned behind a
+      #     dead login;
+      #   • verification is withdrawn, because nobody has yet proved they can
+      #     read the new mailbox;
+      #   • the address must not already belong to somebody else in the
+      #     company, which User's uniqueness validation enforces — caught here
+      #     so it reads as a sentence rather than a 500.
+      #
+      # Their password is untouched: they keep signing in, at the new address.
+      def rename_existing_account
+        user = @employee.user
+        return user if @email.blank? || @email == user.email_address
 
-        raise Error, "This employee's sign-in address can't be changed from here"
+        taken = @company.users.where.not(id: user.id).exists?(email_address: @email)
+        raise Error, "#{@email} is already in use by another account" if taken
+
+        user.update!(email_address: @email, email_verified_at: nil)
+        user
+      end
+
+      # The company's work-email domain, when it has set one.
+      #
+      # Checked here rather than on Employee because this is the only path that
+      # turns an address into a login — and it is the login address the rule is
+      # about. A company with no domain configured accepts any valid address,
+      # which is the only safe default for a tenant whose domain we don't know.
+      def reject_foreign_domain
+        domain = @company.work_email_domain.to_s.strip.downcase.delete_prefix("@")
+        return if domain.blank? || @email.blank?
+        return if @email.end_with?("@#{domain}")
+
+        raise Error, "Work email must end with @#{domain}"
       end
 
       def resolve_user

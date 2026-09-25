@@ -38,12 +38,6 @@ export const resetPasswordSchema = z
   })
 export type ResetPasswordValues = z.infer<typeof resetPasswordSchema>
 
-// Choosing a password from an invitation link is the same form as resetting
-// one — same rules, same confirmation — so it shares the schema rather than
-// growing a near-identical copy that could drift.
-export const acceptInvitationSchema = resetPasswordSchema
-export type AcceptInvitationValues = ResetPasswordValues
-
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, "Current password is required"),

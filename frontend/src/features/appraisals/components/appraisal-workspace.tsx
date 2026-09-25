@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   ArrowLeftIcon, ArrowRightIcon, CalendarDaysIcon, CheckIcon, CloudIcon, GaugeIcon,
-  HistoryIcon, MessageSquareIcon, NetworkIcon, PencilLineIcon, ShieldIcon, TargetIcon,
+  HistoryIcon, MessageSquareIcon, NetworkIcon, PencilLineIcon, TargetIcon,
   TriangleAlertIcon, UsersRoundIcon, type LucideIcon,
 } from "lucide-react"
 import { cn } from "cn"
@@ -17,7 +17,6 @@ import { PerformanceAreaList } from "@/features/appraisals/components/performanc
 import { RatingSelect, RatingGuide } from "@/features/appraisals/components/rating-select"
 import { RevisionHistory } from "@/features/appraisals/components/revision-history"
 import { AppraisalComments } from "@/features/appraisals/components/appraisal-comments"
-import { CompensationPanel } from "@/features/appraisals/components/compensation-panel"
 import { FeedbackRequestsPanel } from "@/features/appraisals/components/feedback-requests-panel"
 import { SelfAppraisalImport } from "@/features/appraisals/components/self-appraisal-import"
 import { EMPTY_ANSWER, needsEvidence, type AnswerValue } from "@/features/appraisals/components/question-answer"
@@ -157,6 +156,12 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
   const [answers, setAnswers] = useState<AnswerState>(() => {
     const seeded: AnswerState = {}
     draft?.answers?.forEach((answer) => {
+      // Guarded, because `String(undefined)` is the perfectly valid map key
+      // "undefined" — which then travelled all the way to the server as a
+      // question id and came back as "Question undefined does not belong to
+      // this appraisal's template". An answer with no question isn't an
+      // answer; it is dropped here rather than poisoning the payload.
+      if (answer.questionId == null) return
       seeded[String(answer.questionId)] = { rating: answer.rating, comment: answer.comment ?? "" }
     })
     return seeded
@@ -204,6 +209,7 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
     setAnswers((prev) => {
       const next = { ...prev }
       rows.forEach((row) => {
+        if (row.questionId == null) return
         next[String(row.questionId)] = { rating: row.rating, comment: row.comment ?? "" }
       })
       return next
@@ -214,6 +220,12 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
   const answerPayload = useMemo(
     () =>
       Object.entries(answers)
+        // `String(undefined)` is a perfectly valid object key, so a missing
+        // question id used to become the literal key "undefined" and travel to
+        // the server as one. Guarded at the source too; this is the last
+        // gate before the request, and it checks for the sentinel rather than
+        // for a shape, since a question id is opaque here.
+        .filter(([questionId]) => questionId && questionId !== "undefined" && questionId !== "null")
         .filter(([, answer]) => answer.rating != null || answer.comment.trim())
         .map(([questionId, answer]) => ({ questionId, rating: answer.rating, comment: answer.comment })),
     [answers]
@@ -356,15 +368,20 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
   // slab above the tab strip — two stacked panels read as two windows.
   const renderForm = () => (
       <div className="grid gap-4">
-        {/* Numbered stepper. Each step carries a caption as well as a name,
-            and a fixed row height keeps every circle and connector on one
-            line however long the labels run. */}
-        <ol className="flex flex-wrap items-stretch gap-x-2 gap-y-3">
+        {/* Numbered stepper.
+            
+            The circles sit on ONE line with the connectors running between
+            them, and each step's name and caption hang underneath. Side-by-side
+            labels pushed every circle apart by however long its words were, so
+            the connectors were long, the row was tall, and the whole strip ate
+            the top of the page before any of the form appeared. Stacking the
+            text under the circle costs one short line and gives it all back. */}
+        <ol className="flex items-start gap-1">
           {steps.map((definition, index) => {
             const done = index < stepIndex
             const active = index === stepIndex
             return (
-              <li key={definition.key} className="flex h-11 min-w-fit flex-1 items-center gap-2">
+              <li key={definition.key} className="flex min-w-0 flex-1 items-start gap-1">
                 <button
                   type="button"
                   // Backwards only: a step you haven't reached can't be
@@ -373,13 +390,13 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
                   aria-current={active ? "step" : undefined}
                   onClick={() => goTo(index)}
                   className={cn(
-                    "flex h-full shrink-0 items-center gap-2 rounded-lg px-1.5 text-left transition-colors",
+                    "grid min-w-0 flex-1 justify-items-center gap-1 rounded-lg px-1 py-1 text-center transition-colors",
                     index > stepIndex ? "cursor-not-allowed opacity-55" : "hover:bg-muted/60"
                   )}
                 >
                   <span
                     className={cn(
-                      "flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold tabular-nums transition-colors",
+                      "flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold tabular-nums transition-colors",
                       active
                         ? "border-role-hr bg-role-hr text-role-hr-foreground ring-4 ring-role-hr/15"
                         : done
@@ -387,22 +404,31 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
                           : "border-muted-foreground/30 bg-card text-muted-foreground"
                     )}
                   >
-                    {done ? <CheckIcon className="size-3.5" /> : index + 1}
+                    {done ? <CheckIcon className="size-3" /> : index + 1}
                   </span>
-                  <span className="flex flex-col justify-center whitespace-nowrap leading-tight">
+                  <span className="grid min-w-0 leading-tight">
                     <span
-                      className={cn("text-xs font-semibold", active ? "text-role-hr" : "text-foreground")}
+                      className={cn(
+                        "truncate text-[11px] font-semibold",
+                        active ? "text-role-hr" : "text-foreground"
+                      )}
                     >
                       {definition.title}
                     </span>
-                    <span className="text-[11px] text-muted-foreground">{definition.caption}</span>
+                    {/* The caption is the first thing to go on a narrow
+                        screen — the step's name carries the meaning. */}
+                    <span className="hidden truncate text-[10px] text-muted-foreground sm:block">
+                      {definition.caption}
+                    </span>
                   </span>
                 </button>
                 {index < steps.length - 1 && (
                   <span
                     aria-hidden
+                    // Aligned with the middle of the circles, which sit at the
+                    // top of each column now that the text is below them.
                     className={cn(
-                      "hidden h-px min-w-3 flex-1 self-center sm:block",
+                      "mt-[11px] hidden h-px min-w-2 flex-1 sm:block",
                       done ? "bg-success/60" : "bg-border"
                     )}
                   />
@@ -487,10 +513,13 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
 
           {/* The standing summary. Everything in it is derived from what has
               been entered — there is nothing to fill in here. */}
-          <aside className="grid gap-3 lg:sticky lg:top-4">
-            <section className="grid gap-3 rounded-xl border p-4">
+          {/* Tighter than the left column and pinned to the top of it: this
+              is a running total, read at a glance and returned to, so height
+              spent on it is height taken from the form being filled in. */}
+          <aside className="grid content-start gap-2.5 lg:sticky lg:top-4">
+            <section className="grid gap-2 rounded-xl border p-3">
               <h3 className="flex items-center gap-2 text-sm font-semibold">
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-role-hr/12 text-role-hr">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-role-hr/12 text-role-hr">
                   <TargetIcon className="size-3.5" />
                 </span>
                 Your progress
@@ -509,7 +538,7 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
               </div>
             </section>
 
-            <section className="grid gap-2 rounded-xl border p-4">
+            <section className="grid gap-2 rounded-xl border p-3">
               <h3 className="text-sm font-semibold">Selected ratings</h3>
               <ul className="grid gap-1.5">
                 {areaProgress.map(({ category, average }) => (
@@ -630,14 +659,6 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
     })
   }
 
-  // Restricted: the server omits the compensation block entirely unless the
-  // viewer holds appraisals.manage_compensation.
-  if (viewer.canManageCompensation) {
-    tabs.push({
-      id: "compensation", label: "Compensation & promotion", icon: ShieldIcon,
-      render: () => <CompensationPanel appraisal={appraisal} />,
-    })
-  }
 
   const requestedTab = searchParams.get("tab")
   const activeTab = tabs.find((tab) => tab.id === requestedTab) ?? tabs[0]

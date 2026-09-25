@@ -1,6 +1,6 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 
 import {
   appraisalsApi,
@@ -48,6 +48,11 @@ export function useAppraisals(params: AppraisalListParams = {}, enabled = true) 
     queryKey: ["appraisals", params],
     queryFn: () => appraisalsApi.list(params),
     enabled,
+    // Searching and paging change the key, which would otherwise blank the
+    // list back to a loading state on every keystroke. Holding the previous
+    // page until the next one arrives means the rows dim and update rather
+    // than flashing away and back.
+    placeholderData: keepPreviousData,
   })
 }
 

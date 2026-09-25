@@ -11,6 +11,12 @@ module Api
       rescue_from ::Appraisals::OverrideScore::Error, with: :render_unprocessable
       rescue_from ::Appraisals::SelfAppraisalImport::Error, with: :render_unprocessable
 
+      # Ten is what fits on a screen without scrolling past the controls. The
+      # cap exists so `?perPage=100000` can't be used to pull the whole table
+      # and undo the point of paginating.
+      DEFAULT_PER_PAGE = 10
+      MAX_PER_PAGE = 100
+
       def index
         authorize Appraisal
         scope = policy_scope(Appraisal).includes(
@@ -27,7 +33,29 @@ module Api
         when "pending" then scope = pending_for_reviewer(scope)
         end
 
-        render_data(Api::V1::AppraisalSummarySerializer.new(scope.order(created_at: :desc)).as_json)
+        scope = search(scope, params[:q])
+
+        # Paginated in SQL, not in the browser. A company with two thousand
+        # employees has two thousand appraisals per cycle, and sending all of
+        # them so the client can show ten is a page that gets slower every year
+        # until somebody notices.
+        page = [ params[:page].to_i, 1 ].max
+        per_page = (params[:perPage].presence || DEFAULT_PER_PAGE).to_i.clamp(1, MAX_PER_PAGE)
+        # Counted before the limit, and on a scope with no `includes` join
+        # duplicating rows — `count` on an eager-loaded relation over a
+        # has_many would over-report.
+        total_count = scope.reorder(nil).distinct.count
+        records = scope.order(created_at: :desc).limit(per_page).offset((page - 1) * per_page)
+
+        render json: {
+          data: Api::V1::AppraisalSummarySerializer.new(records).as_json,
+          meta: {
+            page: page,
+            perPage: per_page,
+            totalPages: (total_count / per_page.to_f).ceil,
+            totalCount: total_count
+          }
+        }
       end
 
       def show
@@ -105,7 +133,7 @@ module Api
         render_detail(appraisal)
       end
 
-      # Any explicit workflow move the UI offers (discussion, compensation step,
+      # Any explicit workflow move the UI offers (discussion,
       # close). Kept manual on purpose — the workflow routes and notifies, it
       # never decides a review.
       def advance
@@ -168,26 +196,6 @@ module Api
       # The before/after diff on the audit entry is the approval history the
       # scope asks for (§17, §27) — recorded through the existing audit log
       # rather than a second history table alongside it.
-      def compensation
-        appraisal = find_appraisal
-        authorize appraisal, :manage_compensation?
-        decision = appraisal.compensation_decision || appraisal.build_compensation_decision
-        tracked = compensation_params.keys.map(&:to_s)
-        before = decision.persisted? ? decision.attributes.slice(*tracked) : {}
-
-        decision.assign_attributes(compensation_params.merge(actor_user: Current.user))
-        decision.save!
-
-        ::Audit::Record.call(
-          action: "appraisal.compensation_recorded", auditable: appraisal, request: request,
-          before_changes: before, after_changes: decision.attributes.slice(*tracked)
-        )
-        render_detail(appraisal)
-      end
-
-      # The workbook an employee fills in offline (scope §10.1). Generated from
-      # the cycle's frozen template and stamped with the metadata #import_preview
-      # checks, so a workbook can't be filed against the wrong appraisal.
       def export
         appraisal = find_appraisal
         authorize appraisal, :show?
@@ -237,10 +245,37 @@ module Api
       end
 
       private
+        # Searches the PERSON, because that is who a list of appraisals is
+        # scanned for. Runs in SQL so it composes with pagination — filtering
+        # the ten rows already fetched would silently search one page.
+        #
+        # ILIKE rather than a tsvector index: this is a per-company table of a
+        # few thousand rows at most, and full-text search would be machinery
+        # without a problem.
+        def search(scope, query)
+          term = query.to_s.strip
+          return scope if term.blank?
+
+          pattern = "%#{term.downcase.gsub(/[%_\\]/) { |c| "\\#{c}" }}%"
+          # LEFT JOIN on users, not an inner one: most employees have a login
+          # and some do not, and an inner join would quietly drop the ones who
+          # don't from every search result.
+          scope
+            .joins(:employee)
+            .joins("LEFT JOIN users ON users.id = employees.user_id")
+            .where(
+              "LOWER(employees.first_name) LIKE :q OR LOWER(employees.last_name) LIKE :q " \
+              "OR LOWER(employees.first_name || ' ' || employees.last_name) LIKE :q " \
+              "OR LOWER(employees.employee_code) LIKE :q " \
+              "OR LOWER(COALESCE(employees.personal_email, '')) LIKE :q " \
+              "OR LOWER(COALESCE(users.email_address, '')) LIKE :q",
+              q: pattern
+            )
+        end
         def find_appraisal
           policy_scope(Appraisal).includes(
             :appraisal_cycle, :employee, :primary_manager, :secondary_manager, :final_manager,
-            :transitions, :score_overrides, :compensation_decision, revisions: :answers
+            :transitions, :score_overrides, revisions: :answers
           ).find(params[:id])
         end
 
@@ -291,17 +326,6 @@ module Api
         def narrative_params
           params.permit(:summary, :achievements, :strengths, :improvement_areas,
                         :training_needs, :next_period_goals).to_h.symbolize_keys
-        end
-
-        def compensation_params
-          params.permit(
-            :current_compensation, :last_increment_percentage, :last_increment_on,
-            :recommended_increment_percentage, :recommended_compensation,
-            :approved_increment_percentage, :approved_compensation,
-            :effective_date, :management_comments,
-            :promotion_recommendation, :proposed_designation_id,
-            :promotion_reason, :promotion_effective_date, :new_responsibilities
-          )
         end
     end
   end

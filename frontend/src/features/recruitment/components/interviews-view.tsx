@@ -8,13 +8,9 @@ import { InterviewFeedbackDialog } from "./interview-feedback-dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { FilterPanel } from "@/components/ui/filter-panel"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
@@ -27,8 +23,6 @@ import {
   ChevronRightIcon,
   UserCheckIcon,
   SlidersHorizontalIcon,
-  FilterIcon,
-  ChevronDownIcon,
 } from "lucide-react"
 import { INTERVIEW_WORKFLOW_STATUSES, type CandidateStatus, type CandidateSummary } from "@/types/recruitment"
 import { cn } from "cn"
@@ -71,6 +65,9 @@ const STAGE_FILTER_OPTIONS: { label: string; value: CandidateStatus }[] = [
   { label: "Scheduled", value: "interview_scheduled" },
   { label: "Completed", value: "interview_completed" },
 ]
+
+/** The same two stages, plus "All", in the shape the panel's Select wants. */
+const STAGE_SELECT_ITEMS = [{ label: "All stages", value: "all" }, ...STAGE_FILTER_OPTIONS]
 
 // Only the Filter's own stages light it up — a tab selection is shown by the
 // tab, not by a count on a control that didn't set it.
@@ -162,53 +159,46 @@ export function InterviewsView() {
             />
           </div>
 
-          {/* A real dropdown, not a popover wrapping a select: one click
-              opens the stages, a second picks one. Only this list works this
-              way — Resumes and Employees keep the FilterPopover, whose panels
-              hold several controls at once and so genuinely need one. */}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  aria-label="Filter interviews by stage"
-                  className={cn(
-                    "h-9 shrink-0 gap-1.5 rounded-full text-xs",
-                    isFilterStage(stage) && "border-role-recruitment text-role-recruitment bg-role-recruitment/5"
-                  )}
-                />
-              }
-            >
-              <FilterIcon className="size-3.5" />
-              {/* The chosen stage names itself on the button, so no separate
-                  count badge is needed to say something is filtered. */}
-              {STAGE_FILTER_OPTIONS.find((o) => o.value === stage)?.label ?? "Filter"}
-              <ChevronDownIcon className="size-3.5 opacity-60" />
-            </DropdownMenuTrigger>
-
-            <DropdownMenuContent align="end" className="w-40">
-              <DropdownMenuRadioGroup
+          {/* Same panel as every other list, although this one holds a single
+              control. Consistency is the point: a filter should be in the same
+              place, opened the same way, wherever you are in the app. */}
+          <FilterPanel
+            activeCount={isFilterStage(stage) ? 1 : 0}
+            onReset={() => {
+              setStage("")
+              setPage(1)
+            }}
+            ariaLabel="Filter interviews"
+            title="Filter interviews"
+            accentClassName="border-role-recruitment text-role-recruitment bg-role-recruitment/5"
+            badgeClassName="bg-role-recruitment text-role-recruitment-foreground"
+          >
+            <div className="grid gap-1.5">
+              <Label htmlFor="interviews-stage">Stage</Label>
+              <Select
+                items={STAGE_SELECT_ITEMS}
                 // Bound to `stage` itself, not to a filter-only subset: on the
-                // Feedback Received tab nothing here is checked, which is the
+                // Feedback Received tab nothing here is chosen, which is the
                 // truth — that tab's stage is not one of these two.
-                value={stage}
+                value={stage || "all"}
                 onValueChange={(v) => {
-                  setStage((v || "") as CandidateStatus | "")
+                  setStage((!v || v === "all" ? "" : v) as CandidateStatus | "")
                   setPage(1)
                 }}
               >
-                <DropdownMenuRadioItem value="" className="text-xs">
-                  All
-                </DropdownMenuRadioItem>
-                {STAGE_FILTER_OPTIONS.map((o) => (
-                  <DropdownMenuRadioItem key={o.value} value={o.value} className="text-xs">
-                    {o.label}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <SelectTrigger id="interviews-stage" aria-label="Filter by stage" className="h-9 w-full">
+                  <SelectValue placeholder="Stage" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STAGE_SELECT_ITEMS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </FilterPanel>
         </div>
 
         <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b text-xs">

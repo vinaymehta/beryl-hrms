@@ -1,19 +1,8 @@
-import { Building2Icon } from "lucide-react"
+import { redirect } from "next/navigation"
 
-import { DepartmentDesignationManager } from "@/features/employees/components/department-designation-manager"
-
-export const metadata = { title: "Departments" }
-
+// Departments moved into All Settings, so there is one door to it rather than
+// two. The route stays and redirects, because bookmarks and any link written
+// before the move should still land somewhere correct rather than 404.
 export default function DepartmentsPage() {
-  return (
-    <div className="grid gap-4">
-      <div className="flex items-center gap-2.5">
-        <span className="flex size-9 items-center justify-center rounded-xl bg-role-hr/12 text-role-hr">
-          <Building2Icon className="size-4.5" />
-        </span>
-        <h1 className="text-2xl font-semibold tracking-tight">Departments</h1>
-      </div>
-      <DepartmentDesignationManager />
-    </div>
-  )
+  redirect("/all-settings?section=departments")
 }

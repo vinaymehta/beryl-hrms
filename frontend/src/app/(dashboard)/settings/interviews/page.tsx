@@ -1,10 +1,11 @@
-import { SettingsDialog } from "@/features/settings/components/settings-dialog"
+import { redirect } from "next/navigation"
 
-export const metadata = { title: "Calendly · Settings" }
-
-// Route kept exactly as it was: the backend redirects here after Calendly
-// OAuth (Calendly::ConnectionsController#callback). It now opens the Settings
-// modal with the Calendly section already selected.
+// The backend redirects here after Calendly OAuth
+// (Calendly::ConnectionsController#callback), so the ROUTE must keep working
+// exactly as it did. Calendly now lives in the full-screen All Settings
+// window, under Integration — so this forwards there rather than being
+// changed on the backend, which would break any authorization already in
+// flight.
 export default function SettingsInterviewsPage() {
-  return <SettingsDialog initialSection="calendly" />
+  redirect("/all-settings?section=calendly")
 }

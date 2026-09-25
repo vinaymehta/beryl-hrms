@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client"
-import type { AuthUser, InvitationSummary, MeResponse, SessionSummary } from "@/types/auth"
+import type { AuthUser, MeResponse, SessionSummary } from "@/types/auth"
 import type {
   ChangePasswordValues,
   ForgotPasswordValues,
@@ -68,24 +68,6 @@ export const authApi = {
       newPassword: values.password,
       newPasswordConfirmation: values.passwordConfirmation,
     }),
-
-  // Who an invitation link is for, so the page can greet them by name and say
-  // plainly that a link has expired rather than only failing on submit. The
-  // backend returns the name, address and company and nothing else.
-  invitation: (token: string) =>
-    apiClient.get<InvitationSummary>(`/auth/invitation?token=${encodeURIComponent(token)}`),
-
-  // Spends the invitation: sets the password the employee chose and signs them
-  // in, so there is no second prompt to change a password they just picked.
-  // password is omitted entirely when Admin didn't require one — the link is
-  // then the proof of identity and simply signs them in.
-  acceptInvitation: (token: string, password?: string, passwordConfirmation?: string) =>
-    apiClient
-      .post<MeResponse>(
-        "/auth/accept_invitation",
-        password ? { token, password, passwordConfirmation } : { token }
-      )
-      .then(toAuthUser),
 
   sessions: () => apiClient.get<SessionSummary[]>("/auth/sessions"),
 

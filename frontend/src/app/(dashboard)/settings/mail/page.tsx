@@ -1,10 +1,8 @@
-import { SettingsDialog } from "@/features/settings/components/settings-dialog"
+import { redirect } from "next/navigation"
 
-export const metadata = { title: "Mail · Settings" }
-
-// Route kept exactly as it was: the backend redirects here after Zoho OAuth
-// (Mail::ConnectionsController#callback). It now opens the Settings modal with
-// the Mail section already selected.
+// The backend redirects here after Zoho OAuth
+// (Mail::ConnectionsController#callback) — see the note in the Calendly
+// equivalent. Mail lives under Integration in All Settings now.
 export default function SettingsMailPage() {
-  return <SettingsDialog initialSection="mail" />
+  redirect("/all-settings?section=mail")
 }

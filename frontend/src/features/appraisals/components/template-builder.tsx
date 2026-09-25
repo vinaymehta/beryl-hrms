@@ -17,7 +17,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { TemplateImportPanel } from "@/features/appraisals/components/template-import-panel"
 import { APPRAISAL_LENSES } from "@/features/appraisals/constants"
 import { useAppraisalTemplate } from "@/features/appraisals/hooks/use-appraisals"
-import { useCreateAppraisalTemplate } from "@/features/appraisals/hooks/use-appraisal-mutations"
+import {
+  useCreateAppraisalTemplate,
+  useUpdateAppraisalTemplate,
+} from "@/features/appraisals/hooks/use-appraisal-mutations"
 import type { AppraisalLens, AppraisalTemplate, TemplateImportPreview } from "@/types/appraisals"
 
 interface DraftQuestion {
@@ -244,8 +247,15 @@ function categoriesFromImport(preview: TemplateImportPreview): DraftCategory[] {
  * The 100% weight rule (§5) is shown live here and enforced again server-side,
  * so a template can't be activated in a state the engine would reject.
  */
-export function TemplateBuilderPage({ sourceId }: { sourceId?: string }) {
-  const { data: source, isLoading } = useAppraisalTemplate(sourceId)
+/**
+ * @param sourceId  open pre-filled as the NEXT VERSION of this template — the
+ *   original is untouched and a new row is created.
+ * @param editId    open THIS template for editing in place. Only ever a draft:
+ *   an active template may have appraisals written against its questions, so
+ *   changing it is a new version, not an edit. The server enforces the same.
+ */
+export function TemplateBuilderPage({ sourceId, editId }: { sourceId?: string; editId?: string }) {
+  const { data: source, isLoading } = useAppraisalTemplate(editId ?? sourceId)
 
   if (sourceId && isLoading) {
     return (
@@ -258,16 +268,17 @@ export function TemplateBuilderPage({ sourceId }: { sourceId?: string }) {
 
   // Keyed so switching source rebuilds the draft state from scratch rather than
   // leaving the previous template's categories sitting in the form.
-  return <TemplateBuilderBody key={source?.id ?? "new"} source={source} />
+  return <TemplateBuilderBody key={source?.id ?? "new"} source={source} editing={Boolean(editId)} />
 }
 
-function TemplateBuilderBody({ source }: { source?: AppraisalTemplate }) {
+function TemplateBuilderBody({ source, editing }: { source?: AppraisalTemplate; editing?: boolean }) {
   const router = useRouter()
   const [name, setName] = useState(source ? `${source.name}` : "")
   const [description, setDescription] = useState(source?.description ?? "")
   const [categories, setCategories] = useState<DraftCategory[]>(() => categoriesFrom(source))
   const [activateNow, setActivateNow] = useState(true)
   const createTemplate = useCreateAppraisalTemplate()
+  const updateTemplate = useUpdateAppraisalTemplate(source?.id ?? "")
 
   /**
    * The parts of an imported workbook the category/question model has no column
@@ -322,33 +333,35 @@ function TemplateBuilderBody({ source }: { source?: AppraisalTemplate }) {
   }
 
   function handleSave() {
-    createTemplate.mutate(
-      {
-        name,
-        description,
-        status: activateNow ? "active" : "draft",
-        ...(structure ? { structure } : {}),
-        categoriesAttributes: categories.map((category, index) => ({
-          name: category.name,
-          description: category.description,
-          lens: category.lens || null,
-          weight: Number(category.weight) || 0,
-          position: index,
-          questionsAttributes: category.questions
-            .filter((question) => question.prompt.trim())
-            .map((question, questionIndex) => ({
-              prompt: question.prompt,
-              description: question.description,
-              position: questionIndex,
-              selfRating: question.selfRating,
-              managerRating: question.managerRating,
-              requiresComment: question.requiresComment,
-              required: question.required,
-            })),
-        })),
-      },
-      { onSuccess: goBack }
-    )
+    const payload = {
+      name,
+      description,
+      status: activateNow ? "active" : "draft",
+      ...(structure ? { structure } : {}),
+      categoriesAttributes: categories.map((category, index) => ({
+        name: category.name,
+        description: category.description,
+        lens: category.lens || null,
+        weight: Number(category.weight) || 0,
+        position: index,
+        questionsAttributes: category.questions
+          .filter((question) => question.prompt.trim())
+          .map((question, questionIndex) => ({
+            prompt: question.prompt,
+            description: question.description,
+            position: questionIndex,
+            selfRating: question.selfRating,
+            managerRating: question.managerRating,
+            requiresComment: question.requiresComment,
+            required: question.required,
+          })),
+      })),
+    }
+
+    // Editing replaces the template in place; anything else creates a new one.
+    // Both go to the same list afterwards.
+    if (editing && source) updateTemplate.mutate(payload, { onSuccess: goBack })
+    else createTemplate.mutate(payload, { onSuccess: goBack })
   }
 
   return (
@@ -363,7 +376,11 @@ function TemplateBuilderBody({ source }: { source?: AppraisalTemplate }) {
           </span>
           <div>
             <h1 className="text-2xl leading-tight font-semibold tracking-tight">
-              {source ? `New version of ${source.name}` : "New appraisal template"}
+              {editing && source
+                ? `Edit ${source.name}`
+                : source
+                  ? `New version of ${source.name}`
+                  : "New appraisal template"}
             </h1>
             <p className="text-xs text-muted-foreground">
               {source

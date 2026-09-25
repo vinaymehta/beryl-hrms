@@ -10,6 +10,7 @@ import type {
   ImportPreview,
   TemplateImportPreview,
   Calibration,
+  PageMeta,
 } from "@/types/appraisals"
 
 function toQuery(params: Record<string, string | number | undefined>): string {
@@ -27,6 +28,12 @@ export const appraisalTemplatesApi = {
   newVersion: (id: string, name?: string) =>
     apiClient.post<AppraisalTemplate>(`/appraisal_templates/${id}/new_version`, { name }),
   activate: (id: string) => apiClient.patch<AppraisalTemplate>(`/appraisal_templates/${id}/activate`, {}),
+  /**
+   * Archives rather than destroying — a cycle that ran against a template must
+   * keep resolving to it. The list hides archived templates, so from here it
+   * reads as a delete; one a cycle has actually used is refused outright.
+   */
+  remove: (id: string) => apiClient.delete<void>(`/appraisal_templates/${id}`),
   /**
    * Upload → Validate → Parse → Preview. Writes nothing: the parsed categories
    * come back into the builder, where they are reviewed and then created
@@ -56,8 +63,13 @@ export const appraisalCyclesApi = {
 }
 
 export const appraisalsApi = {
+  // Paginated on the server. The whole list is never fetched to slice in the
+  // browser — a company with two thousand employees has two thousand
+  // appraisals per cycle.
   list: (params: AppraisalListParams = {}) =>
-    apiClient.get<AppraisalSummary[]>(`/appraisals${toQuery(params as Record<string, string | undefined>)}`),
+    apiClient.getPaginated<{ data: AppraisalSummary[]; meta: PageMeta }>(
+      `/appraisals${toQuery(params as Record<string, string | number | undefined>)}`
+    ),
   get: (id: string) => apiClient.get<AppraisalDetail>(`/appraisals/${id}`),
   submitSelf: (id: string, values: unknown) => apiClient.post<AppraisalDetail>(`/appraisals/${id}/submit_self`, values),
   /**
@@ -76,8 +88,6 @@ export const appraisalsApi = {
   release: (id: string, notes?: string) => apiClient.patch<AppraisalDetail>(`/appraisals/${id}/release`, { notes }),
   acknowledge: (id: string, note?: string) =>
     apiClient.patch<AppraisalDetail>(`/appraisals/${id}/acknowledge`, { note }),
-  compensation: (id: string, values: unknown) =>
-    apiClient.patch<AppraisalDetail>(`/appraisals/${id}/compensation`, values),
   addComment: (id: string, values: unknown) => apiClient.post<AppraisalDetail>(`/appraisals/${id}/add_comment`, values),
   /** The offline workbook (§10.1). Streamed, so it bypasses the JSON client. */
   exportUrl: (id: string) => `${API_BASE}/appraisals/${id}/export`,

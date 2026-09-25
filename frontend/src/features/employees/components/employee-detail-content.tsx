@@ -44,7 +44,6 @@ import {
 import { EmployeeStatusBadge } from "@/features/employees/components/employee-status-badge"
 import { ManagerHierarchyCard } from "@/features/employees/components/manager-hierarchy-card"
 import { EmployeeRecordTabs } from "@/features/employees/components/employee-record-tabs"
-import { EmployeeLevelBadge } from "@/features/employees/components/employee-level-badge"
 import { EmployeeForm } from "@/features/employees/components/employee-form"
 import { AccountAccess } from "@/features/employees/components/account-access"
 import { useEmployee } from "@/features/employees/hooks/use-employees"
@@ -241,10 +240,6 @@ export function EmployeeDetailContent({
                 status={employee.status}
                 className="border border-white/25 bg-white/15 text-white"
               />
-              <EmployeeLevelBadge
-                level={employee.currentLevel}
-                className="border border-white/25 bg-white/15 text-white"
-              />
               {employee.roles.map((role) => (
                 <Badge key={role.id} className="border border-white/25 bg-white/15 text-white">
                   {role.name}
@@ -270,10 +265,6 @@ export function EmployeeDetailContent({
             <InfoRow label="Date of joining" value={employee.dateOfJoining} icon={CalendarDaysIcon} />
             <InfoRow label="Department" value={employee.department?.name ?? null} />
             <InfoRow label="Job title" value={employee.designation?.title ?? null} />
-            <InfoRow
-              label="Current role / level"
-              value={employee.currentLevel ? <EmployeeLevelBadge level={employee.currentLevel} /> : null}
-            />
             <InfoRow label="Status" value={<EmployeeStatusBadge status={employee.status} />} />
           </div>
         </SectionCard>
