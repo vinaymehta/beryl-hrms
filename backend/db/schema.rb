@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_25_200000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_28_140000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -191,6 +191,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_200000) do
     t.text "improvement_areas"
     t.text "next_period_goals"
     t.jsonb "responses", default: {}, null: false
+    t.integer "review_level"
     t.integer "stage", null: false
     t.text "strengths"
     t.datetime "submitted_at", null: false
@@ -296,6 +297,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_200000) do
     t.bigint "primary_manager_id"
     t.datetime "released_at"
     t.bigint "released_by_id"
+    t.jsonb "review_drafts", default: {}, null: false
+    t.integer "review_level"
+    t.bigint "reviewer_ids", default: [], null: false, array: true
     t.bigint "secondary_manager_id"
     t.jsonb "self_appraisal_draft", default: {}, null: false
     t.datetime "self_appraisal_draft_saved_at"
@@ -310,6 +314,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_200000) do
     t.index ["company_id"], name: "index_appraisals_on_company_id"
     t.index ["employee_id"], name: "index_appraisals_on_employee_id"
     t.index ["released_by_id"], name: "index_appraisals_on_released_by_id"
+    t.index ["reviewer_ids"], name: "index_appraisals_on_reviewer_ids", using: :gin
   end
 
   create_table "attendance_records", force: :cascade do |t|
@@ -556,6 +561,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_200000) do
     t.string "timezone", default: "UTC", null: false
     t.datetime "updated_at", null: false
     t.string "work_email_domain"
+    t.boolean "work_email_domain_enforced", default: true, null: false
     t.index ["slug"], name: "index_companies_on_slug", unique: true
   end
 
@@ -740,7 +746,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_200000) do
     t.string "emergency_contact_name"
     t.string "emergency_contact_phone"
     t.string "employee_code", null: false
-    t.integer "employment_type"
+    t.bigint "employment_type_id"
     t.string "first_name", null: false
     t.string "gender"
     t.string "last_name", null: false
@@ -759,7 +765,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_200000) do
     t.index ["company_id"], name: "index_employees_on_company_id"
     t.index ["department_id"], name: "index_employees_on_department_id"
     t.index ["designation_id"], name: "index_employees_on_designation_id"
+    t.index ["employment_type_id"], name: "index_employees_on_employment_type_id"
     t.index ["user_id"], name: "index_employees_on_user_id"
+  end
+
+  create_table "employment_types", force: :cascade do |t|
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.string "name", null: false
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "name"], name: "index_employment_types_on_company_id_and_name", unique: true
+    t.index ["company_id"], name: "index_employment_types_on_company_id"
   end
 
   create_table "jobs", force: :cascade do |t|
@@ -1038,7 +1056,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_200000) do
   add_foreign_key "employees", "companies"
   add_foreign_key "employees", "departments"
   add_foreign_key "employees", "designations"
+  add_foreign_key "employees", "employment_types"
   add_foreign_key "employees", "users"
+  add_foreign_key "employment_types", "companies"
   add_foreign_key "jobs", "companies"
   add_foreign_key "jobs", "departments"
   add_foreign_key "leave_requests", "companies"

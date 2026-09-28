@@ -6,9 +6,15 @@ import type {
   EmployeeListParams,
   Department,
   Designation,
+  EmploymentType,
 } from "@/types/employees"
 import type { Role } from "@/types/auth"
-import type { EmployeePayload, DepartmentFormValues, DesignationFormValues } from "@/features/employees/schemas"
+import type {
+  EmployeePayload,
+  DepartmentFormValues,
+  DesignationFormValues,
+  EmploymentTypeFormValues,
+} from "@/features/employees/schemas"
 
 // GUESS: exact backend query-param names / response shape for employees,
 // departments, designations not confirmed against a live backend (built in
@@ -70,13 +76,24 @@ export const employeesApi = {
   // The code to prefill the add-employee form with. A suggestion the user can
   // overwrite, not a reservation — nothing is consumed by asking.
   nextCode: () => apiClient.get<{ employeeCode: string | null }>("/employees/next_code"),
+
+  // Whether an Employee ID may be used: not taken, and not below the Initial
+  // ID. `message` says which. `excludeId` is the employee being edited, whose
+  // own current code does not count as taken.
+  codeAvailable: (code: string, excludeId?: string) =>
+    apiClient.get<{ available: boolean; message: string | null }>(`/employees/code_available${toQuery({ code, excludeId })}`),
 }
 
 /** Company-wide preferences. One row per company — the Company itself. */
 export const companySettingsApi = {
   get: () => apiClient.get<CompanySettings>("/company_settings"),
-  update: (values: { employeeCodeInitial: string }) =>
-    apiClient.patch<CompanySettings>("/company_settings", values),
+  // Partial: only the keys sent are changed on the server.
+  update: (values: {
+    employeeCodeInitial?: string
+    name?: string
+    workEmailDomain?: string
+    workEmailDomainEnforced?: boolean
+  }) => apiClient.patch<CompanySettings>("/company_settings", values),
 }
 
 /**
@@ -105,4 +122,14 @@ export const designationsApi = {
   update: (id: string, values: Partial<DesignationFormValues>) =>
     apiClient.patch<Designation>(`/designations/${id}`, values),
   archive: (id: string) => apiClient.patch<Designation>(`/designations/${id}`, { status: "archived" }),
+  // Archives server-side, and the list leaves archived rows out — as departments.
+  remove: (id: string) => apiClient.delete<void>(`/designations/${id}`),
+}
+
+export const employmentTypesApi = {
+  list: () => apiClient.get<EmploymentType[]>("/employment_types"),
+  create: (values: EmploymentTypeFormValues) => apiClient.post<EmploymentType>("/employment_types", values),
+  update: (id: string, values: Partial<EmploymentTypeFormValues>) =>
+    apiClient.patch<EmploymentType>(`/employment_types/${id}`, values),
+  remove: (id: string) => apiClient.delete<void>(`/employment_types/${id}`),
 }

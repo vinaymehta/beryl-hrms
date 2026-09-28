@@ -1,6 +1,8 @@
-# One immutable snapshot of an appraisal: V1 (employee self-appraisal), V2
-# (primary manager), V3 (secondary manager), Final (final manager/calibration),
-# and any further revision a return-for-correction produces.
+# One immutable snapshot of an appraisal: the employee's self-appraisal, one
+# manager_review per manager level (`review_level` says which), the Final
+# review by Admin/HR, and any further revision a return-for-correction adds.
+# primary_review / secondary_review are the old fixed stages, kept for rows
+# written before the level-based workflow.
 #
 # IMMUTABLE is enforced, not merely intended: #readonly? refuses every update
 # after create, so no controller, service or console slip can rewrite history.
@@ -15,7 +17,8 @@ class AppraisalRevision < ApplicationRecord
     self_appraisal: 0,
     primary_review: 1,
     secondary_review: 2,
-    final_review: 3
+    final_review: 3,
+    manager_review: 4
   }, prefix: true, validate: true
 
   belongs_to :company

@@ -1,9 +1,7 @@
 import { redirect } from "next/navigation"
 
-// Sessions are no longer a page of their own — they live in Account &
-// Security alongside the password, which is where the reference design puts
-// them and where people look for them. The route stays so existing links and
-// bookmarks still land somewhere correct.
+// Sessions are a tab of the Settings page, not a page of their own. The route
+// stays so existing links and bookmarks still land on that tab.
 export default function SessionsPage() {
-  redirect("/settings")
+  redirect("/settings?tab=sessions")
 }

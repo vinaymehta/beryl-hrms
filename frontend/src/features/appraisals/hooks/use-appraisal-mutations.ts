@@ -62,6 +62,15 @@ export function useSaveSelfAppraisalDraft(id: string) {
   })
 }
 
+export function useSaveReviewDraft(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (values: unknown) => appraisalsApi.saveReviewDraft(id, values),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["appraisals", id] }),
+    onError: (error) => toast.error(errorMessage(error, "Couldn't save your review draft.")),
+  })
+}
+
 export function useSubmitReview(id: string) {
   return useAppraisalAction(
     id,

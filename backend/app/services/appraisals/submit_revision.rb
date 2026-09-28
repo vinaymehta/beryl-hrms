@@ -1,7 +1,6 @@
 module Appraisals
-  # Creates one immutable revision — V1 for the employee's self-appraisal, V2 for
-  # the primary manager, V3 for the secondary, and the final reviewer's version
-  # after that. The version number comes from the existing history, so a
+  # Creates one immutable revision — the employee's self-appraisal, one per
+  # manager level, and the Final review by Admin/HR after them. The version number comes from the existing history, so a
   # returned-and-resubmitted appraisal simply adds another.
   #
   # Nothing is ever overwritten. A correction is a NEW revision sitting on top of
@@ -17,8 +16,7 @@ module Appraisals
 
     STAGE_FOR_STATUS = {
       "self_appraisal_open" => :self_appraisal,
-      "primary_review" => :primary_review,
-      "secondary_review" => :secondary_review,
+      "manager_review" => :manager_review,
       "final_review" => :final_review
     }.freeze
 
@@ -46,6 +44,8 @@ module Appraisals
       ActiveRecord::Base.transaction do
         revision = @appraisal.revisions.create!(
           stage: @stage,
+          # Which manager level wrote it, for a manager_review.
+          review_level: (@appraisal.review_level if @stage == "manager_review"),
           author_user: @author_user,
           author_employee: @author_user&.employee_record,
           responses: template_responses,

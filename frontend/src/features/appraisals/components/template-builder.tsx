@@ -3,7 +3,13 @@
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
-  PlusIcon, Trash2Icon, ArrowLeftIcon, TriangleAlertIcon, CheckCircle2Icon, LayersIcon, ChevronDownIcon,
+  PlusIcon,
+  Trash2Icon,
+  ArrowLeftIcon,
+  TriangleAlertIcon,
+  CheckCircle2Icon,
+  LayersIcon,
+  ChevronDownIcon,
 } from "lucide-react"
 import { cn } from "cn"
 
@@ -12,16 +18,22 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TemplateImportPanel } from "@/features/appraisals/components/template-import-panel"
-import { APPRAISAL_LENSES } from "@/features/appraisals/constants"
+import {
+  ImportedSectionsEditor,
+  withDerivedSections,
+} from "@/features/appraisals/components/imported-sections-editor"
 import { useAppraisalTemplate } from "@/features/appraisals/hooks/use-appraisals"
 import {
   useCreateAppraisalTemplate,
   useUpdateAppraisalTemplate,
 } from "@/features/appraisals/hooks/use-appraisal-mutations"
-import type { AppraisalLens, AppraisalTemplate, TemplateImportPreview } from "@/types/appraisals"
+import type {
+  AppraisalTemplate,
+  TemplateImportPreview,
+  TemplateStructure,
+} from "@/types/appraisals"
 
 interface DraftQuestion {
   key: string
@@ -37,13 +49,6 @@ interface DraftCategory {
   key: string
   name: string
   description: string
-  /**
-   * "" means the source never said which perspective this area belongs to — a
-   * sectioned company workbook lists its perspectives separately and maps
-   * none of the areas to one. The importer refuses to guess, so the admin
-   * picks here, and saving is blocked until they have.
-   */
-  lens: AppraisalLens | ""
   weight: string
   questions: DraftQuestion[]
 }
@@ -51,11 +56,19 @@ interface DraftCategory {
 const newKey = () => Math.random().toString(36).slice(2)
 
 function blankQuestion(): DraftQuestion {
-  return { key: newKey(), prompt: "", description: "", selfRating: true, managerRating: true, requiresComment: false, required: true }
+  return {
+    key: newKey(),
+    prompt: "",
+    description: "",
+    selfRating: true,
+    managerRating: true,
+    requiresComment: false,
+    required: true,
+  }
 }
 
 function blankCategory(): DraftCategory {
-  return { key: newKey(), name: "", description: "", lens: "past", weight: "", questions: [blankQuestion()] }
+  return { key: newKey(), name: "", description: "", weight: "", questions: [blankQuestion()] }
 }
 
 function categoriesFrom(template?: AppraisalTemplate): DraftCategory[] {
@@ -64,7 +77,6 @@ function categoriesFrom(template?: AppraisalTemplate): DraftCategory[] {
     key: newKey(),
     name: category.name,
     description: category.description ?? "",
-    lens: category.lens,
     weight: String(Number(category.weight)),
     questions: category.questions.map((question) => ({
       key: newKey(),
@@ -83,7 +95,7 @@ function categoriesFrom(template?: AppraisalTemplate): DraftCategory[] {
  * verbatim and saved on the template — see the `structure` column. Null for a
  * flat one-row-per-question sheet, which has no such sections.
  */
-function structureFromImport(preview: TemplateImportPreview): Record<string, unknown> | null {
+function structureFromImport(preview: TemplateImportPreview): TemplateStructure | null {
   // Keyed off whether sections were actually FOUND, not off the layout label.
   // Gating on `layout === "sectioned"` meant one unrecognised heading threw
   // away every section that had been read successfully.
@@ -94,7 +106,7 @@ function structureFromImport(preview: TemplateImportPreview): Record<string, unk
     (preview.ratingGuide?.length ?? 0) > 0
   if (!hasSections) return null
 
-  return {
+  return withDerivedSections({
     title: preview.title ?? null,
     assessmentPeriod: preview.assessmentPeriod ?? null,
     employeeFields: preview.employeeFields ?? { fields: [], missing: [] },
@@ -107,108 +119,7 @@ function structureFromImport(preview: TemplateImportPreview): Record<string, unk
     // decide which steps exist and what each one asks, so a workbook with a
     // renamed, added or removed section changes the form without a code change.
     wizardSections: preview.wizardSections ?? [],
-  }
-}
-
-interface ImportedItem {
-  label: string
-  detail?: string | null
-}
-
-interface ImportedSectionData {
-  label: string
-  items: ImportedItem[]
-}
-
-/**
- * What the workbook carried, as readable lists rather than counts.
- *
- * A bare "Development & career prompts: 5" is a receipt, not a review — it
- * tells you something arrived but not whether it is the right something, which
- * is indistinguishable from the import having silently dropped it. These rows
- * open to show the actual labels the appraisal form will ask.
- */
-function importedSections(structure: Record<string, unknown>): ImportedSectionData[] {
-  const list = <T,>(key: string) => (structure[key] as T[] | undefined) ?? []
-
-  const perspectives = list<{ name?: string; weight?: number; assessmentFocus?: string }>("perspectives")
-  const development = list<{ label?: string; value?: string }>("developmentFields")
-  const finalReview = list<{ label?: string; value?: string }>("finalReviewFields")
-  const guide = list<{ rating?: number; level?: string; definition?: string }>("ratingGuide")
-  const employee =
-    ((structure.employeeFields as { fields?: { label?: string; value?: string }[] })?.fields) ?? []
-  const steps = list<{ title?: string; fields?: unknown[] }>("wizardSections")
-
-  return [
-    {
-      label: "Performance perspectives",
-      items: perspectives.map((row) => ({
-        label: [ row.name, row.weight != null ? `${row.weight}%` : null ].filter(Boolean).join(" · "),
-        detail: row.assessmentFocus,
-      })),
-    },
-    {
-      label: "Development & career prompts",
-      items: development.map((row) => ({ label: row.label ?? "", detail: row.value })),
-    },
-    {
-      label: "Final review fields",
-      items: finalReview.map((row) => ({ label: row.label ?? "", detail: row.value })),
-    },
-    {
-      label: "Rating guide entries",
-      items: guide.map((row) => ({
-        label: [ row.rating, row.level ].filter((part) => part != null && part !== "").join(" · "),
-        detail: row.definition,
-      })),
-    },
-    {
-      label: "Employee information fields",
-      // Mostly blank in a template — the values are filled in per employee.
-      items: employee.map((row) => ({ label: row.label ?? "", detail: row.value })),
-    },
-    {
-      label: "Appraisal form steps",
-      items: steps.map((row) => ({
-        label: row.title ?? "",
-        detail: `${row.fields?.length ?? 0} field${(row.fields?.length ?? 0) === 1 ? "" : "s"}`,
-      })),
-    },
-  ].filter((section) => section.items.length > 0)
-}
-
-function ImportedSection({ section }: { section: ImportedSectionData }) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <li className="overflow-hidden rounded-lg border">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-xs transition-colors hover:bg-muted/50"
-      >
-        <ChevronDownIcon
-          className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
-        />
-        <span className="flex-1">{section.label}</span>
-        <Badge variant="outline" className="tabular-nums">
-          {section.items.length}
-        </Badge>
-      </button>
-
-      {open && (
-        <ul className="grid gap-1 border-t bg-muted/20 px-2.5 py-2">
-          {section.items.map((item, index) => (
-            <li key={`${item.label}-${index}`} className="text-xs">
-              <span className="font-medium text-foreground">{item.label || "(unnamed)"}</span>
-              {item.detail && <span className="text-muted-foreground"> — {item.detail}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </li>
-  )
+  })
 }
 
 /** Parsed spreadsheet → the same draft shape a hand-built template uses. */
@@ -217,7 +128,6 @@ function categoriesFromImport(preview: TemplateImportPreview): DraftCategory[] {
     key: newKey(),
     name: category.name,
     description: category.description ?? "",
-    lens: category.lens ?? "",
     weight: String(category.weight),
     questions: category.questions.map((question) => ({
       key: newKey(),
@@ -271,11 +181,31 @@ export function TemplateBuilderPage({ sourceId, editId }: { sourceId?: string; e
   return <TemplateBuilderBody key={source?.id ?? "new"} source={source} editing={Boolean(editId)} />
 }
 
-function TemplateBuilderBody({ source, editing }: { source?: AppraisalTemplate; editing?: boolean }) {
+function TemplateBuilderBody({
+  source,
+  editing,
+}: {
+  source?: AppraisalTemplate
+  editing?: boolean
+}) {
   const router = useRouter()
   const [name, setName] = useState(source ? `${source.name}` : "")
   const [description, setDescription] = useState(source?.description ?? "")
   const [categories, setCategories] = useState<DraftCategory[]>(() => categoriesFrom(source))
+  // Which categories are expanded. Collapsed rows keep a long template
+  // scannable, like the imported sections below; a brand-new template's first
+  // (blank) category starts open, since it has to be filled in.
+  const [openKeys, setOpenKeys] = useState<Set<string>>(() =>
+    source ? new Set() : new Set(categories.map((category) => category.key))
+  )
+  function toggleCategory(key: string) {
+    setOpenKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
   const [activateNow, setActivateNow] = useState(true)
   const createTemplate = useCreateAppraisalTemplate()
   const updateTemplate = useUpdateAppraisalTemplate(source?.id ?? "")
@@ -286,31 +216,35 @@ function TemplateBuilderBody({ source, editing }: { source?: AppraisalTemplate; 
    * final review and the rating guide. Held here and saved with the template so
    * the import does not quietly throw away most of the document it just read.
    */
-  const [structure, setStructure] = useState<Record<string, unknown> | null>(null)
+  // Starts from the source's own sections when editing or versioning one, so
+  // they stay editable rather than only arriving fresh from an import.
+  const [structure, setStructure] = useState<TemplateStructure | null>(
+    () => source?.structure ?? null
+  )
 
   const totalWeight = useMemo(
     () => categories.reduce((sum, category) => sum + (Number(category.weight) || 0), 0),
     [categories]
   )
   const weightsOk = Math.abs(totalWeight - 100) < 0.01
-  const hasQuestions = categories.every((category) => category.questions.some((q) => q.prompt.trim()))
+  const hasQuestions = categories.every((category) =>
+    category.questions.some((q) => q.prompt.trim())
+  )
   const namesOk = Boolean(name.trim()) && categories.every((category) => category.name.trim())
-  // An imported workbook can arrive without perspectives assigned; the column
-  // is NOT NULL, so saving one would silently store "past".
-  const missingLens = categories.filter((category) => category.lens === "")
   // Activation is what triggers the server's completeness checks, so a draft
   // can be saved incomplete but an active template cannot. The Create button
   // used to be disabled outright by this, which left an admin who imported a
   // workbook staring at a dead button with nothing saying why.
-  const canSave =
-    namesOk && hasQuestions && (!activateNow || (weightsOk && missingLens.length === 0))
+  const canSave = namesOk && hasQuestions && (!activateNow || weightsOk)
   const questionCount = categories.reduce(
     (sum, category) => sum + category.questions.filter((q) => q.prompt.trim()).length,
     0
   )
 
   function patchCategory(key: string, patch: Partial<DraftCategory>) {
-    setCategories((prev) => prev.map((category) => (category.key === key ? { ...category, ...patch } : category)))
+    setCategories((prev) =>
+      prev.map((category) => (category.key === key ? { ...category, ...patch } : category))
+    )
   }
 
   function patchQuestion(categoryKey: string, questionKey: string, patch: Partial<DraftQuestion>) {
@@ -341,7 +275,6 @@ function TemplateBuilderBody({ source, editing }: { source?: AppraisalTemplate; 
       categoriesAttributes: categories.map((category, index) => ({
         name: category.name,
         description: category.description,
-        lens: category.lens || null,
         weight: Number(category.weight) || 0,
         position: index,
         questionsAttributes: category.questions
@@ -401,13 +334,8 @@ function TemplateBuilderBody({ source, editing }: { source?: AppraisalTemplate; 
               onUse={(preview) => {
                 const imported = categoriesFromImport(preview)
                 setCategories(imported)
+                setOpenKeys(new Set())
                 setStructure(structureFromImport(preview))
-                // An imported workbook usually arrives with no perspectives
-                // assigned, and a template missing those cannot be activated.
-                // Leaving "activate now" ticked would just disable Create with
-                // no obvious cause, so it drops to draft and the admin ticks it
-                // back once the perspectives are set.
-                if (imported.some((category) => category.lens === "")) setActivateNow(false)
               }}
             />
           )}
@@ -433,135 +361,163 @@ function TemplateBuilderBody({ source, editing }: { source?: AppraisalTemplate; 
           </section>
 
           {categories.map((category, index) => (
-            <section key={category.key} className="overflow-hidden rounded-xl border bg-card shadow-2xs">
-              <div className="flex items-center justify-between gap-2 border-b px-4 py-2.5">
-                <span className="flex items-center gap-2 text-sm font-semibold">
-                  <span className="flex size-6 items-center justify-center rounded-full border text-[11px] text-muted-foreground">
+            <section
+              key={category.key}
+              className="overflow-hidden rounded-xl border bg-card shadow-2xs"
+            >
+              <div
+                className={cn(
+                  "flex items-center justify-between gap-2 px-4 py-2.5",
+                  openKeys.has(category.key) && "border-b"
+                )}
+              >
+                <button
+                  type="button"
+                  aria-expanded={openKeys.has(category.key)}
+                  onClick={() => toggleCategory(category.key)}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm font-semibold"
+                >
+                  <ChevronDownIcon
+                    className={cn(
+                      "size-4 shrink-0 text-muted-foreground transition-transform",
+                      openKeys.has(category.key) && "rotate-180"
+                    )}
+                  />
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] text-muted-foreground">
                     {index + 1}
                   </span>
-                  Category
-                </span>
+                  <span className="truncate">{category.name.trim() || "Untitled category"}</span>
+                  <Badge variant="outline" className="shrink-0 tabular-nums">
+                    {Number(category.weight) || 0}%
+                  </Badge>
+                  <Badge variant="outline" className="shrink-0 tabular-nums">
+                    {category.questions.filter((q) => q.prompt.trim()).length} question
+                    {category.questions.filter((q) => q.prompt.trim()).length === 1 ? "" : "s"}
+                  </Badge>
+                </button>
                 {categories.length > 1 && (
                   <Button
                     variant="ghost"
                     size="icon-sm"
                     aria-label="Remove category"
-                    onClick={() => setCategories((prev) => prev.filter((c) => c.key !== category.key))}
+                    onClick={() =>
+                      setCategories((prev) => prev.filter((c) => c.key !== category.key))
+                    }
                   >
                     <Trash2Icon className="size-4 text-destructive" />
                   </Button>
                 )}
               </div>
 
-              <div className="grid gap-3.5 p-4">
-                <div className="grid gap-3.5 sm:grid-cols-[2fr_1fr_auto]">
-                  <div className="grid gap-1.5">
-                    <Label htmlFor={`cat-name-${category.key}`}>Name</Label>
-                    <Input
-                      id={`cat-name-${category.key}`}
-                      value={category.name}
-                      onChange={(e) => patchCategory(category.key, { name: e.target.value })}
-                      placeholder="Technical Skills & Code Quality"
-                    />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor={`cat-lens-${category.key}`}>Lens</Label>
-                    <Select
-                      items={APPRAISAL_LENSES.map((l) => ({ value: l.value, label: l.label }))}
-                      value={category.lens}
-                      onValueChange={(next) => patchCategory(category.key, { lens: (next as AppraisalLens) ?? "" })}
-                    >
-                      <SelectTrigger id={`cat-lens-${category.key}`} className="h-9 w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {APPRAISAL_LENSES.map((lens) => (
-                          <SelectItem key={lens.value} value={lens.value}>
-                            {lens.label} ({lens.targetWeight}%)
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid w-24 gap-1.5">
-                    <Label htmlFor={`cat-weight-${category.key}`}>Weight %</Label>
-                    <Input
-                      id={`cat-weight-${category.key}`}
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      value={category.weight}
-                      onChange={(e) => patchCategory(category.key, { weight: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-2 border-t pt-3">
-                  <p className="text-xs font-semibold text-muted-foreground">Questions</p>
-                  {category.questions.map((question) => (
-                    <div key={question.key} className="grid gap-2 rounded-lg border p-2.5">
-                      <div className="flex items-start gap-2">
-                        <Input
-                          value={question.prompt}
-                          aria-label="Question"
-                          onChange={(e) => patchQuestion(category.key, question.key, { prompt: e.target.value })}
-                          placeholder="What is being assessed?"
-                        />
-                        {category.questions.length > 1 && (
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label="Remove question"
-                            onClick={() =>
-                              patchCategory(category.key, {
-                                questions: category.questions.filter((q) => q.key !== question.key),
-                              })
-                            }
-                          >
-                            <Trash2Icon className="size-4 text-destructive" />
-                          </Button>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-                        {([
-                          ["selfRating", "Employee rates"],
-                          ["managerRating", "Manager rates"],
-                          ["requiresComment", "Evidence required"],
-                          ["required", "Required"],
-                        ] as const).map(([key, label]) => (
-                          <Label key={key} className="flex items-center gap-1.5 text-xs font-normal">
-                            <Checkbox
-                              checked={question[key]}
-                              onCheckedChange={(next) =>
-                                patchQuestion(category.key, question.key, { [key]: Boolean(next) })
-                              }
-                            />
-                            {label}
-                          </Label>
-                        ))}
-                      </div>
+              {openKeys.has(category.key) && (
+                <div className="grid gap-3.5 p-4">
+                  <div className="grid gap-3.5 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <div className="grid gap-1.5">
+                      <Label htmlFor={`cat-name-${category.key}`}>Name</Label>
+                      <Input
+                        id={`cat-name-${category.key}`}
+                        value={category.name}
+                        onChange={(e) => patchCategory(category.key, { name: e.target.value })}
+                        placeholder="Technical Skills & Code Quality"
+                      />
                     </div>
-                  ))}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-fit gap-1.5"
-                    onClick={() =>
-                      patchCategory(category.key, { questions: [...category.questions, blankQuestion()] })
-                    }
-                  >
-                    <PlusIcon className="size-3.5" /> Add question
-                  </Button>
+                    <div className="grid w-24 gap-1.5">
+                      <Label htmlFor={`cat-weight-${category.key}`}>Weight %</Label>
+                      <Input
+                        id={`cat-weight-${category.key}`}
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={category.weight}
+                        onChange={(e) => patchCategory(category.key, { weight: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 border-t pt-3">
+                    <p className="text-xs font-semibold text-muted-foreground">Questions</p>
+                    {category.questions.map((question) => (
+                      <div key={question.key} className="grid gap-2 rounded-lg border p-2.5">
+                        <div className="flex items-start gap-2">
+                          <Input
+                            value={question.prompt}
+                            aria-label="Question"
+                            onChange={(e) =>
+                              patchQuestion(category.key, question.key, { prompt: e.target.value })
+                            }
+                            placeholder="What is being assessed?"
+                          />
+                          {category.questions.length > 1 && (
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label="Remove question"
+                              onClick={() =>
+                                patchCategory(category.key, {
+                                  questions: category.questions.filter(
+                                    (q) => q.key !== question.key
+                                  ),
+                                })
+                              }
+                            >
+                              <Trash2Icon className="size-4 text-destructive" />
+                            </Button>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                          {(
+                            [
+                              ["selfRating", "Employee rates"],
+                              ["managerRating", "Manager rates"],
+                              ["requiresComment", "Evidence required"],
+                              ["required", "Required"],
+                            ] as const
+                          ).map(([key, label]) => (
+                            <Label
+                              key={key}
+                              className="flex items-center gap-1.5 text-xs font-normal"
+                            >
+                              <Checkbox
+                                checked={question[key]}
+                                onCheckedChange={(next) =>
+                                  patchQuestion(category.key, question.key, {
+                                    [key]: Boolean(next),
+                                  })
+                                }
+                              />
+                              {label}
+                            </Label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-fit gap-1.5"
+                      onClick={() =>
+                        patchCategory(category.key, {
+                          questions: [...category.questions, blankQuestion()],
+                        })
+                      }
+                    >
+                      <PlusIcon className="size-3.5" /> Add question
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )}
             </section>
           ))}
 
           <Button
             variant="outline"
             className="w-fit gap-1.5"
-            onClick={() => setCategories((prev) => [...prev, blankCategory()])}
+            onClick={() => {
+              const added = blankCategory()
+              setCategories((prev) => [...prev, added])
+              setOpenKeys((prev) => new Set(prev).add(added.key))
+            }}
           >
             <PlusIcon className="size-4" /> Add category
           </Button>
@@ -569,57 +525,31 @@ function TemplateBuilderBody({ source, editing }: { source?: AppraisalTemplate; 
           {/* The rest of the imported workbook. The categories above are only
               part of it, and without this an admin sees seven questions load
               and reasonably concludes the other sections were dropped. They
-              are not edited here — they are saved with the template exactly as
-              the spreadsheet defined them. */}
+              are edited here too, and saved with the template. */}
           {/* Loud when nothing came through. An import that finds the seven
               areas and no sections looks like a success until the appraisal
               form comes up short. */}
           {categories.length > 0 && !structure && (
             <section className="grid gap-1 rounded-xl border border-warning/40 bg-warning/5 p-4">
               <p className="text-sm font-medium text-warning">
-                No perspectives, development prompts, final review or rating guide were read from this file
+                No perspectives, development prompts, final review or rating guide were read from
+                this file
               </p>
               <p className="text-xs text-muted-foreground">
-                Only the performance areas were imported. If the workbook has those sections, check that each
-                one&apos;s heading sits on a row of its own.
+                Only the performance areas were imported. If the workbook has those sections, check
+                that each one&apos;s heading sits on a row of its own.
               </p>
             </section>
           )}
 
-          {structure && (
-            <section className="grid gap-2 rounded-xl border bg-card p-4 shadow-2xs">
-              <div>
-                <h3 className="text-sm font-semibold">Also imported from the workbook</h3>
-                <p className="text-xs text-muted-foreground">
-                  Saved with this template and rendered by the appraisal form. Open one to check what
-                  came through; to change any of it, edit the spreadsheet and import again.
-                </p>
-              </div>
-              <ul className="grid gap-1.5">
-                {importedSections(structure).map((section) => (
-                  <ImportedSection key={section.label} section={section} />
-                ))}
-              </ul>
-            </section>
-          )}
+          {/* Each imported section is its own card, alongside the categories. */}
+          {structure && <ImportedSectionsEditor structure={structure} onChange={setStructure} />}
         </div>
 
         {/* The weight total has to stay in view while categories are being
             edited — it is the one rule that decides whether this can be
             activated at all. */}
         <aside className="grid gap-3 xl:sticky xl:top-4">
-          {missingLens.length > 0 && (
-            <div className="grid gap-1 rounded-xl border border-info/40 bg-info/5 p-4">
-              <p className="text-sm font-medium text-info">
-                {missingLens.length} categor{missingLens.length === 1 ? "y needs" : "ies need"} a perspective
-              </p>
-              <p className="text-xs text-muted-foreground">
-                This workbook lists its perspectives separately and doesn&apos;t say which area belongs to
-                which, so nothing was assumed. You can save this as a draft now; activating it needs all of
-                them set.
-              </p>
-            </div>
-          )}
           <div
             className={cn(
               "grid gap-1.5 rounded-xl border p-4",
@@ -632,14 +562,21 @@ function TemplateBuilderBody({ source, editing }: { source?: AppraisalTemplate; 
                 weightsOk ? "text-success" : "text-warning"
               )}
             >
-              {weightsOk ? <CheckCircle2Icon className="size-4" /> : <TriangleAlertIcon className="size-4" />}
+              {weightsOk ? (
+                <CheckCircle2Icon className="size-4" />
+              ) : (
+                <TriangleAlertIcon className="size-4" />
+              )}
               Weights total {totalWeight.toFixed(2)}%
             </p>
             <p className="text-xs text-muted-foreground">
-              {weightsOk ? "Ready to activate." : "Must total exactly 100% before this can be activated."}
+              {weightsOk
+                ? "Ready to activate."
+                : "Must total exactly 100% before this can be activated."}
             </p>
             <p className="text-xs text-muted-foreground">
-              {categories.length} categor{categories.length === 1 ? "y" : "ies"} · {questionCount} question
+              {categories.length} categor{categories.length === 1 ? "y" : "ies"} · {questionCount}{" "}
+              question
               {questionCount === 1 ? "" : "s"}
             </p>
           </div>
@@ -648,7 +585,6 @@ function TemplateBuilderBody({ source, editing }: { source?: AppraisalTemplate; 
             <Label className="flex items-start gap-2 text-sm font-normal">
               <Checkbox
                 checked={activateNow}
-                disabled={missingLens.length > 0}
                 onCheckedChange={(next) => setActivateNow(Boolean(next))}
               />
               <span>
@@ -663,7 +599,11 @@ function TemplateBuilderBody({ source, editing }: { source?: AppraisalTemplate; 
               disabled={!canSave || createTemplate.isPending}
               onClick={handleSave}
             >
-              {createTemplate.isPending ? "Saving…" : source ? "Create new version" : "Create template"}
+              {createTemplate.isPending
+                ? "Saving…"
+                : source
+                  ? "Create new version"
+                  : "Create template"}
             </Button>
             <Button variant="outline" onClick={goBack}>
               Cancel

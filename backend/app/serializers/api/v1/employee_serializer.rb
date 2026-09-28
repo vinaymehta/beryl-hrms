@@ -5,7 +5,7 @@ module Api
                  :date_of_birth, :gender, :phone, :personal_email,
                  :address_line1, :address_line2, :city, :state, :postal_code, :country,
                  :emergency_contact_name, :emergency_contact_phone, :work_location,
-                 :user_id, :department_id, :designation_id,
+                 :user_id, :department_id, :designation_id, :employment_type_id,
                  # Career level (Intern → Manager). Null for employees whose
                  # level hasn't been recorded; NOT the same thing as the RBAC
                  # roles below — see Employee#current_level.
@@ -15,6 +15,9 @@ module Api
 
       one :department, resource: Api::V1::DepartmentSerializer
       one :designation, resource: Api::V1::DesignationSerializer
+      # The name alone: the full EmploymentTypeSerializer counts employees,
+      # which would be one extra query per row of the employee list.
+      attribute(:employment_type_name) { |employee| employee.employment_type&.name }
 
       # §4's five relationships. Named slots rather than one list, because the
       # position IS the meaning: a consumer must never have to guess which

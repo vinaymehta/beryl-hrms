@@ -13,7 +13,7 @@ module Api
         authorize AppraisalTemplate
         templates = policy_scope(AppraisalTemplate)
                       .includes(categories: :questions)
-                      .order(:name, :version)
+                      .order(created_at: :desc, id: :desc)
         templates = if params[:status].present?
           templates.where(status: params[:status])
         else

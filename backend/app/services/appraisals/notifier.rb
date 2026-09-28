@@ -29,33 +29,48 @@ module Appraisals
 
     # Addressed to whoever is holding it up, which for the self-appraisal stage
     # is the employee themselves — hence the wording switch.
+    # role: :employee, :manager (whoever's level it is now) or :final
+    # (Admin/HR, who hold the Final review between them).
     def self.overdue(appraisal, role:)
-      recipient = recipient_for(appraisal, role)
-      body =
-        if role.to_s == "employee"
-          "Your self-appraisal for #{appraisal.appraisal_cycle.name} is past its deadline."
-        else
-          "#{appraisal.employee.full_name}'s appraisal is past its #{role} review deadline."
-        end
-
-      deliver_to_employee_record(
-        appraisal, recipient,
+      kwargs = {
         category: "appraisal.overdue",
         title: "Appraisal action overdue",
-        body: body,
-        email_context: context_for(appraisal, action: "This is past its deadline", stage: role.to_s.humanize)
-      )
+        email_context: context_for(appraisal, action: "This is past its deadline", stage: stage_label(appraisal))
+      }
+
+      case role.to_s
+      when "employee"
+        deliver_to_employee_record(appraisal, appraisal.employee,
+                                   body: "Your self-appraisal for #{appraisal.appraisal_cycle.name} is past its deadline.", **kwargs)
+      when "manager"
+        deliver_to_employee_record(appraisal, appraisal.current_reviewer,
+                                   body: "#{appraisal.employee.full_name}'s appraisal is past its manager review deadline.", **kwargs)
+      when "final"
+        deliver_to_permission_holders(appraisal, FINAL_REVIEW_PERMISSION,
+                                      body: "#{appraisal.employee.full_name}'s appraisal is past its final review deadline.", **kwargs)
+      end
     end
 
     # "Your review is pending" — sent to whoever the workflow just handed it to.
-    def self.review_pending(appraisal, role:)
-      recipient = recipient_for(appraisal, role)
+    def self.review_pending(appraisal, level:)
       deliver_to_employee_record(
-        appraisal, recipient,
+        appraisal, appraisal.reviewer_id_at(level) && Employee.find_by(id: appraisal.reviewer_id_at(level)),
         category: "appraisal.review_pending",
         title: "An appraisal is waiting for your review",
-        body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}. You are the #{role} reviewer.",
-        email_context: context_for(appraisal, action: "Review and submit your assessment", stage: "#{role.to_s.humanize} review")
+        body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}. You are the level #{level} reviewer.",
+        email_context: context_for(appraisal, action: "Review and submit your assessment", stage: "Level #{level} manager review")
+      )
+    end
+
+    # Every manager level has reviewed (or none was assigned). The Final review
+    # is Admin/HR's — whoever holds appraisals.view_all — so all of them hear.
+    def self.final_review_pending(appraisal, except_user: nil)
+      deliver_to_permission_holders(
+        appraisal, FINAL_REVIEW_PERMISSION, except_user: except_user,
+        category: "appraisal.review_pending",
+        title: "An appraisal is ready for final review",
+        body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}. The manager reviews are complete.",
+        email_context: context_for(appraisal, action: "Complete the final review", stage: "Final review")
       )
     end
 
@@ -104,11 +119,9 @@ module Appraisals
       )
     end
 
-    # Everyone who reviewed it, including the secondary — they authored a
-    # version of this appraisal, so leaving them out of its closing beat was an
-    # oversight rather than a rule.
+    # Every manager level that reviewed it — each authored a version of it.
     def self.acknowledged(appraisal)
-      %i[final secondary primary].filter_map { |role| recipient_for(appraisal, role) }.uniq.each do |recipient|
+      appraisal.reviewers.each do |recipient|
         deliver_to_employee_record(
           appraisal, recipient,
           category: "appraisal.acknowledged",
@@ -119,13 +132,11 @@ module Appraisals
       end
     end
 
-    def self.recipient_for(appraisal, role)
-      case role.to_s
-      when "employee" then appraisal.employee
-      when "primary" then appraisal.primary_manager
-      when "secondary" then appraisal.secondary_manager
-      when "final" then appraisal.final_manager
-      end
+    # Who holds the Final review: Admin/HR, by permission rather than by name.
+    FINAL_REVIEW_PERMISSION = "appraisals.view_all".freeze
+
+    def self.stage_label(appraisal)
+      appraisal.manager_review? ? "Level #{appraisal.review_level} manager review" : appraisal.status.humanize
     end
 
     def self.deadline_phrase(date)

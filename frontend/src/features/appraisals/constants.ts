@@ -13,15 +13,20 @@ export const APPRAISAL_STATUSES: {
   label: string
   className: string
   /** Whose move it is at this point — shown next to the status badge. */
-  owner: "employee" | "primary" | "secondary" | "final" | "hr" | null
+  owner: "employee" | "manager" | "admin" | "primary" | "secondary" | "final" | "hr" | null
 }[] = [
   { value: "draft", label: "Draft", className: "bg-muted text-muted-foreground", owner: "hr" },
   { value: "self_appraisal_open", label: "Self-appraisal open", className: "bg-info/15 text-info", owner: "employee" },
   { value: "employee_submitted", label: "Submitted", className: "bg-info/15 text-info", owner: "primary" },
+  // One entry, drawn once per manager level — see appraisalStatusLabel.
+  { value: "manager_review", label: "Manager review", className: "bg-role-hr/15 text-role-hr", owner: "manager" },
+  // The old fixed manager stages. Nothing enters them now; kept so any
+  // historical row still has a label.
   { value: "primary_review", label: "Primary review", className: "bg-role-hr/15 text-role-hr", owner: "primary" },
   { value: "secondary_review", label: "Secondary review", className: "bg-role-hr/15 text-role-hr", owner: "secondary" },
-  { value: "final_review", label: "Final review", className: "bg-role-admin/15 text-role-admin", owner: "final" },
-  { value: "appraisal_discussion", label: "Discussion", className: "bg-warning/15 text-warning", owner: "final" },
+  // Admin/HR's, after every manager level.
+  { value: "final_review", label: "Final review", className: "bg-role-admin/15 text-role-admin", owner: "admin" },
+  { value: "appraisal_discussion", label: "Discussion", className: "bg-warning/15 text-warning", owner: "admin" },
   { value: "compensation_approval", label: "Compensation approval", className: "bg-warning/15 text-warning", owner: "hr" },
   { value: "released", label: "Released", className: "bg-success/15 text-success", owner: "employee" },
   { value: "employee_acknowledged", label: "Acknowledged", className: "bg-success/15 text-success", owner: "hr" },
@@ -36,16 +41,26 @@ export function appraisalStatusMeta(status: AppraisalStatus) {
   return APPRAISAL_STATUSES.find((s) => s.value === status) ?? APPRAISAL_STATUSES[0]
 }
 
-/** Employee → V1 → Primary → V2 → Secondary → V3 → Final. */
+/** "Level 2 manager review" rather than a bare "Manager review", when the level is known. */
+export function appraisalStatusLabel(status: AppraisalStatus, reviewLevel?: number | null) {
+  if (status === "manager_review" && reviewLevel) return `Level ${reviewLevel} manager review`
+  return appraisalStatusMeta(status).label
+}
+
+/** Employee → each manager level → Final (Admin/HR). */
 export const APPRAISAL_STAGES: { value: AppraisalStage; label: string; shortLabel: string; className: string }[] = [
   { value: "self_appraisal", label: "Employee self-appraisal", shortLabel: "Self", className: "bg-info/15 text-info" },
+  { value: "manager_review", label: "Manager review", shortLabel: "Manager", className: "bg-role-hr/15 text-role-hr" },
   { value: "primary_review", label: "Primary manager review", shortLabel: "Primary", className: "bg-role-hr/15 text-role-hr" },
   { value: "secondary_review", label: "Secondary manager review", shortLabel: "Secondary", className: "bg-muted text-muted-foreground" },
-  { value: "final_review", label: "Final review / calibration", shortLabel: "Final", className: "bg-role-admin/15 text-role-admin" },
+  { value: "final_review", label: "Final review (Admin/HR)", shortLabel: "Final", className: "bg-role-admin/15 text-role-admin" },
 ]
 
-export function appraisalStageMeta(stage: AppraisalStage) {
-  return APPRAISAL_STAGES.find((s) => s.value === stage) ?? APPRAISAL_STAGES[0]
+/** A stage's labels, with the manager level spelled out when there is one. */
+export function appraisalStageMeta(stage: AppraisalStage, reviewLevel?: number | null) {
+  const meta = APPRAISAL_STAGES.find((s) => s.value === stage) ?? APPRAISAL_STAGES[0]
+  if (stage !== "manager_review" || !reviewLevel) return meta
+  return { ...meta, label: `Level ${reviewLevel} manager review`, shortLabel: `Level ${reviewLevel}` }
 }
 
 /** The scope's headline split, shown as guidance when weighting a template. */
@@ -106,6 +121,35 @@ export const RATING_SCALE = [
     requiresComment: true,
   },
 ]
+
+/** One point on a rating scale. */
+export interface RatingScaleOption {
+  value: number
+  label: string
+  description: string
+  requiresComment: boolean
+}
+
+/**
+ * The rating scale an appraisal actually uses: its TEMPLATE's rating guide
+ * when the template has one, the built-in scale otherwise.
+ *
+ * Ratings are stored as whole numbers 1–5 (AppraisalAnswer), so guide rows
+ * outside that range are left out rather than offered and then refused. The
+ * evidence rule stays the server's: 1, 2, 4 and 5 need a comment.
+ */
+export function ratingScaleFrom(guide?: { rating: number | null; level: string | null; definition: string | null }[] | null): RatingScaleOption[] {
+  const rows = (guide ?? [])
+    .filter((row) => row.rating != null && Number.isInteger(row.rating) && row.rating >= 1 && row.rating <= 5)
+    .map((row) => ({
+      value: row.rating!,
+      label: row.level?.trim() || `Rating ${row.rating}`,
+      description: row.definition ?? "",
+      requiresComment: RATINGS_REQUIRING_COMMENT.includes(row.rating!),
+    }))
+  const unique = [...new Map(rows.map((row) => [row.value, row])).values()]
+  return unique.length ? unique.sort((a, b) => a.value - b.value) : RATING_SCALE
+}
 
 /**
  * A self-rating this far above the reviewer's own is worth pointing at during

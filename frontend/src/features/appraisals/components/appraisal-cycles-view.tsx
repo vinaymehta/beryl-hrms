@@ -56,24 +56,24 @@ function ProgressBar({ cycle }: { cycle: AppraisalCycle }) {
 }
 
 /**
- * Editing and deleting are for a cycle that has not begun.
+ * Editing and deleting are locked only while a cycle is running.
  *
- * Once it is running, people are writing self-appraisals against it and
- * reviewers are working to its deadlines; changing the template or the dates
- * underneath them, or removing it outright, would invalidate work already
- * done. Once it is closed it is a record, and records are not edited.
+ * While it runs, people are writing self-appraisals against it and reviewers
+ * are working to its deadlines; removing it underneath them would throw that
+ * work away mid-flight. Close it first.
  *
- * The API will still delete a started cycle — that capability exists for a
- * cycle created wrongly — but it is not something to offer behind an ordinary
- * button.
+ * A closed cycle can be edited and deleted again. Editing it is limited by the
+ * form itself — once a cycle has started, its template and employee list are
+ * fixed (CycleForm's `locked`), so only the name, description, dates and review
+ * options change. Deleting it removes its appraisals too, which the
+ * confirmation says in so many words.
  */
 function locked(cycle: AppraisalCycle) {
-  return cycle.status === "active" || cycle.status === "closed"
+  return cycle.status === "active"
 }
 
 function lockReason(cycle: AppraisalCycle) {
   if (cycle.status === "active") return "This cycle is running — close it first"
-  if (cycle.status === "closed") return "A closed cycle is a record and can't be changed"
   return null
 }
 
@@ -169,7 +169,6 @@ export function AppraisalCyclesView({ onOpenCycle }: { onOpenCycle: (cycleId: st
                     <UsersIcon className="size-3" />
                     {cycle.started ? cycle.appraisalCount : cycle.eligibleCount} employees
                   </Badge>
-                  {cycle.secondaryReviewEnabled && <Badge variant="outline">Secondary review</Badge>}
                   {cycle.employeeSubmissionDeadline && (
                     <Badge variant="outline">
                       Due {new Date(cycle.employeeSubmissionDeadline).toLocaleDateString()}
@@ -242,9 +241,11 @@ export function AppraisalCyclesView({ onOpenCycle }: { onOpenCycle: (cycleId: st
           <DialogHeader>
             <DialogTitle>Delete {deleting?.name}?</DialogTitle>
             <DialogDescription>
-              {deleting?.eligibleCount
-                ? `${deleting.eligibleCount} ${deleting.eligibleCount === 1 ? "employee is" : "employees are"} on this cycle's list. Nothing has been appraised yet, so nothing is lost — but the cycle and its list go.`
-                : "The cycle and its employee list will be removed."}
+              {deleting?.started
+                ? "Every appraisal in this cycle — self-appraisals, reviews, ratings and comments — is permanently deleted with it. This can't be undone."
+                : deleting?.eligibleCount
+                  ? `${deleting.eligibleCount} ${deleting.eligibleCount === 1 ? "employee is" : "employees are"} on this cycle's list. Nothing has been appraised yet, so nothing is lost — but the cycle and its list go.`
+                  : "The cycle and its employee list will be removed."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

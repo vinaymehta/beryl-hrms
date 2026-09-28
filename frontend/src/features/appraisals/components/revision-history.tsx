@@ -6,7 +6,8 @@ import { cn } from "cn"
 
 import { Badge } from "@/components/ui/badge"
 import { RevisionBadge } from "@/features/appraisals/components/appraisal-badges"
-import { appraisalStageMeta, APPRAISAL_STATUS_LABELS, RATING_SCALE } from "@/features/appraisals/constants"
+import { appraisalStageMeta, APPRAISAL_STATUS_LABELS } from "@/features/appraisals/constants"
+import { useRatingScale } from "@/features/appraisals/components/rating-select"
 import type { AppraisalDetail, AppraisalRevision } from "@/types/appraisals"
 
 function questionPrompt(appraisal: AppraisalDetail, questionId: string) {
@@ -17,8 +18,8 @@ function questionPrompt(appraisal: AppraisalDetail, questionId: string) {
   return { prompt: "Question", category: "" }
 }
 
-function ratingLabel(rating: number | null) {
-  return RATING_SCALE.find((option) => option.value === rating)?.label ?? null
+function ratingLabel(scale: { value: number; label: string }[], rating: number | null) {
+  return scale.find((option) => option.value === rating)?.label ?? null
 }
 
 const NARRATIVE_ROWS: { key: keyof AppraisalRevision; label: string }[] = [
@@ -88,6 +89,7 @@ function DeltaChip({ delta }: { delta: ReturnType<typeof ratingDelta> }) {
  * leaving it looking like an error.
  */
 export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
+  const scale = useRatingScale()
   // Oldest → newest, which is the order a diff has to be computed in.
   const chronological = useMemo(
     () => [...appraisal.revisions].sort((a, b) => a.versionNumber - b.versionNumber),
@@ -117,7 +119,7 @@ export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
         const open = openId === revision.id
         const index = chronological.findIndex((r) => r.id === revision.id)
         const previous = index > 0 ? chronological[index - 1] : undefined
-        const stage = appraisalStageMeta(revision.stage)
+        const stage = appraisalStageMeta(revision.stage, revision.reviewLevel)
         // The workflow state this version moved the appraisal into — read from
         // the transition log rather than guessed from the stage name.
         const transition = [...appraisal.transitions]
@@ -135,7 +137,7 @@ export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
               onClick={() => setOpenId(open ? null : revision.id)}
               className="flex w-full flex-wrap items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-accent"
             >
-              <RevisionBadge stage={revision.stage} versionNumber={revision.versionNumber} />
+              <RevisionBadge stage={revision.stage} versionNumber={revision.versionNumber} reviewLevel={revision.reviewLevel} />
               <div className="min-w-0">
                 <p className="text-sm font-medium">{revision.authorName ?? "Unknown"}</p>
                 <p className="text-[11px] text-muted-foreground">
@@ -201,8 +203,8 @@ export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
                           </div>
                           <p className="text-[11px] text-muted-foreground">
                             {meta.category}
-                            {meta.category && ratingLabel(answer.rating) && " · "}
-                            {ratingLabel(answer.rating)}
+                            {meta.category && ratingLabel(scale, answer.rating) && " · "}
+                            {ratingLabel(scale, answer.rating)}
                           </p>
                           {answer.comment && <p className="mt-1 text-xs whitespace-pre-wrap">{answer.comment}</p>}
                         </li>

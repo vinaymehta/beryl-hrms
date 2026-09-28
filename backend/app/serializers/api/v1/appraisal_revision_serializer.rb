@@ -4,7 +4,7 @@ module Api
     # decided upstream by AppraisalPolicy#visible_revision_stages — this only
     # shapes the ones already cleared.
     class AppraisalRevisionSerializer < ApplicationSerializer
-      attributes :id, :version_number, :stage, :submitted_at, :calculated_score,
+      attributes :id, :version_number, :stage, :review_level, :submitted_at, :calculated_score,
                  :summary, :achievements, :strengths, :improvement_areas,
                  :training_needs, :next_period_goals
 

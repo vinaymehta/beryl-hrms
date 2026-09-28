@@ -55,6 +55,7 @@ import { generatePassword } from "@/features/employees/generate-password"
 import {
   useDepartments,
   useDesignations,
+  useEmploymentTypes,
   useAssignableManagers,
   useRoles,
 } from "@/features/employees/hooks/use-employees"
@@ -63,10 +64,10 @@ import {
   DEFAULT_EMPLOYEE_ROLE_SLUG,
   MANAGER_LEVELS,
   ADDITIONAL_MANAGER_RELATIONSHIPS,
-  EMPLOYMENT_TYPES,
   OTHER_CITY,
 } from "@/features/employees/constants"
 import { usePermission } from "@/features/auth/hooks/use-permission"
+import { useDebounced } from "@/hooks/use-debounced"
 import { PERMISSIONS, roleBadgeClasses } from "@/constants/permissions"
 import { API_ORIGIN } from "@/lib/api-client"
 import type { Employee, EmployeeSummary, ReviewChainLevel } from "@/types/employees"
@@ -84,6 +85,9 @@ const WORK_LOCATION_OPTIONS = WORK_LOCATIONS.map((value) => ({ value, label: val
  * old ones. The codes are looked up on the way in instead.
  */
 const COUNTRIES = Country.getAllCountries()
+
+/** Every employee is in India; the Country field offers nothing else. */
+const DEFAULT_COUNTRY = "India"
 
 function isoForCountry(name: string) {
   return COUNTRIES.find((c) => c.name === name)?.isoCode ?? null
@@ -274,140 +278,23 @@ function ManagerSlotField({
   isLoading: boolean
   error?: string
 }) {
-  const [isEditing, setIsEditing] = useState(false)
-  const assigned = useMemo(() => options.find((o) => o.value === value), [options, value])
-
-  if (!value) {
-    if (!isEditing) {
-      return (
-        <div className="flex items-center justify-between rounded-lg border border-dashed p-2.5">
-          <span className="text-xs text-muted-foreground">Not assigned</span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs font-medium"
-            onClick={() => setIsEditing(true)}
-          >
-            Assign
-          </Button>
-        </div>
-      )
-    }
-
-    return (
-      <div className="grid gap-1.5">
-        <SearchSelect
-          id={id}
-          aria-label={label}
-          options={options}
-          value={null}
-          onChange={(next) => {
-            onChange(next ?? "")
-            setIsEditing(false)
-          }}
-          onSearchChange={onSearchChange}
-          isLoading={isLoading}
-          invalid={Boolean(error)}
-          clearable={true}
-          placeholder={`Select a ${label.toLowerCase()}`}
-          searchPlaceholder="Search active employees…"
-          emptyMessage="No active employees match that search."
-        />
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-muted-foreground"
-            onClick={() => setIsEditing(false)}
-          >
-            Cancel
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
-  if (isEditing) {
-    return (
-      <div className="grid gap-1.5">
-        <SearchSelect
-          id={id}
-          aria-label={label}
-          options={options}
-          value={value}
-          onChange={(next) => {
-            onChange(next ?? "")
-            setIsEditing(false)
-          }}
-          onSearchChange={onSearchChange}
-          isLoading={isLoading}
-          invalid={Boolean(error)}
-          clearable={true}
-          placeholder={`Select a ${label.toLowerCase()}`}
-          searchPlaceholder="Search active employees…"
-          emptyMessage="No active employees match that search."
-        />
-        <div className="flex items-center justify-between">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-muted-foreground"
-            onClick={() => setIsEditing(false)}
-          >
-            Done
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-            onClick={() => {
-              onChange("")
-              setIsEditing(false)
-            }}
-          >
-            Remove
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
+  // A plain dropdown: pick someone, change them by picking again, clear with
+  // the × — no separate Assign / Change / Remove step.
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border p-2.5">
-      <div className="flex min-w-0 items-center gap-2.5">
-        {assigned?.adornment}
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{assigned?.label ?? "Assigned manager"}</p>
-          {assigned?.description && (
-            <p className="truncate text-xs text-muted-foreground">{assigned.description}</p>
-          )}
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs font-medium"
-          onClick={() => setIsEditing(true)}
-        >
-          Change
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs font-medium text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-          onClick={() => onChange("")}
-        >
-          Remove
-        </Button>
-      </div>
-    </div>
+    <SearchSelect
+      id={id}
+      aria-label={label}
+      options={options}
+      value={value || null}
+      onChange={(next) => onChange(next ?? "")}
+      onSearchChange={onSearchChange}
+      isLoading={isLoading}
+      invalid={Boolean(error)}
+      clearable
+      placeholder={`Select a ${label.toLowerCase()}`}
+      searchPlaceholder="Search active employees…"
+      emptyMessage="No active employees match that search."
+    />
   )
 }
 
@@ -421,6 +308,7 @@ export function EmployeeForm({
   isPending: boolean
 }) {
   const { data: departments } = useDepartments()
+  const { data: employmentTypes } = useEmploymentTypes()
 
   // The next employee ID, from the pattern set in Settings → Other → Initial
   // ID. Only for a NEW employee: an existing one already has a code, and
@@ -475,7 +363,7 @@ export function EmployeeForm({
       departmentId: employee?.department?.id != null ? String(employee.department.id) : "",
       designationId: employee?.designation?.id != null ? String(employee.designation.id) : "",
       currentLevel: employee?.currentLevel ?? "",
-      employmentType: employee?.employmentType ?? "",
+      employmentTypeId: employee?.employmentTypeId != null ? String(employee.employmentTypeId) : "",
       // Faridabad is the head office, so it is the answer for most new hires.
       workLocation: (employee?.workLocation as EmployeeFormValues["workLocation"]) ?? "Faridabad",
       primaryManagerId: managerIdOf(employee, "primary"),
@@ -504,7 +392,7 @@ export function EmployeeForm({
       cityOther: "",
       state: employee?.state ?? "",
       postalCode: employee?.postalCode ?? "",
-      country: employee?.country ?? "",
+      country: employee?.country || DEFAULT_COUNTRY,
       emergencyContactName: employee?.emergencyContactName ?? "",
       emergencyContactPhone: employee?.emergencyContactPhone ?? "",
     },
@@ -524,6 +412,33 @@ export function EmployeeForm({
 
     form.setValue("employeeCode", suggestion)
   }, [employee, suggestion, form])
+
+  // Employee ID checked as it is typed — already in use, or below the Initial
+  // ID — so the problem shows under the field on the spot rather than as a
+  // failed save. Skipped for an unchanged code on an edit.
+  const typedCode = (form.watch("employeeCode") ?? "").trim()
+  const settledCode = useDebounced(typedCode, 400)
+  const checkCode = settledCode !== "" && settledCode !== (employee?.employeeCode ?? "")
+  const { data: codeCheck } = useQuery({
+    queryKey: ["employees", "code-available", settledCode, employee?.id ?? null],
+    queryFn: () => employeesApi.codeAvailable(settledCode, employee?.id),
+    enabled: checkCode,
+    staleTime: 0,
+  })
+  // Only trusted once it answers for what is in the box right now.
+  const codeProblem =
+    checkCode && settledCode === typedCode && codeCheck?.available === false
+      ? (codeCheck.message ?? "This employee ID can't be used")
+      : null
+
+  useEffect(() => {
+    const current = form.getFieldState("employeeCode").error
+    if (codeProblem) {
+      form.setError("employeeCode", { type: "taken", message: codeProblem })
+    } else if (current?.type === "taken") {
+      form.clearErrors("employeeCode")
+    }
+  }, [codeProblem, form])
 
   const departmentId = form.watch("departmentId")
   const { data: designations } = useDesignations(departmentId || undefined)
@@ -657,9 +572,15 @@ export function EmployeeForm({
   const selectedState = form.watch("state") ?? ""
   const selectedCity = form.watch("city") ?? ""
 
+  // India only. An existing record naming another country keeps it as an
+  // option, so opening the form doesn't silently rewrite their address.
+  const savedCountry = employee?.country
   const countryOptions = useMemo(
-    () => COUNTRIES.map((c) => ({ value: c.name, label: c.name })),
-    []
+    () => [
+      { value: DEFAULT_COUNTRY, label: DEFAULT_COUNTRY },
+      ...(savedCountry && savedCountry !== DEFAULT_COUNTRY ? [ { value: savedCountry, label: savedCountry } ] : []),
+    ],
+    [savedCountry]
   )
   const stateOptions = useMemo(
     () => statesOf(selectedCountry).map((st) => ({ value: st.name, label: st.name })),
@@ -708,15 +629,26 @@ export function EmployeeForm({
    * scrolled to, so "nothing happened" can't be the whole story.
    */
   function reportInvalid(errors: FieldErrors<EmployeeFormValues>) {
-    const [ name, error ] = Object.entries(errors)[0] ?? []
+    const entries = Object.entries(errors)
+    const [ name, error ] = entries[0] ?? []
     const message = (error as { message?: string } | undefined)?.message
+    const others = entries.length - 1
 
-    toast.error(message ?? "Some details still need fixing before this can be saved.")
+    // Says how many more there are, so fixing the first isn't followed by a
+    // second failed save with no warning.
+    toast.error(message ?? "Some details still need fixing before this can be saved.", {
+      description: others > 0 ? `${others} more ${others === 1 ? "field needs" : "fields need"} fixing.` : undefined,
+    })
     if (name) {
       form.setFocus(name as keyof EmployeeFormValues)
-      document
-        .querySelector(`[name="${name}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "center" })
+      // Dropdowns (managers, roles, country/state/city) carry no `name`, only
+      // an id — `primaryManagerId` → `employee-primary-manager`.
+      const id =
+        name === "roleIds"
+          ? "employee-roles"
+          : `employee-${name.replace(/Id$/, "").replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`
+      const target = document.querySelector(`[name="${name}"]`) ?? document.getElementById(id)
+      target?.scrollIntoView({ behavior: "smooth", block: "center" })
     }
   }
 
@@ -730,8 +662,16 @@ export function EmployeeForm({
     // — the schema is built before it arrives, and a rule that isn't known yet
     // can't be compiled into it. Worded identically to
     // Employees::AccountProvisioner#reject_foreign_domain.
+    if (codeProblem) {
+      form.setError("employeeCode", { type: "taken", message: codeProblem })
+      reportInvalid({ employeeCode: { type: "taken", message: codeProblem } })
+      return
+    }
+
     if (workEmailDomain && values.workEmail && !values.workEmail.toLowerCase().endsWith(`@${workEmailDomain.toLowerCase()}`)) {
-      form.setError("workEmail", { message: `Work email must end with @${workEmailDomain}` })
+      const message = `Work email must end with @${workEmailDomain}`
+      form.setError("workEmail", { message })
+      reportInvalid({ workEmail: { type: "manual", message } })
       return
     }
 
@@ -740,12 +680,17 @@ export function EmployeeForm({
     // surname until you had also found somebody a manager — and the rule is
     // about who is being hired, not about who is already here.
     if (!employee && canManageManagers && !values.primaryManagerId) {
-      form.setError("primaryManagerId", { message: "A 1st level manager is required" })
+      const message = "A 1st level manager is required"
+      form.setError("primaryManagerId", { message })
+      // These checks run after zod passes, so reportInvalid never saw them —
+      // call it here too, or the save fails with no toast at all.
+      reportInvalid({ primaryManagerId: { type: "manual", message } })
       return
     }
 
     const {
       currentLevel,
+      employmentTypeId,
       primaryManagerId,
       secondaryManagerId,
       finalManagerId,
@@ -760,6 +705,8 @@ export function EmployeeForm({
     const payload: EmployeePayload = {
       ...rest,
       currentLevel: currentLevel || null,
+      // "" is "not set", which has to reach the API as null to clear it.
+      employmentTypeId: employmentTypeId || null,
       // "Other" is a prompt to type one, not a city anybody lives in.
       city: rest.city === OTHER_CITY ? cityOther?.trim() || null : rest.city,
     }
@@ -958,17 +905,17 @@ export function EmployeeForm({
               <div className="grid gap-1.5">
                 <Label htmlFor="employee-employment-type">Employment type</Label>
                 <Select
-                  items={EMPLOYMENT_TYPES}
-                  value={form.watch("employmentType") || null}
-                  onValueChange={(v) => form.setValue("employmentType", v ?? "")}
+                  items={employmentTypes?.map((t) => ({ value: String(t.id), label: t.name }))}
+                  value={form.watch("employmentTypeId") || null}
+                  onValueChange={(v) => form.setValue("employmentTypeId", v ?? "")}
                 >
                   <SelectTrigger id="employee-employment-type" className="h-9 w-full">
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {EMPLOYMENT_TYPES.map((type) => (
-                      <SelectItem key={type.value} value={type.value}>
-                        {type.label}
+                    {employmentTypes?.map((type) => (
+                      <SelectItem key={type.id} value={String(type.id)}>
+                        {type.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1469,12 +1416,11 @@ export function EmployeeForm({
                   options={countryOptions}
                   value={form.watch("country") || null}
                   onChange={(next) => {
-                    form.setValue("country", next ?? "")
+                    form.setValue("country", next ?? DEFAULT_COUNTRY)
                     form.setValue("state", "")
                     form.setValue("city", "")
                     form.setValue("cityOther", "")
                   }}
-                  clearable
                   placeholder="Select a country"
                   searchPlaceholder="Search countries…"
                   emptyMessage="No country matches that search."

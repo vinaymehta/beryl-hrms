@@ -3,6 +3,8 @@ class EmployeePolicy < ApplicationPolicy
   def show? = permission?("employees.view")
   def create? = permission?("employees.create")
   def update? = permission?("employees.update")
+  # Checking whether an Employee ID is free — for whoever may set one.
+  def code_available? = create? || update?
   # Deactivation (status -> inactive/offboarded) is gated on the delete
   # permission per the spec's "prefer deactivation over destroy" guidance —
   # there is no literal DELETE route for employees.

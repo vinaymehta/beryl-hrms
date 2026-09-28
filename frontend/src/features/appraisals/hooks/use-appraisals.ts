@@ -1,6 +1,7 @@
 "use client"
 
-import { keepPreviousData, useQuery } from "@tanstack/react-query"
+import { useEffect } from "react"
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
   appraisalsApi,
@@ -8,6 +9,7 @@ import {
   appraisalTemplatesApi,
   notificationsApi,
 } from "@/features/appraisals/api"
+import { subscribe } from "@/lib/cable"
 import type { AppraisalListParams } from "@/types/appraisals"
 
 export function useAppraisalCycles(status?: string, enabled = true) {
@@ -77,11 +79,27 @@ export function useCalibration(cycleId: string | null) {
   })
 }
 
+/**
+ * The bell's feed, kept current by NotificationsChannel rather than by
+ * polling: the server pushes "changed" the moment a notification is raised or
+ * read, and the list is re-read then. It is also re-read on every (re)connect,
+ * to pick up anything raised while the socket was down.
+ */
 export function useNotifications(enabled = true) {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    if (!enabled) return
+    const refresh = () => queryClient.invalidateQueries({ queryKey: ["notifications"] })
+    return subscribe("NotificationsChannel", { received: refresh, connected: refresh })
+  }, [enabled, queryClient])
+
   return useQuery({
     queryKey: ["notifications"],
     queryFn: notificationsApi.list,
     enabled,
-    refetchInterval: 60_000,
+    // Pushed, so neither a timer nor a window focus needs to ask again.
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   })
 }

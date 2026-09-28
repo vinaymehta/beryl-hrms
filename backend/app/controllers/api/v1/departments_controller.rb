@@ -11,7 +11,7 @@ module Api
       # been deleted.
       def index
         authorize Department
-        scope = policy_scope(Department).active.order(:name)
+        scope = policy_scope(Department).active.order(created_at: :desc, id: :desc)
         render_data(Api::V1::DepartmentSerializer.new(scope).as_json)
       end
 

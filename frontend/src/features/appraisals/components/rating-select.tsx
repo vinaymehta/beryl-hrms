@@ -1,13 +1,26 @@
 "use client"
 
+import { createContext, useContext } from "react"
 import { StarIcon } from "lucide-react"
 import { cn } from "cn"
 
-import { RATING_SCALE } from "@/features/appraisals/constants"
+import { RATING_SCALE, type RatingScaleOption } from "@/features/appraisals/constants"
 import type { TemplateImportRatingGuideRow } from "@/types/appraisals"
 
 /**
- * The 1–5 scale as five stars.
+ * The scale in force for the appraisal on screen — its template's own rating
+ * guide (see ratingScaleFrom). Provided once by AppraisalWorkspace, so every
+ * rating control and label below it follows the template instead of a
+ * built-in list.
+ */
+export const RatingScaleContext = createContext<RatingScaleOption[]>(RATING_SCALE)
+
+export function useRatingScale() {
+  return useContext(RatingScaleContext)
+}
+
+/**
+ * The scale as stars, one per level the template defines.
  *
  * Replaces a row of five full-width labelled buttons, which took the whole
  * width of a card for one value and pushed the evidence box — the part that
@@ -23,7 +36,7 @@ export function RatingSelect({
   onChange,
   disabled,
   labelledBy,
-  scale = RATING_SCALE,
+  scale: scaleProp,
 }: {
   value: number | null
   onChange: (next: number) => void
@@ -31,6 +44,8 @@ export function RatingSelect({
   labelledBy?: string
   scale?: { value: number; label: string }[]
 }) {
+  const contextScale = useRatingScale()
+  const scale = scaleProp ?? contextScale
   const selected = scale.find((option) => option.value === value)
 
   return (
@@ -69,7 +84,7 @@ export function RatingSelect({
             {selected.value} · {selected.label}
           </span>
         ) : (
-          "Select a rating (1–5)"
+          `Select a rating (${scale[0]?.value ?? 1}–${scale.at(-1)?.value ?? 5})`
         )}
       </p>
     </div>

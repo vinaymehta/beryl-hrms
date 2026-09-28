@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query"
 
-import { employeesApi, departmentsApi, designationsApi, rolesApi } from "@/features/employees/api"
+import { employeesApi, departmentsApi, designationsApi, employmentTypesApi, rolesApi } from "@/features/employees/api"
 import type { EmployeeListParams } from "@/types/employees"
 
 export function useEmployees(params: EmployeeListParams) {
@@ -47,6 +47,10 @@ export function useAssignableManagers(search: string, enabled = true) {
  */
 export function useRoles(enabled = true) {
   return useQuery({ queryKey: ["roles"], queryFn: rolesApi.list, enabled })
+}
+
+export function useEmploymentTypes(enabled = true) {
+  return useQuery({ queryKey: ["employment-types"], queryFn: employmentTypesApi.list, enabled })
 }
 
 export function useDesignations(departmentId?: string) {

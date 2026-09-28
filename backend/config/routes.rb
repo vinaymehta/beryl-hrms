@@ -47,7 +47,12 @@ Rails.application.routes.draw do
       resources :employees, only: %i[ index show create update ] do
         # The code to prefill the add-employee form with. A suggestion, not a
         # reservation — see Employees::NextCode.
-        collection { get :next_code }
+        collection do
+          get :next_code
+          # Whether an Employee ID is free, so the form can say so as it is
+          # typed rather than only after Save.
+          get :code_available
+        end
         member do
           patch :deactivate
           # Account access, kept apart from the profile edit above. Neither
@@ -105,6 +110,7 @@ Rails.application.routes.draw do
           # Work in progress. Mutable and unversioned, so a step-by-step
           # self-appraisal can save as it goes without minting V-numbers.
           patch :save_draft
+          patch :save_review_draft
           # A reviewer's independent version at the stage they own.
           post :submit_review
           patch :advance
@@ -144,6 +150,7 @@ Rails.application.routes.draw do
       resources :roles, only: %i[ index ]
       resources :departments, only: %i[ index show create update destroy ]
       resources :designations, only: %i[ index show create update destroy ]
+      resources :employment_types, only: %i[ index show create update destroy ]
 
       resources :leaves, only: %i[ index create update ]
 

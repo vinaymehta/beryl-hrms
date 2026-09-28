@@ -243,16 +243,6 @@ module Appraisals
                       "above it — the importer looks for a row containing only that heading."
         end
 
-        if categories.any?
-          # The scope's lenses are defined by the workbook's own PERFORMANCE
-          # PERSPECTIVE block, which does NOT say which of the seven areas
-          # belongs to which perspective. Guessing a mapping here would invent
-          # a fact the document does not contain, and the guess would then be
-          # indistinguishable from something the company actually decided.
-          warnings << "This workbook lists the performance perspectives separately and does not map each " \
-                      "performance area to one. Assign a perspective to each area before activating the template."
-        end
-
         {
           layout: "sectioned",
           title: meta_line(1),
@@ -296,7 +286,11 @@ module Appraisals
             key: "perspectives",
             kind: "perspectives",
             title: banner_title(:perspectives) || "Performance perspective",
-            caption: "Weighted view across the perspectives this template defines",
+            caption: "Completed by the reviewer",
+            # The workbook gives each perspective a Manager Rating and a Manager
+            # Summary column — the manager's part of the form, not the
+            # employee's, exactly like the final review.
+            audience: "reviewer",
             fields: perspectives.map do |perspective|
               {
                 key: perspective[:key],
@@ -443,7 +437,8 @@ module Appraisals
 
           categories << {
             name: name,
-            # Deliberately nil — see the warning in #parse_sectioned.
+            # Areas carry no lens: the perspectives are their own section,
+            # rated by the manager, not a tag on each area.
             lens: nil,
             weight: weight || 0.0,
             description: evaluated,

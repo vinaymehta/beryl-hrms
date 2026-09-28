@@ -17,7 +17,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { LensBadge } from "@/features/appraisals/components/appraisal-badges"
 import { useAppraisalTemplates } from "@/features/appraisals/hooks/use-appraisals"
 import { useActivateTemplate, useDeleteTemplate } from "@/features/appraisals/hooks/use-appraisal-mutations"
 import { usePermission } from "@/features/auth/hooks/use-permission"
@@ -126,12 +125,6 @@ export function TemplatesView() {
                     </p>
                   </div>
                   <Badge className={STATUS_CLASSES[template.status]}>{template.status}</Badge>
-                </div>
-
-                <div className="flex flex-wrap gap-1">
-                  {[...new Set(template.categories.map((c) => c.lens))].map((lens) => (
-                    <LensBadge key={lens} lens={lens} />
-                  ))}
                 </div>
 
                 <div className="flex items-center gap-1.5 text-xs">

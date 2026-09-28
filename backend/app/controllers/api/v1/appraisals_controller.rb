@@ -20,7 +20,7 @@ module Api
       def index
         authorize Appraisal
         scope = policy_scope(Appraisal).includes(
-          :appraisal_cycle, :employee, :primary_manager, :final_manager, :revisions
+          :appraisal_cycle, :employee, :revisions
         )
         scope = scope.where(appraisal_cycle_id: params[:cycleId]) if params[:cycleId].present?
         scope = scope.where(status: params[:status]) if params[:status].present?
@@ -86,7 +86,8 @@ module Api
           appraisal.update!(self_appraisal_draft: {}, self_appraisal_draft_saved_at: nil)
 
           ::Appraisals::Workflow.new(appraisal: appraisal, to: :employee_submitted, actor: Current.user).call
-          ::Appraisals::Workflow.new(appraisal: appraisal, to: :primary_review, actor: Current.user).call
+          to, level = appraisal.first_review_step
+          ::Appraisals::Workflow.new(appraisal: appraisal, to: to, level: level, actor: Current.user).call
         end
 
         ::Audit::Record.call(action: "appraisal.self_submitted", auditable: appraisal, request: request)
@@ -114,18 +115,45 @@ module Api
         render_detail(appraisal)
       end
 
+      # A reviewer's work in progress at the stage they own — saved as they step
+      # through the form, so leaving half-way loses nothing. Mutable,
+      # unversioned, and visible to its author alone (DetailPresenter). The
+      # workflow does not move; only #submit_review does that.
+      def save_review_draft
+        appraisal = find_appraisal
+        authorize appraisal, :save_review_draft?
+
+        drafts = appraisal.review_drafts.merge(
+          appraisal.review_draft_key => {
+            "author_user_id" => Current.user.id,
+            "answers" => answer_params.map { |answer| answer.transform_keys(&:to_s) },
+            "narrative" => narrative_params.transform_keys(&:to_s),
+            "responses" => response_params,
+            "step" => params[:step].presence&.to_i,
+            "saved_at" => Time.current.iso8601
+          }
+        )
+        appraisal.update!(review_drafts: drafts)
+
+        render_detail(appraisal)
+      end
+
       # A reviewer's own independent version, at the stage they own.
       def submit_review
         appraisal = find_appraisal
         authorize appraisal, :submit_review?
 
         ActiveRecord::Base.transaction do
+          draft_key = appraisal.review_draft_key
           ::Appraisals::SubmitRevision.call(
             appraisal: appraisal, stage: appraisal.status, author_user: Current.user,
             answers: answer_params, narrative: narrative_params, responses: response_params
           )
+          # Submitted, so the draft for this level has served its purpose.
+          appraisal.update!(review_drafts: appraisal.review_drafts.except(draft_key))
+          to, level = next_step_after_review(appraisal)
           ::Appraisals::Workflow.new(
-            appraisal: appraisal, to: next_status_after_review(appraisal), actor: Current.user, notes: params[:notes]
+            appraisal: appraisal, to: to, level: level, actor: Current.user, notes: params[:notes]
           ).call
         end
 
@@ -274,7 +302,7 @@ module Api
         end
         def find_appraisal
           policy_scope(Appraisal).includes(
-            :appraisal_cycle, :employee, :primary_manager, :secondary_manager, :final_manager,
+            :appraisal_cycle, :employee,
             :transitions, :score_overrides, revisions: :answers
           ).find(params[:id])
         end
@@ -285,26 +313,23 @@ module Api
 
         def own_employee_id = Current.user.employee_record&.id
 
-        # "Waiting on me" means the appraisal is at the stage I own — not merely
-        # that I appear somewhere in its reviewer chain.
+        # "Waiting on me" means the appraisal is at the step I own right now:
+        # my manager level's turn, or — for Admin/HR — the Final review and
+        # discussion. Postgres arrays are 1-based, so reviewer_ids[review_level]
+        # is exactly the current reviewer.
         def pending_for_reviewer(scope)
           me = own_employee_id
-          return scope.none if me.nil?
+          mine = me ? scope.where(status: Appraisal.statuses[:manager_review])
+                           .where("appraisals.reviewer_ids[appraisals.review_level] = ?", me) : scope.none
+          return mine unless Current.user.permission?("appraisals.view_all")
 
-          scope.where(primary_manager_id: me, status: Appraisal.statuses[:primary_review])
-               .or(scope.where(secondary_manager_id: me, status: Appraisal.statuses[:secondary_review]))
-               .or(scope.where(final_manager_id: me, status: [
-                 Appraisal.statuses[:final_review],
-                 Appraisal.statuses[:appraisal_discussion],
-                 Appraisal.statuses[:compensation_approval]
-               ]))
+          mine.or(scope.where(status: [ Appraisal.statuses[:final_review], Appraisal.statuses[:appraisal_discussion] ]))
         end
 
-        def next_status_after_review(appraisal)
+        def next_step_after_review(appraisal)
           case appraisal.status
-          when "primary_review" then appraisal.next_review_status
-          when "secondary_review" then :final_review
-          when "final_review" then :appraisal_discussion
+          when "manager_review" then appraisal.step_after_manager_review
+          when "final_review" then [ :appraisal_discussion, nil ]
           else raise ::Appraisals::Workflow::Error, "There is no review to submit at this stage"
           end
         end

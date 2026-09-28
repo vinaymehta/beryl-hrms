@@ -204,17 +204,50 @@ export function EmployeeDetailContent({
 
   return (
     <div className="grid gap-4">
-      {showBack && (
-        <div className="flex items-center justify-between">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 text-xs font-medium shadow-2xs hover:bg-muted/80"
-            onClick={handleBack}
-          >
-            <ArrowLeftIcon className="size-4" />
-            {backLabel}
-          </Button>
+      {/* Back on the left, the record's actions on the right — above the
+          header ribbon, so they are in reach without scrolling. Actions are
+          hidden entirely for a viewer who can do neither thing, rather than
+          offering buttons the API would refuse. */}
+      {(showBack || canUpdate || canDeactivate) && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {showBack ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs font-medium shadow-2xs hover:bg-muted/80"
+              onClick={handleBack}
+            >
+              <ArrowLeftIcon className="size-4" />
+              {backLabel}
+            </Button>
+          ) : (
+            <span />
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {canUpdate && (
+              <Button variant="outline" className="gap-1.5" onClick={() => setEditOpen(true)}>
+                <PencilIcon className="size-4" /> Edit
+              </Button>
+            )}
+            {canDeactivate &&
+              (employee.status === "active" ? (
+                <Button
+                  variant="outline"
+                  className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setConfirmOpen(true)}
+                >
+                  <UserMinusIcon className="size-4" /> Deactivate
+                </Button>
+              ) : (
+                <Button
+                  className="gap-1.5 bg-role-hr text-role-hr-foreground hover:bg-role-hr/90 shadow-2xs"
+                  disabled={reactivateEmployee.isPending}
+                  onClick={() => reactivateEmployee.mutate(employee.id)}
+                >
+                  <UserCheckIcon className="size-4" /> Reactivate
+                </Button>
+              ))}
+          </div>
         </div>
       )}
 
@@ -310,39 +343,6 @@ export function EmployeeDetailContent({
           </div>
         }
       />
-
-      {/* Sticky bottom action bar — matches the Edit/Add Employee sheets'
-          footer convention instead of living in the header, where it used
-          to clip in the narrower right-side panel. Hidden entirely for a
-          viewer who can do neither thing, rather than offering buttons the
-          API would refuse. */}
-      {(canUpdate || canDeactivate) && (
-        <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2 rounded-xl border bg-background p-3 shadow-[0_-1px_8px_rgba(0,0,0,0.06)]">
-          {canUpdate && (
-            <Button variant="outline" className="gap-1.5" onClick={() => setEditOpen(true)}>
-              <PencilIcon className="size-4" /> Edit
-            </Button>
-          )}
-          {canDeactivate &&
-            (employee.status === "active" ? (
-              <Button
-                variant="outline"
-                className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => setConfirmOpen(true)}
-              >
-                <UserMinusIcon className="size-4" /> Deactivate
-              </Button>
-            ) : (
-              <Button
-                className="gap-1.5 bg-role-hr text-role-hr-foreground hover:bg-role-hr/90 shadow-2xs"
-                disabled={reactivateEmployee.isPending}
-                onClick={() => reactivateEmployee.mutate(employee.id)}
-              >
-                <UserCheckIcon className="size-4" /> Reactivate
-              </Button>
-            ))}
-        </div>
-      )}
 
       <Sheet open={editOpen} onOpenChange={setEditOpen}>
         <SheetContent side="right" className="w-full p-0 flex flex-col gap-0 sm:w-[45vw] sm:min-w-180 sm:max-w-275">

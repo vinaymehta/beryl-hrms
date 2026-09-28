@@ -11,21 +11,26 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      // Top-centre and wider than sonner's 356px default, with colour by
+      // type: the bottom-corner default was small enough to go unnoticed.
+      position="top-center"
+      richColors
+      closeButton
       icons={{
         success: (
-          <CircleCheckIcon className="size-4" />
+          <CircleCheckIcon className="size-5" />
         ),
         info: (
-          <InfoIcon className="size-4" />
+          <InfoIcon className="size-5" />
         ),
         warning: (
-          <TriangleAlertIcon className="size-4" />
+          <TriangleAlertIcon className="size-5" />
         ),
         error: (
-          <OctagonXIcon className="size-4" />
+          <OctagonXIcon className="size-5" />
         ),
         loading: (
-          <Loader2Icon className="size-4 animate-spin" />
+          <Loader2Icon className="size-5 animate-spin" />
         ),
       }}
       style={
@@ -34,11 +39,14 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
           "--border-radius": "var(--radius)",
+          "--width": "min(480px, calc(100vw - 32px))",
         } as React.CSSProperties
       }
       toastOptions={{
         classNames: {
-          toast: "cn-toast",
+          toast: "cn-toast !px-5 !py-4 !text-base !shadow-lg",
+          title: "!text-base !font-semibold",
+          description: "!text-sm",
         },
       }}
       {...props}

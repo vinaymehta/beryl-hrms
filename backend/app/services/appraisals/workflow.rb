@@ -9,16 +9,21 @@ module Appraisals
   class Workflow
     class Error < StandardError; end
 
-    # from => permitted next states. The branch after a primary review is
-    # resolved at runtime by Appraisal#next_review_status, so both are allowed
-    # here and the caller doesn't choose.
+    # from => permitted next states. Which manager level comes next, or whether
+    # the Final review does, is resolved by Appraisal#first_review_step and
+    # #step_after_manager_review — the caller doesn't choose.
+    #
+    # manager_review → manager_review is one level handing to the next.
+    # primary_review / secondary_review are the old fixed stages; nothing enters
+    # them now, but they keep exits so no historical row is stranded.
     ALLOWED = {
       "draft" => %w[self_appraisal_open],
       "self_appraisal_open" => %w[employee_submitted],
-      "employee_submitted" => %w[primary_review self_appraisal_open],
-      "primary_review" => %w[secondary_review final_review self_appraisal_open],
-      "secondary_review" => %w[final_review primary_review self_appraisal_open],
-      "final_review" => %w[appraisal_discussion secondary_review primary_review self_appraisal_open],
+      "employee_submitted" => %w[manager_review final_review self_appraisal_open],
+      "manager_review" => %w[manager_review final_review self_appraisal_open],
+      "primary_review" => %w[manager_review final_review self_appraisal_open],
+      "secondary_review" => %w[manager_review final_review self_appraisal_open],
+      "final_review" => %w[appraisal_discussion manager_review self_appraisal_open],
       # Compensation & Promotion is withdrawn from the workflow. The status
       # itself is NOT removed from Appraisal — historical appraisals sit in it
       # and their rows must keep resolving — but nothing can move INTO it any
@@ -36,11 +41,13 @@ module Appraisals
 
     def self.call(...) = new(...).call
 
-    def initialize(appraisal:, to:, actor: Current.user, notes: nil)
+    # @param level [Integer, nil] the manager level, when moving to manager_review.
+    def initialize(appraisal:, to:, actor: Current.user, notes: nil, level: nil)
       @appraisal = appraisal
       @to = to.to_s
       @actor = actor
       @notes = notes
+      @level = level
     end
 
     def call
@@ -49,9 +56,14 @@ module Appraisals
         raise Error, "An appraisal can't move from #{from.humanize.downcase} to #{@to.humanize.downcase}"
       end
 
+      if @to == "manager_review" && @appraisal.reviewer_id_at(@level).nil?
+        raise Error, "There is no manager at level #{@level} to review this appraisal"
+      end
+
       ActiveRecord::Base.transaction do
-        @appraisal.update!(status: @to)
-        self.class.record_transition(@appraisal, from: from, to: @to, actor: @actor, notes: @notes)
+        @appraisal.update!(status: @to, review_level: @to == "manager_review" ? @level : nil)
+        notes = @notes.presence || ("Level #{@level} manager review" if @to == "manager_review")
+        self.class.record_transition(@appraisal, from: from, to: @to, actor: @actor, notes: notes)
       end
 
       announce(from)
@@ -75,9 +87,9 @@ module Appraisals
       # the transaction commits.
       def announce(from)
         case @to
-        when "primary_review" then Notifier.review_pending(@appraisal, role: :primary)
-        when "secondary_review" then Notifier.review_pending(@appraisal, role: :secondary)
-        when "final_review" then Notifier.review_pending(@appraisal, role: :final)
+        when "manager_review" then Notifier.review_pending(@appraisal, level: @appraisal.review_level)
+        # No one person is named for the Final review — it is Admin/HR's.
+        when "final_review" then Notifier.final_review_pending(@appraisal, except_user: @actor)
         # Past the reviewer chain. Nobody is named on the appraisal for these
         # two steps, so they are announced to whoever holds the permission —
         # otherwise the appraisal finishes its reviews and then waits in silence.

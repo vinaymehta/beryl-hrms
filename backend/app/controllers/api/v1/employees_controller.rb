@@ -35,7 +35,7 @@ module Api
       def index
         authorize Employee
         scope = policy_scope(Employee).includes(
-          :department, :designation,
+          :department, :designation, :employment_type,
           { manager_assignments: { manager: %i[department designation] } },
           { user: :roles }
         )
@@ -64,6 +64,25 @@ module Api
           data: Api::V1::EmployeeSerializer.new(records).as_json,
           meta: { page: page, perPage: per_page, totalPages: (total_count / per_page.to_f).ceil, totalCount: total_count }
         }
+      end
+
+      # GET /api/v1/employees/code_available?code=ACM-007&excludeId=12
+      #
+      # The same two rules the model applies on save — unique within the
+      # company, and not below the Initial ID — so the form can show the
+      # problem under the field as it is typed. `excludeId` is the employee
+      # being edited, whose own current code is of course not "taken".
+      def code_available
+        authorize Employee, :code_available?
+        code = params[:code].to_s.strip
+        taken = code.present? &&
+                current_company.employees.where(employee_code: code).where.not(id: params[:excludeId].presence).exists?
+        floor = Employee.employee_code_floor_error(current_company, code)
+        message =
+          if taken then "This employee ID is already in use"
+          elsif floor then "Employee ID #{floor}"
+          end
+        render_data({ available: message.nil?, message: message })
       end
 
       # GET /api/v1/employees/next_code
@@ -170,9 +189,10 @@ module Api
 
         def sorted(scope)
           column = SORTABLE[params[:sortBy].to_s]
-          # Last name is the order a staff directory is read in; it stays the
-          # default so an unsorted list is still in a sensible order.
-          return scope.order(:last_name, :first_name) if column.nil?
+          # Newest first when no column is chosen — the most recently added
+          # people are the ones most likely to be looked for. `id` breaks ties
+          # between rows created in the same instant (seeds, imports).
+          return scope.order(created_at: :desc, id: :desc) if column.nil?
 
           direction = params[:sortDir].to_s.casecmp("desc").zero? ? "DESC" : "ASC"
           # LEFT JOIN so somebody with no department still appears when sorting
@@ -223,7 +243,7 @@ module Api
         def employee_params
           params.permit(
             :employee_code, :first_name, :last_name, :department_id, :designation_id,
-            :date_of_joining, :status, :current_level, :employment_type, :work_location,
+            :date_of_joining, :status, :current_level, :employment_type_id, :work_location,
             :date_of_birth, :gender, :phone, :personal_email,
             :address_line1, :address_line2, :city, :state, :postal_code, :country,
             :emergency_contact_name, :emergency_contact_phone, :profile_photo

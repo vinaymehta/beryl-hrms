@@ -88,9 +88,10 @@ module Employees
       # Checked here rather than on Employee because this is the only path that
       # turns an address into a login — and it is the login address the rule is
       # about. A company with no domain configured accepts any valid address,
-      # which is the only safe default for a tenant whose domain we don't know.
+      # which is the only safe default for a tenant whose domain we don't know —
+      # and so does one that has switched the check off in Settings.
       def reject_foreign_domain
-        domain = @company.work_email_domain.to_s.strip.downcase.delete_prefix("@")
+        domain = @company.enforced_work_email_domain.to_s.strip.downcase.delete_prefix("@")
         return if domain.blank? || @email.blank?
         return if @email.end_with?("@#{domain}")
 

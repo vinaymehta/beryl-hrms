@@ -109,7 +109,7 @@ const baseEmployeeFields = z.object({
   /** The job title. Designation IS the job title — there is no second field. */
   designationId: z.string().optional(),
   currentLevel: z.enum(EMPLOYEE_LEVEL_VALUES).optional().or(z.literal("")),
-  employmentType: z.string().optional(),
+  employmentTypeId: z.string().optional(),
   workLocation: z.enum(WORK_LOCATIONS),
   // Employee → Primary Manager → (optional) Secondary Manager → Final Manager.
   // One field per typed slot, each an employee id or "" for unassigned. Not
@@ -199,6 +199,12 @@ export const designationFormSchema = z.object({
 })
 export type DesignationFormValues = z.infer<typeof designationFormSchema>
 
+export const employmentTypeFormSchema = z.object({
+  name: z.string().trim().min(1, "Name is required"),
+  description: z.string().optional(),
+})
+export type EmploymentTypeFormValues = z.infer<typeof employmentTypeFormSchema>
+
 /**
  * What actually goes over the wire, which is not quite the form's own shape:
  *
@@ -213,6 +219,7 @@ export interface EmployeePayload
   extends Omit<
     EmployeeFormValues,
     | "currentLevel"
+    | "employmentTypeId"
     | "city"
     | "cityOther"
     | "primaryManagerId"
@@ -225,6 +232,7 @@ export interface EmployeePayload
     | "password"
   > {
   currentLevel?: EmployeeLevel | null
+  employmentTypeId?: string | null
   // "Other" is resolved to the typed-in name before sending, so `cityOther`
   // never leaves the form; null is how a cleared city is expressed.
   city?: string | null

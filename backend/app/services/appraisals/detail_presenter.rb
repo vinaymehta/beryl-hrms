@@ -33,6 +33,7 @@ module Appraisals
         "transitions" => Api::V1::AppraisalTransitionSerializer.new(@appraisal.transitions.to_a).as_json,
         "scoreOverrides" => Api::V1::AppraisalScoreOverrideSerializer.new(@appraisal.score_overrides.to_a).as_json,
         "selfAppraisalDraft" => self_appraisal_draft,
+        "reviewDraft" => review_draft,
         # The subject's own compact record, for the page header (job title,
         # department, employee code). Same serializer the reporting line
         # already uses, so it carries no more than a manager's entry does —
@@ -72,6 +73,24 @@ module Appraisals
           "responses" => draft["responses"] || {},
           "step" => draft["step"],
           "savedAt" => @appraisal.self_appraisal_draft_saved_at
+        }
+      end
+
+      # The viewer's own unsubmitted review at the stage the appraisal is at —
+      # and only if they wrote it. Same shape as the self draft, so the form
+      # reloads either the same way.
+      def review_draft
+        return nil unless @policy.save_review_draft?
+
+        draft = @appraisal.review_drafts[@appraisal.review_draft_key]
+        return nil if draft.blank? || draft["author_user_id"] != @user&.id
+
+        {
+          "answers" => Array(draft["answers"]).map { |answer| camelize_keys(answer) },
+          "narrative" => camelize_keys(draft["narrative"] || {}),
+          "responses" => draft["responses"] || {},
+          "step" => draft["step"],
+          "savedAt" => draft["saved_at"]
         }
       end
 
@@ -123,7 +142,8 @@ module Appraisals
         stages = @policy.visible_revision_stages
         return [] if stages.empty?
 
-        @appraisal.revisions.where(stage: stages).includes(:answers, :author_employee, :author_user).to_a
+        @appraisal.revisions.where(stage: stages).includes(:answers, :author_employee, :author_user)
+                  .select { |revision| @policy.visible_revision?(revision) }
       end
 
       def visible_comments
@@ -139,12 +159,11 @@ module Appraisals
 
       # Names only — the reviewer chain is not sensitive, and the employee is
       # explicitly allowed to see who their managers are.
+      # The reviewer chain, level 1 first.
       def managers_payload
-        {
-          "primary" => manager_summary(@appraisal.primary_manager),
-          "secondary" => manager_summary(@appraisal.secondary_manager),
-          "final" => manager_summary(@appraisal.final_manager)
-        }
+        @appraisal.reviewers.each_with_index.map do |employee, index|
+          { "level" => index + 1, "employee" => manager_summary(employee) }
+        end
       end
 
       def manager_summary(employee)
@@ -160,6 +179,7 @@ module Appraisals
           "isSubject" => @policy.subject?,
           "isAdministrator" => @policy.administrator?,
           "canSaveSelfDraft" => @policy.save_self_draft?,
+          "canSaveReviewDraft" => @policy.save_review_draft?,
           "canSubmitSelf" => @policy.submit_self?,
           "canSubmitReview" => @policy.submit_review?,
           "canReturnForCorrection" => @policy.return_for_correction?,

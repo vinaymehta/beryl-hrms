@@ -1,6 +1,12 @@
 # One employee's appraisal within one cycle — the spine of the whole feature.
 #
-#   Employee → V1 → Primary → V2 → Secondary → V3 → Final → Released → Acked
+#   Employee (self) → Level 1 manager → Level 2 → … → Level N → Final (Admin/HR)
+#     → Discussion → Released → Acknowledged
+#
+# The manager levels are every level assigned to the employee when the cycle
+# started (`reviewer_ids`, level 1 first); empty levels are skipped. They are
+# walked one at a time in `manager_review`, with `review_level` saying whose
+# turn it is. The Final review after them belongs to Admin/HR, not to a manager.
 #
 # The record itself holds only CURRENT state. Everything historical lives in
 # child records that are never rewritten: revisions, transitions, score
@@ -10,9 +16,10 @@ class Appraisal < ApplicationRecord
 
   class WorkflowError < StandardError; end
 
-  # The scope's workflow, in order. `secondary_review` is skipped when the
-  # cycle doesn't enable it or the employee has no secondary manager — see
-  # #next_review_status.
+  # The workflow, in order. `primary_review` and `secondary_review` are the
+  # old fixed manager stages, kept only so historical rows still resolve —
+  # nothing moves into them any more (LevelBasedAppraisalReview converted the
+  # ones in flight). `manager_review` replaces both, once per level.
   enum :status, {
     draft: 0,
     self_appraisal_open: 1,
@@ -24,13 +31,14 @@ class Appraisal < ApplicationRecord
     compensation_approval: 7,
     released: 8,
     employee_acknowledged: 9,
-    closed: 10
+    closed: 10,
+    manager_review: 11
   }, default: :draft, validate: true
 
   # Stages at which the employee's own submission is locked. Reopening
   # (Appraisals::Workflow#return_for_correction) moves back out of these.
   LOCKED_FOR_EMPLOYEE = %w[
-    employee_submitted primary_review secondary_review final_review
+    employee_submitted manager_review primary_review secondary_review final_review
     appraisal_discussion compensation_approval released employee_acknowledged closed
   ].freeze
 
@@ -83,7 +91,7 @@ class Appraisal < ApplicationRecord
           dependent: :destroy,
           inverse_of: :appraisal
 
-  delegate :secondary_review_enabled?, :appraisal_template, to: :appraisal_cycle
+  delegate :appraisal_template, to: :appraisal_cycle
 
   private
     def delete_revision_answers
@@ -92,11 +100,8 @@ class Appraisal < ApplicationRecord
 
   public
 
-  scope :for_reviewer, ->(employee_id) {
-    where(primary_manager_id: employee_id)
-      .or(where(secondary_manager_id: employee_id))
-      .or(where(final_manager_id: employee_id))
-  }
+  # Appraisals this employee reviews at any level.
+  scope :for_reviewer, ->(employee_id) { where("? = ANY(appraisals.reviewer_ids)", employee_id) }
 
   def latest_revision = revisions.last
 
@@ -109,41 +114,48 @@ class Appraisal < ApplicationRecord
 
   def employee_locked? = LOCKED_FOR_EMPLOYEE.include?(status)
 
-  # Whether this cycle runs a secondary step for THIS employee. Both conditions
-  # matter: the cycle has to want one, and somebody has to be in the slot.
-  def secondary_review_applicable?
-    secondary_review_enabled? && secondary_manager_id.present?
-  end
-
   # The score the workflow actually stands behind: an override when one has been
   # made, otherwise the calculation. Both are always stored.
   def effective_score = final_score || calculated_score
 
   def overridden? = final_score.present? && calculated_score.present? && final_score != calculated_score
 
-  # Which employee is the reviewer at a given stage.
-  def reviewer_id_for(stage)
-    case stage.to_s
-    when "primary_review" then primary_manager_id
-    when "secondary_review" then secondary_manager_id
-    when "final_review", "appraisal_discussion", "compensation_approval" then final_manager_id
-    end
+  # The manager reviewing at a given level (1-based), or nil.
+  def reviewer_id_at(level)
+    level.to_i.positive? ? reviewer_ids[level.to_i - 1] : nil
   end
 
-  # What this employee is to this appraisal, if anything. Drives every reviewer
-  # authorization question — see AppraisalPolicy.
+  # Whose turn it is right now, when a manager level is.
+  def current_reviewer_id
+    manager_review? ? reviewer_id_at(review_level) : nil
+  end
+
+  def current_reviewer = (id = current_reviewer_id) && Employee.find_by(id: id)
+
+  # The level this employee reviews at on this appraisal, or nil.
   def reviewer_level_for(employee_id)
     return nil if employee_id.blank?
 
-    case employee_id
-    when primary_manager_id then "primary"
-    when secondary_manager_id then "secondary"
-    when final_manager_id then "final"
-    end
+    index = reviewer_ids.index(employee_id.to_i)
+    index && index + 1
   end
 
-  # Where the workflow goes after the primary review — the one branch point.
-  def next_review_status
-    secondary_review_applicable? ? :secondary_review : :final_review
+  def reviewers = Employee.where(id: reviewer_ids).index_by(&:id).values_at(*reviewer_ids).compact
+
+  # Where the employee's submission goes: the first manager level, or — with
+  # nobody assigned at any level — straight to the Final review.
+  def first_review_step
+    reviewer_ids.any? ? [ :manager_review, 1 ] : [ :final_review, nil ]
+  end
+
+  # Where a manager's submitted review goes: the next level, or the Final
+  # review once the last level has reviewed.
+  def step_after_manager_review
+    review_level.to_i < reviewer_ids.size ? [ :manager_review, review_level.to_i + 1 ] : [ :final_review, nil ]
+  end
+
+  # One draft per stage and level, so each manager has their own.
+  def review_draft_key
+    manager_review? ? "manager_review:#{review_level}" : status
   end
 end

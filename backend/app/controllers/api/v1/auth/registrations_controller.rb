@@ -26,6 +26,7 @@ module Api
               )
 
               ::Roles::SeedDefaults.call(company)
+              EmploymentType.seed_defaults(company)
               admin_role = company.roles.find_by!(slug: "admin")
               user.user_roles.create!(role: admin_role, company: company)
 

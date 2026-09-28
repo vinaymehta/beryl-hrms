@@ -109,10 +109,16 @@ export function AppraisalList({
                 )}
                 <TableCell className="text-muted-foreground">{appraisal.cycleName ?? "—"}</TableCell>
                 <TableCell>
-                  <AppraisalStatusBadge status={appraisal.status} />
+                  <AppraisalStatusBadge status={appraisal.status} reviewLevel={appraisal.reviewLevel} />
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground lg:table-cell">
-                  <span className="first-letter:uppercase">{meta.owner ?? "—"}</span>
+                  <span className="first-letter:uppercase">
+                    {appraisal.status === "manager_review" && appraisal.reviewLevel
+                      ? (appraisal.reviewerNames[appraisal.reviewLevel - 1] ?? `Level ${appraisal.reviewLevel} manager`)
+                      : meta.owner === "admin"
+                        ? "Admin / HR"
+                        : (meta.owner ?? "—")}
+                  </span>
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
                   {appraisal.currentVersion ? (

@@ -32,6 +32,15 @@ export interface Designation {
   status: "active" | "archived"
 }
 
+/** Full-time, Contract, … — a per-company list managed from All Settings. */
+export interface EmploymentType {
+  id: string
+  name: string
+  description: string | null
+  status: "active" | "archived"
+  employeeCount: number
+}
+
 /**
  * The compact shape an employee takes when nested inside another employee —
  * today, as one of their reporting managers. The backend serves this from
@@ -119,7 +128,8 @@ export interface Employee {
   lastName: string
   status: EmployeeStatus
   currentLevel: EmployeeLevel | null
-  employmentType: string | null
+  employmentTypeId: string | null
+  employmentTypeName: string | null
   workLocation: string | null
   dateOfJoining: string | null
   department: Department | null
@@ -183,6 +193,13 @@ export interface EmployeeListParams {
 export interface CompanySettings {
   employeeCodeInitial: string | null
   nextEmployeeCode: string | null
-  /** Work emails must end with @<this>. null means no restriction. */
+  /**
+   * Work emails must end with @<this>. null means no restriction — none set,
+   * or the check switched off. The employee form validates against this.
+   */
   workEmailDomain: string | null
+  /** For the Company settings page: the name, the stored domain and the switch. */
+  companyName: string
+  workEmailDomainSetting: string | null
+  workEmailDomainEnforced: boolean
 }

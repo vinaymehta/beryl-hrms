@@ -42,12 +42,11 @@ class AppraisalRemindersJob < ApplicationJob
       end
     end
 
-    # Each review stage against its own deadline — an overdue primary review is
-    # the primary manager's problem, not the final manager's.
+    # Each step against its own deadline: a manager level still reviewing is
+    # that manager's problem; an outstanding Final review is Admin/HR's.
     def remind_reviewers(cycle)
       {
-        primary: [ :primary_review, cycle.primary_review_deadline ],
-        secondary: [ :secondary_review, cycle.secondary_review_deadline ],
+        manager: [ :manager_review, cycle.primary_review_deadline ],
         final: [ :final_review, cycle.finalization_deadline ]
       }.each do |role, (status, deadline)|
         next if deadline.blank?

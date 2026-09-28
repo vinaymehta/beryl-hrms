@@ -12,6 +12,7 @@ module Permissions
       employees.manage_roles employees.manage_reporting_managers
       departments.view departments.create departments.update departments.delete
       designations.view designations.create designations.update designations.delete
+      employment_types.view employment_types.create employment_types.update employment_types.delete
       attendance.view attendance.manage
       leave.view leave.create leave.approve
       documents.view documents.create documents.delete documents.manage_own

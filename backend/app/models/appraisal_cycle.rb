@@ -57,7 +57,6 @@ class AppraisalCycle < ApplicationRecord
       ordered = [
         [ :employee_submission_deadline, employee_submission_deadline ],
         [ :primary_review_deadline, primary_review_deadline ],
-        [ :secondary_review_deadline, secondary_review_enabled? ? secondary_review_deadline : nil ],
         [ :finalization_deadline, finalization_deadline ]
       ].reject { |(_, value)| value.nil? }
 

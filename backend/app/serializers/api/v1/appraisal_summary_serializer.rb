@@ -16,12 +16,14 @@ module Api
         appraisal.employee&.employee_code
       end
       attribute :effective_score, &:effective_score
-      attribute :secondary_review_applicable, &:secondary_review_applicable?
-      attribute :primary_manager_name do |appraisal|
-        appraisal.primary_manager&.full_name
+      # The reviewer chain, level 1 first, and whose turn it is. The timeline
+      # draws one step per level from this.
+      attribute :review_level, &:review_level
+      attribute :reviewer_names do |appraisal|
+        appraisal.reviewers.map(&:full_name)
       end
-      attribute :final_manager_name do |appraisal|
-        appraisal.final_manager&.full_name
+      attribute :primary_manager_name do |appraisal|
+        appraisal.reviewers.first&.full_name
       end
       attribute :current_version do |appraisal|
         appraisal.revisions.map(&:version_number).max

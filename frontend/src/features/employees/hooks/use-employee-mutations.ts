@@ -3,9 +3,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
-import { employeesApi, departmentsApi, designationsApi } from "@/features/employees/api"
+import { employeesApi, departmentsApi, designationsApi, employmentTypesApi } from "@/features/employees/api"
 import { ApiError } from "@/types/api"
-import type { EmployeePayload, DepartmentFormValues, DesignationFormValues } from "@/features/employees/schemas"
+import type {
+  EmployeePayload,
+  DepartmentFormValues,
+  DesignationFormValues,
+  EmploymentTypeFormValues,
+} from "@/features/employees/schemas"
 import type { AccountActionResult } from "@/types/employees"
 
 function errorMessage(error: unknown, fallback: string) {
@@ -155,8 +160,74 @@ export function useCreateDesignation() {
     mutationFn: (values: DesignationFormValues) => designationsApi.create(values),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["designations"] })
-      toast.success("Designation created.")
+      toast.success("Job title created.")
     },
-    onError: (error) => toast.error(errorMessage(error, "Couldn't create that designation.")),
+    onError: (error) => toast.error(errorMessage(error, "Couldn't create that job title.")),
+  })
+}
+
+export function useUpdateDesignation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, values }: { id: string; values: Partial<DesignationFormValues> }) =>
+      designationsApi.update(id, values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["designations"] })
+      queryClient.invalidateQueries({ queryKey: ["employees"] })
+      toast.success("Job title updated.")
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't update that job title.")),
+  })
+}
+
+export function useDeleteDesignation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => designationsApi.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["designations"] })
+      queryClient.invalidateQueries({ queryKey: ["departments"] })
+      toast.success("Job title deleted.")
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't delete that job title.")),
+  })
+}
+
+export function useCreateEmploymentType() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (values: EmploymentTypeFormValues) => employmentTypesApi.create(values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["employment-types"] })
+      toast.success("Employee type created.")
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't create that employee type.")),
+  })
+}
+
+export function useUpdateEmploymentType() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, values }: { id: string; values: Partial<EmploymentTypeFormValues> }) =>
+      employmentTypesApi.update(id, values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["employment-types"] })
+      queryClient.invalidateQueries({ queryKey: ["employees"] })
+      toast.success("Employee type updated.")
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't update that employee type.")),
+  })
+}
+
+export function useDeleteEmploymentType() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => employmentTypesApi.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["employment-types"] })
+      queryClient.invalidateQueries({ queryKey: ["employees"] })
+      toast.success("Employee type deleted.")
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't delete that employee type.")),
   })
 }

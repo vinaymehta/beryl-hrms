@@ -1,12 +1,12 @@
 import {
   Building2Icon,
   CalendarClockIcon,
-  EyeIcon,
-  PencilIcon,
-  Trash2Icon,
+  BadgeIcon,
+  BriefcaseIcon,
   HashIcon,
   LockIcon,
   MailIcon,
+  MonitorIcon,
   PlugIcon,
   SlidersHorizontalIcon,
   type LucideIcon,
@@ -15,12 +15,13 @@ import {
 import { PERMISSIONS, type PermissionKey } from "@/constants/permissions"
 
 export type SettingsSectionId =
-  | "departments_view"
-  | "departments_edit"
-  | "departments_delete"
+  | "departments"
+  | "job_titles"
+  | "employment_types"
   | "calendly"
   | "mail"
   | "initial_id"
+  | "company"
 export type SettingsGroupId = "department" | "integration" | "other"
 
 /**
@@ -52,37 +53,34 @@ export interface SettingsSection {
 }
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
-  // Three pages rather than one page with a mode picker, so Department reads
-  // exactly like Integration does — a flat list on the landing screen, the
-  // same list under a collapsible group in the left navigation. Gating each
-  // on its own permission also means somebody who may edit but not delete is
-  // never shown the option at all, rather than shown it and refused.
+  // One page per list. Departments carries View, Edit and Delete on each
+  // row, each shown only to somebody holding the permission behind it.
   {
-    id: "departments_view",
+    id: "departments",
     group: "department",
-    label: "View",
-    description: "Every department, with how many people are in it.",
-    href: "/all-settings?section=departments_view",
-    icon: EyeIcon,
+    label: "Departments",
+    description: "View, edit and delete departments, with how many people are in each.",
+    href: "/all-settings?section=departments",
+    icon: Building2Icon,
     permission: PERMISSIONS.departmentsView,
   },
   {
-    id: "departments_edit",
+    id: "job_titles",
     group: "department",
-    label: "Edit",
-    description: "Rename a department or change what it is for.",
-    href: "/all-settings?section=departments_edit",
-    icon: PencilIcon,
-    permission: PERMISSIONS.departmentsUpdate,
+    label: "Job Titles",
+    description: "The job titles offered on the employee form, each within a department.",
+    href: "/all-settings?section=job_titles",
+    icon: BadgeIcon,
+    permission: PERMISSIONS.designationsView,
   },
   {
-    id: "departments_delete",
+    id: "employment_types",
     group: "department",
-    label: "Delete",
-    description: "Remove departments, one at a time or several together.",
-    href: "/all-settings?section=departments_delete",
-    icon: Trash2Icon,
-    permission: PERMISSIONS.departmentsDelete,
+    label: "Employee Types",
+    description: "Full-time, Contract and the rest — the types offered on the employee form.",
+    href: "/all-settings?section=employment_types",
+    icon: BriefcaseIcon,
+    permission: PERMISSIONS.employmentTypesView,
   },
   {
     id: "calendly",
@@ -111,6 +109,16 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     icon: HashIcon,
     permission: [PERMISSIONS.employeesManageRoles, PERMISSIONS.employeesCreate],
   },
+  {
+    id: "company",
+    group: "other",
+    label: "Company",
+    description: "The company name, and whether work emails must use the company's domain.",
+    href: "/all-settings?section=company",
+    icon: Building2Icon,
+    // The same key CompanySettingPolicy#update? checks.
+    permission: PERMISSIONS.employeesManageRoles,
+  },
 ]
 
 /**
@@ -130,7 +138,7 @@ export const SETTINGS_GROUPS: {
   {
     id: "department",
     label: "Department",
-    description: "Departments and the designations that sit inside them.",
+    description: "Departments, job titles and employee types.",
     icon: Building2Icon,
     tint: { header: "bg-emerald-500/8", icon: "bg-emerald-500/15 text-emerald-600" },
   },
@@ -144,28 +152,38 @@ export const SETTINGS_GROUPS: {
   {
     id: "other",
     label: "Other",
-    description: "How this workspace numbers its people.",
+    description: "How this workspace numbers its people, and the company itself.",
     icon: SlidersHorizontalIcon,
     tint: { header: "bg-amber-500/8", icon: "bg-amber-500/15 text-amber-600" },
   },
 ]
 
 /**
- * Account & Security, which is NOT part of All Settings.
- *
- * It is the one page that belongs to the person rather than to the workspace,
- * and it stays where it always was — the Settings entry in the application
- * sidebar. Keeping it out of the administrative window is the whole point of
- * the split: an employee changing their password should not be looking at
- * department management to do it.
+ * The sidebar's Settings page, which is NOT part of All Settings: it belongs
+ * to the person rather than the workspace. Two tabs — your password, and the
+ * devices you are signed in on.
  */
-export const ACCOUNT_SECTION = {
-  id: "account" as const,
-  label: "Account & Security",
-  description: "Manage your password and active sessions.",
-  href: "/settings",
-  icon: LockIcon,
-}
+export type PersonalSettingsTab = "account" | "sessions"
+
+export const PERSONAL_SETTINGS_TABS: {
+  id: PersonalSettingsTab
+  label: string
+  description: string
+  icon: LucideIcon
+}[] = [
+  {
+    id: "account",
+    label: "Account",
+    description: "Change the password you sign in with.",
+    icon: LockIcon,
+  },
+  {
+    id: "sessions",
+    label: "Sessions",
+    description: "Everywhere you are signed in. Revoke any device you don't recognise.",
+    icon: MonitorIcon,
+  },
+]
 
 export function settingsSection(id: SettingsSectionId) {
   return SETTINGS_SECTIONS.find((s) => s.id === id)!

@@ -1,14 +1,15 @@
 "use client"
 
 import { Suspense, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, SettingsIcon, XIcon } from "lucide-react"
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, SettingsIcon } from "lucide-react"
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useCurrentUser } from "@/features/auth/hooks/use-current-user"
 import { usePermission } from "@/features/auth/hooks/use-permission"
+import { useIsAdmin } from "@/features/auth/hooks/use-is-admin"
 import { cn } from "cn"
 import {
   SETTINGS_GROUPS,
@@ -22,24 +23,26 @@ import {
 import { CalendlySettings } from "./calendly-settings"
 import { MailSettings } from "./mail-settings"
 import { InitialIdSettings } from "./initial-id-settings"
+import { CompanySettings } from "./company-settings"
 import {
   AddDepartmentButton,
-  DepartmentDesignationManager,
+  AddEmploymentTypeButton,
+  AddJobTitleButton,
+  DepartmentsManager,
+  EmploymentTypesManager,
+  JobTitlesManager,
 } from "@/features/employees/components/department-designation-manager"
 
-// Account & Security is deliberately absent: it belongs to the person, not to
-// the workspace, and lives on the sidebar's own Settings page. See SettingsView.
-//
-// The three department entries are the same component with its mode bound, so
-// each is an ordinary page like any other and nothing here needs to know that
-// three of them share an implementation.
+// Account and Sessions are deliberately absent: they belong to the person, not
+// to the workspace, and live on the sidebar's own Settings page. See SettingsView.
 const SECTION_CONTENT: Record<SettingsSectionId, React.ComponentType> = {
-  departments_view: () => <DepartmentDesignationManager mode="view" />,
-  departments_edit: () => <DepartmentDesignationManager mode="edit" />,
-  departments_delete: () => <DepartmentDesignationManager mode="delete" />,
+  departments: DepartmentsManager,
+  job_titles: JobTitlesManager,
+  employment_types: EmploymentTypesManager,
   calendly: CalendlySettings,
   mail: MailSettings,
   initial_id: InitialIdSettings,
+  company: CompanySettings,
 }
 
 /**
@@ -50,23 +53,19 @@ const SECTION_CONTENT: Record<SettingsSectionId, React.ComponentType> = {
  * one simply has no entry here.
  */
 const SECTION_ACTION: Partial<Record<SettingsSectionId, React.ComponentType>> = {
-  departments_view: AddDepartmentButton,
-  departments_edit: AddDepartmentButton,
-  departments_delete: AddDepartmentButton,
+  departments: AddDepartmentButton,
+  job_titles: AddJobTitleButton,
+  employment_types: AddEmploymentTypeButton,
 }
 
 /**
- * All Settings — a full-screen window over the app, reached from the gear in
- * the top bar.
+ * All Settings — reached from the gear in the top bar, and shown to Admins
+ * only.
  *
- * It takes the whole viewport rather than sitting inside the dashboard shell,
- * because administering the workspace is a different mode from using it: the
- * sidebar you navigate the product with is noise while you are configuring it,
- * and the way out is one deliberate "Close Settings" rather than a stray click.
- *
- * Rendered inside the dashboard route on purpose, though, so it inherits the
- * authentication gate and the forced-password-change gate rather than
- * re-implementing either.
+ * The landing screen is an ordinary page inside the dashboard shell. Opening
+ * any page from it switches to a full-screen window over the app — settings
+ * menu on the left, the page on the right — and the back chevron returns to
+ * the landing screen.
  *
  * Two states, one window:
  *   landing   grouped cards, no left navigation.
@@ -77,7 +76,22 @@ const SECTION_ACTION: Partial<Record<SettingsSectionId, React.ComponentType>> = 
  * refresh or a shared link still lands in the right place.
  */
 export function AllSettingsWorkspace({ initialSection }: { initialSection?: SettingsSectionId }) {
-  const router = useRouter()
+  const isAdmin = useIsAdmin()
+
+  // The gear is hidden from everyone else; this covers a typed-in URL.
+  if (!isAdmin) {
+    return (
+      <Alert className="max-w-md">
+        <AlertTitle>Admins only</AlertTitle>
+        <AlertDescription>Workspace settings are available to administrators.</AlertDescription>
+      </Alert>
+    )
+  }
+
+  return <Workspace initialSection={initialSection} />
+}
+
+function Workspace({ initialSection }: { initialSection?: SettingsSectionId }) {
   const { user } = useCurrentUser()
 
   const target = initialSection ? settingsSection(initialSection) : null
@@ -101,10 +115,13 @@ export function AllSettingsWorkspace({ initialSection }: { initialSection?: Sett
     window.history.replaceState(null, "", "/all-settings")
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-background">
-      <header className="flex h-16 shrink-0 items-center gap-3 border-b bg-surface px-4">
-        {section && (
+  // A page opened from the landing screen takes over the whole viewport —
+  // the settings menu on the left, the page on the right, and the back
+  // chevron to come back. The landing screen itself stays inside the shell.
+  if (section !== null) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-background">
+        <header className="flex h-16 shrink-0 items-center gap-3 border-b bg-surface px-4">
           <Button
             size="icon-sm"
             variant="outline"
@@ -114,44 +131,47 @@ export function AllSettingsWorkspace({ initialSection }: { initialSection?: Sett
           >
             <ChevronLeftIcon className="size-4" />
           </Button>
-        )}
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-role-admin/12 text-role-admin">
+            <SettingsIcon className="size-4.5" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-semibold tracking-tight text-foreground">All Settings</h1>
+            <p className="truncate text-xs text-muted-foreground">{user?.companyName}</p>
+          </div>
+
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <SectionLayout section={section} onSelect={openSection} />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-role-admin/12 text-role-admin">
           <SettingsIcon className="size-4.5" />
         </span>
         <div className="min-w-0">
-          <h1 className="truncate text-base font-semibold tracking-tight text-foreground">All Settings</h1>
-          <p className="truncate text-xs text-muted-foreground">{user?.companyName}</p>
+          <h1 className="text-2xl leading-tight font-semibold tracking-tight text-foreground">All Settings</h1>
+          <p className="text-xs text-muted-foreground">{user?.companyName}</p>
         </div>
 
-        <div className="relative mx-auto hidden w-full max-w-lg md:block">
+        <div className="relative ml-auto w-full sm:w-72">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search settings"
             aria-label="Search settings"
-            className="h-10 rounded-lg pl-9"
+            className="h-9 rounded-lg pl-9"
           />
         </div>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-auto gap-2 font-medium md:ml-0"
-          onClick={() => router.push("/")}
-        >
-          Close Settings
-          <XIcon className="size-4 text-destructive" />
-        </Button>
-      </header>
-
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {section === null ? (
-          <Landing query={query} onOpen={openSection} />
-        ) : (
-          <SectionLayout section={section} onSelect={openSection} />
-        )}
       </div>
+
+      <Landing query={query} onOpen={openSection} />
     </div>
   )
 }
@@ -171,14 +191,12 @@ function Landing({
   onOpen: (id: SettingsSectionId) => void
 }) {
   return (
-    <div className="mx-auto w-full max-w-[1400px] p-4 md:p-8">
-      <div className="rounded-2xl border bg-card p-5 md:p-8">
-        <h2 className="text-xl font-medium tracking-tight text-foreground">Workspace Settings</h2>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {SETTINGS_GROUPS.map((group) => (
-            <GroupCard key={group.id} group={group} query={query} onOpen={onOpen} />
-          ))}
-        </div>
+    <div className="rounded-2xl border bg-card p-5 md:p-8">
+      <h2 className="text-xl font-medium tracking-tight text-foreground">Workspace Settings</h2>
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {SETTINGS_GROUPS.map((group) => (
+          <GroupCard key={group.id} group={group} query={query} onOpen={onOpen} />
+        ))}
       </div>
     </div>
   )

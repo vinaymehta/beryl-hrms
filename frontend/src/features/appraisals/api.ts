@@ -77,6 +77,9 @@ export const appraisalsApi = {
    * and unversioned, unlike `submitSelf` which mints the immutable V1.
    */
   saveDraft: (id: string, values: unknown) => apiClient.patch<AppraisalDetail>(`/appraisals/${id}/save_draft`, values),
+  // A reviewer's own draft at their stage — never the employee's.
+  saveReviewDraft: (id: string, values: unknown) =>
+    apiClient.patch<AppraisalDetail>(`/appraisals/${id}/save_review_draft`, values),
   submitReview: (id: string, values: unknown) =>
     apiClient.post<AppraisalDetail>(`/appraisals/${id}/submit_review`, values),
   advance: (id: string, to: string, notes?: string) =>

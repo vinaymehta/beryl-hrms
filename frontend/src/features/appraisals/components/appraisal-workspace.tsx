@@ -3,9 +3,20 @@
 import { useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
-  ArrowLeftIcon, ArrowRightIcon, CalendarDaysIcon, CheckIcon, CloudIcon, GaugeIcon,
-  HistoryIcon, MessageSquareIcon, NetworkIcon, PencilLineIcon, TargetIcon,
-  TriangleAlertIcon, UsersRoundIcon, type LucideIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  CalendarDaysIcon,
+  CheckIcon,
+  CloudIcon,
+  GaugeIcon,
+  HistoryIcon,
+  MessageSquareIcon,
+  NetworkIcon,
+  PencilLineIcon,
+  TargetIcon,
+  TriangleAlertIcon,
+  UsersRoundIcon,
+  type LucideIcon,
 } from "lucide-react"
 import { cn } from "cn"
 
@@ -14,27 +25,55 @@ import { Button } from "@/components/ui/button"
 import { AppraisalStatusBadge } from "@/features/appraisals/components/appraisal-badges"
 import { AppraisalWorkflowTimeline } from "@/features/appraisals/components/appraisal-workflow-timeline"
 import { PerformanceAreaList } from "@/features/appraisals/components/performance-area-list"
-import { RatingSelect, RatingGuide } from "@/features/appraisals/components/rating-select"
+import {
+  RatingGuide,
+  RatingScaleContext,
+  RatingSelect,
+  useRatingScale,
+} from "@/features/appraisals/components/rating-select"
 import { RevisionHistory } from "@/features/appraisals/components/revision-history"
 import { AppraisalComments } from "@/features/appraisals/components/appraisal-comments"
 import { FeedbackRequestsPanel } from "@/features/appraisals/components/feedback-requests-panel"
 import { SelfAppraisalImport } from "@/features/appraisals/components/self-appraisal-import"
-import { EMPTY_ANSWER, needsEvidence, type AnswerValue } from "@/features/appraisals/components/question-answer"
-import { APPRAISAL_LENSES, NARRATIVE_FIELDS, type NarrativeKey } from "@/features/appraisals/constants"
-import { useSaveSelfAppraisalDraft, useSubmitSelfAppraisal, useSubmitReview } from "@/features/appraisals/hooks/use-appraisal-mutations"
+import {
+  EMPTY_ANSWER,
+  needsEvidence,
+  type AnswerValue,
+} from "@/features/appraisals/components/question-answer"
+import {
+  NARRATIVE_FIELDS,
+  ratingScaleFrom,
+  type NarrativeKey,
+} from "@/features/appraisals/constants"
+import {
+  useSaveReviewDraft,
+  useSaveSelfAppraisalDraft,
+  useSubmitSelfAppraisal,
+  useSubmitReview,
+} from "@/features/appraisals/hooks/use-appraisal-mutations"
 import type {
-  AppraisalDetail, AppraisalLens, ImportPreviewResponse, ImportPreviewRow, TemplateField, TemplateWizardSection,
+  AppraisalDetail,
+  ImportPreviewResponse,
+  ImportPreviewRow,
+  TemplateField,
+  TemplateWizardSection,
 } from "@/types/appraisals"
 
 type AnswerState = Record<string, AnswerValue>
 type NarrativeState = Record<NarrativeKey, string>
 
 const EMPTY_NARRATIVE: NarrativeState = {
-  summary: "", achievements: "", strengths: "", improvementAreas: "", trainingNeeds: "", nextPeriodGoals: "",
+  summary: "",
+  achievements: "",
+  strengths: "",
+  improvementAreas: "",
+  trainingNeeds: "",
+  nextPeriodGoals: "",
 }
 
 const NARRATIVE_KEYS = NARRATIVE_FIELDS.map((field) => field.key)
-const isNarrativeKey = (key: string): key is NarrativeKey => (NARRATIVE_KEYS as string[]).includes(key)
+const isNarrativeKey = (key: string): key is NarrativeKey =>
+  (NARRATIVE_KEYS as string[]).includes(key)
 
 /** Which narrative fields the built-in fallback puts on which tab. */
 const STORY_KEYS: NarrativeKey[] = ["summary", "achievements", "strengths"]
@@ -82,9 +121,10 @@ function narrativeSections(template: AppraisalDetail["template"], forReviewer: b
 
   return {
     story: own[0],
-    ahead: own.length > 1
-      ? { ...own[1], key: own[1].key, fields: own.slice(1).flatMap((section) => section.fields) }
-      : null,
+    ahead:
+      own.length > 1
+        ? { ...own[1], key: own[1].key, fields: own.slice(1).flatMap((section) => section.fields) }
+        : null,
   }
 }
 
@@ -132,6 +172,11 @@ interface DetailTab {
  * viewer may see is still decided by the server's `viewer` block.
  */
 export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }) {
+  // The template's own rating guide drives every rating control on this page.
+  const ratingGuide = appraisal.template.structure?.ratingGuide
+  const ratingScale = useMemo(() => ratingScaleFrom(ratingGuide), [ratingGuide])
+  // Scores are shown out of the template's own top rating, not a fixed 5.
+  const ratingMax = ratingScale.at(-1)?.value ?? 5
   const router = useRouter()
   const searchParams = useSearchParams()
   const { viewer } = appraisal
@@ -141,7 +186,8 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
   const subjectOnlyView = viewer.isSubject && !viewer.isAdministrator
 
   const categories = appraisal.template.categories
-  const draft = appraisal.selfAppraisalDraft
+  // A reviewer resumes their own review draft; the employee their self draft.
+  const draft = forReviewer ? appraisal.reviewDraft : appraisal.selfAppraisalDraft
   const sections = useMemo(
     () => narrativeSections(appraisal.template, forReviewer),
     [appraisal.template, forReviewer]
@@ -149,7 +195,16 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
 
   const submitSelf = useSubmitSelfAppraisal(appraisal.id)
   const submitReview = useSubmitReview(appraisal.id)
-  const saveDraft = useSaveSelfAppraisalDraft(appraisal.id)
+  const saveSelfDraft = useSaveSelfAppraisalDraft(appraisal.id)
+  const saveReviewDraft = useSaveReviewDraft(appraisal.id)
+  // Each saves to its own place: a manager stepping through the form used to
+  // hit the employee's draft endpoint and get "you don't have permission" on
+  // every step. Anyone else (e.g. an admin just reading) saves nothing.
+  const saveDraft = viewer.canSaveReviewDraft
+    ? saveReviewDraft
+    : viewer.canSaveSelfDraft
+      ? saveSelfDraft
+      : null
 
   // Seeded ONCE from the saved draft. Re-seeding on every fetch would fight
   // the person typing, since each save refetches the appraisal.
@@ -166,25 +221,38 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
     })
     return seeded
   })
-  const [narrative, setNarrative] = useState<NarrativeState>(() => ({ ...EMPTY_NARRATIVE, ...draft?.narrative }))
-  const [responses, setResponses] = useState<Record<string, string>>(() => ({ ...draft?.responses }))
+  const [narrative, setNarrative] = useState<NarrativeState>(() => ({
+    ...EMPTY_NARRATIVE,
+    ...draft?.narrative,
+  }))
+  const [responses, setResponses] = useState<Record<string, string>>(() => ({
+    ...draft?.responses,
+  }))
   const [savedAt, setSavedAt] = useState<string | null>(draft?.savedAt ?? null)
   const [step, setStep] = useState(() => Math.max(0, (draft?.step ?? 1) - 1))
 
   // A reviewer writes against the employee's own V1; the employee writes
   // against nothing, because there is nothing they may compare with yet.
-  const referenceRevision = appraisal.revisions.find((revision) => revision.stage === "self_appraisal")
+  const referenceRevision = appraisal.revisions.find(
+    (revision) => revision.stage === "self_appraisal"
+  )
   const referenceAnswers = useMemo(() => {
     if (!forReviewer) return undefined
     const map: Record<string, { rating: number | null; comment: string | null }> = {}
     referenceRevision?.answers.forEach((answer) => {
-      map[String(answer.appraisalTemplateQuestionId)] = { rating: answer.rating, comment: answer.comment }
+      map[String(answer.appraisalTemplateQuestionId)] = {
+        rating: answer.rating,
+        comment: answer.comment,
+      }
     })
     return map
   }, [forReviewer, referenceRevision])
 
   function setAnswer(questionId: string, patch: Partial<AnswerValue>) {
-    setAnswers((prev) => ({ ...prev, [questionId]: { ...EMPTY_ANSWER, ...prev[questionId], ...patch } }))
+    setAnswers((prev) => ({
+      ...prev,
+      [questionId]: { ...EMPTY_ANSWER, ...prev[questionId], ...patch },
+    }))
   }
 
   // The six fixed narrative keys keep their own columns; anything else is a
@@ -227,7 +295,11 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
         // for a shape, since a question id is opaque here.
         .filter(([questionId]) => questionId && questionId !== "undefined" && questionId !== "null")
         .filter(([, answer]) => answer.rating != null || answer.comment.trim())
-        .map(([questionId, answer]) => ({ questionId, rating: answer.rating, comment: answer.comment })),
+        .map(([questionId, answer]) => ({
+          questionId,
+          rating: answer.rating,
+          comment: answer.comment,
+        })),
     [answers]
   )
 
@@ -245,8 +317,12 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
       categories.flatMap((category) =>
         category.questions.flatMap((question) => {
           const answer = answers[question.id]
-          const where = question.prompt === category.name ? category.name : `${category.name} — ${question.prompt}`
-          if ((answer?.rating ?? null) == null) return [{ id: question.id, where, reason: "not rated" }]
+          const where =
+            question.prompt === category.name
+              ? category.name
+              : `${category.name} — ${question.prompt}`
+          if ((answer?.rating ?? null) == null)
+            return [{ id: question.id, where, reason: "not rated" }]
           if (needsEvidence(answer)) return [{ id: question.id, where, reason: "needs evidence" }]
           return []
         })
@@ -274,7 +350,9 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
   )
 
   const completedAreas = areaProgress.filter((area) => area.complete).length
-  const percentComplete = categories.length ? Math.round((completedAreas / categories.length) * 100) : 0
+  const percentComplete = categories.length
+    ? Math.round((completedAreas / categories.length) * 100)
+    : 0
 
   /**
    * The score this is heading for, weighted and computed over the RATED areas
@@ -285,26 +363,10 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
     const rated = areaProgress.filter((area) => area.average != null)
     const weight = rated.reduce((sum, area) => sum + Number(area.category.weight), 0)
     if (!weight) return null
-    return rated.reduce((sum, area) => sum + area.average! * Number(area.category.weight), 0) / weight
+    return (
+      rated.reduce((sum, area) => sum + area.average! * Number(area.category.weight), 0) / weight
+    )
   }, [areaProgress])
-
-  const lensRollup = useMemo(
-    () =>
-      APPRAISAL_LENSES.map((lens) => {
-        const inLens = categories.filter((category) => category.lens === (lens.value as AppraisalLens))
-        const rated = inLens
-          .flatMap((category) => category.questions)
-          .map((question) => answers[question.id]?.rating)
-          .filter((rating): rating is number => rating != null)
-        return {
-          ...lens,
-          categories: inLens,
-          weight: inLens.reduce((sum, category) => sum + Number(category.weight), 0),
-          average: rated.length ? rated.reduce((a, b) => a + b, 0) / rated.length : null,
-        }
-      }).filter((lens) => lens.categories.length > 0),
-    [categories, answers]
-  )
 
   // --- the steps -----------------------------------------------------------
 
@@ -319,15 +381,41 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
   const showsPerspectives = viewer.canSubmitReview || viewer.isAdministrator
 
   const steps: Step[] = [
-    { key: "areas", title: "Performance areas", caption: "Rate and add your feedback", section: null },
+    {
+      key: "areas",
+      title: "Performance areas",
+      caption: "Rate and add your feedback",
+      section: null,
+    },
     ...(showsPerspectives
-      ? [{ key: "perspectives", title: "Perspective", caption: "Rate each perspective", section: null }]
+      ? [
+          {
+            key: "perspectives",
+            title: "Perspective",
+            caption: "Rate each perspective",
+            section: null,
+          },
+        ]
       : []),
     ...(sections.story
-      ? [{ key: "story", title: sections.story.title, caption: "Overall comments", section: sections.story }]
+      ? [
+          {
+            key: "story",
+            title: sections.story.title,
+            caption: "Overall comments",
+            section: sections.story,
+          },
+        ]
       : []),
     ...(sections.ahead
-      ? [{ key: "ahead", title: sections.ahead.title, caption: "Future focus", section: sections.ahead }]
+      ? [
+          {
+            key: "ahead",
+            title: sections.ahead.title,
+            caption: "Future focus",
+            section: sections.ahead,
+          },
+        ]
       : []),
     { key: "review", title: "Review & submit", caption: "Check and submit", section: null },
   ]
@@ -339,6 +427,7 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
   const isLast = stepIndex === steps.length - 1
 
   function persist(nextStep = stepIndex) {
+    if (!saveDraft) return
     saveDraft.mutate(
       { step: nextStep + 1, answers: answerPayload, responses, ...narrative },
       { onSuccess: () => setSavedAt(new Date().toISOString()) }
@@ -367,8 +456,8 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
   // The form itself. A function so it can be a TAB's body rather than a
   // slab above the tab strip — two stacked panels read as two windows.
   const renderForm = () => (
-      <div className="grid gap-4">
-        {/* Numbered stepper.
+    <div className="grid gap-4">
+      {/* Numbered stepper.
             
             The circles sit on ONE line with the connectors running between
             them, and each step's name and caption hang underneath. Side-by-side
@@ -376,214 +465,220 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
             the connectors were long, the row was tall, and the whole strip ate
             the top of the page before any of the form appeared. Stacking the
             text under the circle costs one short line and gives it all back. */}
-        <ol className="flex items-start gap-1">
-          {steps.map((definition, index) => {
-            const done = index < stepIndex
-            const active = index === stepIndex
-            return (
-              <li key={definition.key} className="flex min-w-0 flex-1 items-start gap-1">
-                <button
-                  type="button"
-                  // Backwards only: a step you haven't reached can't be
-                  // meaningfully reviewed yet, and Continue is the way forward.
-                  disabled={index > stepIndex}
-                  aria-current={active ? "step" : undefined}
-                  onClick={() => goTo(index)}
+      <ol className="flex items-start gap-1">
+        {steps.map((definition, index) => {
+          const done = index < stepIndex
+          const active = index === stepIndex
+          return (
+            <li key={definition.key} className="flex min-w-0 flex-1 items-start gap-1">
+              <button
+                type="button"
+                // Backwards only: a step you haven't reached can't be
+                // meaningfully reviewed yet, and Continue is the way forward.
+                disabled={index > stepIndex}
+                aria-current={active ? "step" : undefined}
+                onClick={() => goTo(index)}
+                className={cn(
+                  "grid min-w-0 flex-1 justify-items-center gap-1 rounded-lg px-1 py-1 text-center transition-colors",
+                  index > stepIndex ? "cursor-not-allowed opacity-55" : "hover:bg-muted/60"
+                )}
+              >
+                <span
                   className={cn(
-                    "grid min-w-0 flex-1 justify-items-center gap-1 rounded-lg px-1 py-1 text-center transition-colors",
-                    index > stepIndex ? "cursor-not-allowed opacity-55" : "hover:bg-muted/60"
+                    "flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold tabular-nums transition-colors",
+                    active
+                      ? "border-role-hr bg-role-hr text-role-hr-foreground ring-4 ring-role-hr/15"
+                      : done
+                        ? "border-success bg-success text-success-foreground"
+                        : "border-muted-foreground/30 bg-card text-muted-foreground"
                   )}
                 >
+                  {done ? <CheckIcon className="size-3" /> : index + 1}
+                </span>
+                <span className="grid min-w-0 leading-tight">
                   <span
                     className={cn(
-                      "flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold tabular-nums transition-colors",
-                      active
-                        ? "border-role-hr bg-role-hr text-role-hr-foreground ring-4 ring-role-hr/15"
-                        : done
-                          ? "border-success bg-success text-success-foreground"
-                          : "border-muted-foreground/30 bg-card text-muted-foreground"
+                      "truncate text-[11px] font-semibold",
+                      active ? "text-role-hr" : "text-foreground"
                     )}
                   >
-                    {done ? <CheckIcon className="size-3" /> : index + 1}
+                    {definition.title}
                   </span>
-                  <span className="grid min-w-0 leading-tight">
-                    <span
-                      className={cn(
-                        "truncate text-[11px] font-semibold",
-                        active ? "text-role-hr" : "text-foreground"
-                      )}
-                    >
-                      {definition.title}
-                    </span>
-                    {/* The caption is the first thing to go on a narrow
+                  {/* The caption is the first thing to go on a narrow
                         screen — the step's name carries the meaning. */}
-                    <span className="hidden truncate text-[10px] text-muted-foreground sm:block">
-                      {definition.caption}
-                    </span>
+                  <span className="hidden truncate text-[10px] text-muted-foreground sm:block">
+                    {definition.caption}
                   </span>
-                </button>
-                {index < steps.length - 1 && (
-                  <span
-                    aria-hidden
-                    // Aligned with the middle of the circles, which sit at the
-                    // top of each column now that the text is below them.
-                    className={cn(
-                      "mt-[11px] hidden h-px min-w-2 flex-1 sm:block",
-                      done ? "bg-success/60" : "bg-border"
-                    )}
+                </span>
+              </button>
+              {index < steps.length - 1 && (
+                <span
+                  aria-hidden
+                  // Aligned with the middle of the circles, which sit at the
+                  // top of each column now that the text is below them.
+                  className={cn(
+                    "mt-[11px] hidden h-px min-w-2 flex-1 sm:block",
+                    done ? "bg-success/60" : "bg-border"
+                  )}
+                />
+              )}
+            </li>
+          )
+        })}
+      </ol>
+      <p className="sr-only">
+        Step {stepIndex + 1} of {steps.length} · {current.title}
+      </p>
+
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,65fr)_minmax(0,35fr)]">
+        <div className="grid min-w-0 gap-4">
+          {current.key === "areas" && (
+            <PerformanceAreaList
+              categories={categories}
+              answers={answers}
+              onChange={setAnswer}
+              reference={referenceAnswers}
+              referenceLabel={
+                referenceRevision
+                  ? `${referenceRevision.label} · ${referenceRevision.authorName}`
+                  : undefined
+              }
+              // The workbook route sits on the heading row rather than in a
+              // panel of its own above it — it is another way to fill THIS
+              // section in, not a thing in its own right.
+              action={
+                viewer.canSubmitSelf ? (
+                  <SelfAppraisalImport
+                    appraisalId={appraisal.id}
+                    onConfirm={applyImported}
+                    compact
                   />
-                )}
-              </li>
-            )
-          })}
-        </ol>
-        <p className="sr-only">
-          Step {stepIndex + 1} of {steps.length} · {current.title}
-        </p>
+                ) : undefined
+              }
+            />
+          )}
 
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,65fr)_minmax(0,35fr)]">
-          <div className="grid min-w-0 gap-4">
-            {current.key === "areas" && (
-              <PerformanceAreaList
-                categories={categories}
-                answers={answers}
-                onChange={setAnswer}
-                reference={referenceAnswers}
-                referenceLabel={
-                  referenceRevision
-                    ? `${referenceRevision.label} · ${referenceRevision.authorName}`
-                    : undefined
-                }
-                // The workbook route sits on the heading row rather than in a
-                // panel of its own above it — it is another way to fill THIS
-                // section in, not a thing in its own right.
-                action={
-                  viewer.canSubmitSelf ? (
-                    <SelfAppraisalImport appraisalId={appraisal.id} onConfirm={applyImported} compact />
-                  ) : undefined
-                }
-              />
-            )}
+          {current.key === "perspectives" && (
+            <PerspectivesPanel
+              templatePerspectives={appraisal.template.structure?.perspectives}
+              // Only a reviewer at their own stage assesses the perspectives;
+              // the server has already withheld the fields from anyone else,
+              // so this decides the inputs, not access.
+              canAssess={viewer.canSubmitReview}
+              valueOf={valueOf}
+              onChange={setFieldValue}
+            />
+          )}
 
-            {current.key === "perspectives" && (
-              <PerspectivesPanel
-                rollup={lensRollup}
-                templatePerspectives={appraisal.template.structure?.perspectives}
-                // Only a reviewer at their own stage assesses the perspectives;
-                // the server has already withheld the fields from anyone else,
-                // so this decides the inputs, not access.
-                canAssess={viewer.canSubmitReview}
-                valueOf={valueOf}
-                onChange={setFieldValue}
-              />
-            )}
+          {current.section && (
+            <FieldSection section={current.section} valueOf={valueOf} onChange={setFieldValue} />
+          )}
 
-            {current.section && (
-              <FieldSection section={current.section} valueOf={valueOf} onChange={setFieldValue} />
-            )}
+          {current.key === "review" && (
+            <FinalReviewPanel
+              appraisal={appraisal}
+              categories={categories}
+              answers={answers}
+              sections={[sections.story, sections.ahead].filter(Boolean) as TemplateWizardSection[]}
+              valueOf={valueOf}
+              weightedScore={estimatedScore}
+              outstanding={outstanding}
+              onGoToStep={(key: string) => goTo(steps.findIndex((entry) => entry.key === key))}
+            />
+          )}
 
-            {current.key === "review" && (
-              <FinalReviewPanel
-                appraisal={appraisal}
-                categories={categories}
-                answers={answers}
-                sections={[sections.story, sections.ahead].filter(Boolean) as TemplateWizardSection[]}
-                valueOf={valueOf}
-                weightedScore={estimatedScore}
-                outstanding={outstanding}
-                lensRollup={lensRollup}
-                onGoToStep={(key: string) => goTo(steps.findIndex((entry) => entry.key === key))}
-              />
-            )}
-
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-              <Button
-                variant="outline"
-                className="gap-1.5"
-                disabled={stepIndex === 0}
-                onClick={() => goTo(stepIndex - 1)}
-              >
-                <ArrowLeftIcon className="size-4" /> Back
-              </Button>
-              <Button variant="ghost" disabled={saveDraft.isPending} onClick={() => persist()}>
-                Save draft
-              </Button>
-            </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+            <Button
+              variant="outline"
+              className="gap-1.5"
+              disabled={stepIndex === 0}
+              onClick={() => goTo(stepIndex - 1)}
+            >
+              <ArrowLeftIcon className="size-4" /> Back
+            </Button>
+            <Button variant="ghost" disabled={!saveDraft || saveDraft.isPending} onClick={() => persist()}>
+              Save draft
+            </Button>
           </div>
+        </div>
 
-          {/* The standing summary. Everything in it is derived from what has
+        {/* The standing summary. Everything in it is derived from what has
               been entered — there is nothing to fill in here. */}
-          {/* Tighter than the left column and pinned to the top of it: this
+        {/* Tighter than the left column and pinned to the top of it: this
               is a running total, read at a glance and returned to, so height
               spent on it is height taken from the form being filled in. */}
-          <aside className="grid content-start gap-2.5 lg:sticky lg:top-4">
-            <section className="grid gap-2 rounded-xl border p-3">
-              <h3 className="flex items-center gap-2 text-sm font-semibold">
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-role-hr/12 text-role-hr">
-                  <TargetIcon className="size-3.5" />
+        <aside className="grid content-start gap-2.5 lg:sticky lg:top-4">
+          <section className="grid gap-2 rounded-xl border p-3">
+            <h3 className="flex items-center gap-2 text-sm font-semibold">
+              <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-role-hr/12 text-role-hr">
+                <TargetIcon className="size-3.5" />
+              </span>
+              Your progress
+            </h3>
+            <div className="flex items-center gap-3">
+              <div className="relative flex shrink-0 items-center justify-center">
+                <ProgressRing percent={percentComplete} />
+                <span className="absolute text-xs font-semibold tabular-nums">
+                  {percentComplete}%
                 </span>
-                Your progress
-              </h3>
-              <div className="flex items-center gap-3">
-                <div className="relative flex shrink-0 items-center justify-center">
-                  <ProgressRing percent={percentComplete} />
-                  <span className="absolute text-xs font-semibold tabular-nums">{percentComplete}%</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-lg leading-tight font-semibold tabular-nums">
-                    {completedAreas} of {categories.length}
-                  </p>
-                  <p className="text-xs text-muted-foreground">areas completed</p>
-                </div>
               </div>
-            </section>
-
-            <section className="grid gap-2 rounded-xl border p-3">
-              <h3 className="text-sm font-semibold">Selected ratings</h3>
-              <ul className="grid gap-1.5">
-                {areaProgress.map(({ category, average }) => (
-                  <li key={category.id} className="flex items-center gap-2 text-xs">
-                    <span className="min-w-0 flex-1 truncate">{category.name}</span>
-                    {average == null ? (
-                      <span className="shrink-0 text-muted-foreground">Not rated</span>
-                    ) : (
-                      <span className="shrink-0 font-semibold tabular-nums">
-                        {Number.isInteger(average) ? average : average.toFixed(1)}{" "}
-                        <span className="font-normal text-muted-foreground">/ 5</span>
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-
-              <div className="mt-1 grid gap-1.5 border-t pt-3">
-                <p className="text-xs font-medium text-muted-foreground">Estimated overall score</p>
-                <p className="text-2xl leading-none font-bold tabular-nums">
-                  {estimatedScore == null ? "—" : estimatedScore.toFixed(1)}
-                  <span className="text-base font-normal text-muted-foreground"> / 5</span>
+              <div className="min-w-0">
+                <p className="text-lg leading-tight font-semibold tabular-nums">
+                  {completedAreas} of {categories.length}
                 </p>
-                <p className="text-[11px] text-muted-foreground">Based on completed ratings (weighted)</p>
-                <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-role-hr transition-[width] duration-500"
-                    style={{ width: `${estimatedScore == null ? 0 : (estimatedScore / 5) * 100}%` }}
-                  />
-                </div>
+                <p className="text-xs text-muted-foreground">areas completed</p>
               </div>
-            </section>
-
-            <div className="grid gap-1.5">
-              {primaryAction}
-              <p className="text-center text-[11px] text-muted-foreground">
-                Your progress is saved automatically
-              </p>
             </div>
+          </section>
 
-            {/* Shown once for the whole form, always in view while rating. */}
-            <RatingGuide guide={appraisal.template.structure?.ratingGuide} />
-          </aside>
-        </div>
+          <section className="grid gap-2 rounded-xl border p-3">
+            <h3 className="text-sm font-semibold">Selected ratings</h3>
+            <ul className="grid gap-1.5">
+              {areaProgress.map(({ category, average }) => (
+                <li key={category.id} className="flex items-center gap-2 text-xs">
+                  <span className="min-w-0 flex-1 truncate">{category.name}</span>
+                  {average == null ? (
+                    <span className="shrink-0 text-muted-foreground">Not rated</span>
+                  ) : (
+                    <span className="shrink-0 font-semibold tabular-nums">
+                      {Number.isInteger(average) ? average : average.toFixed(1)}{" "}
+                      <span className="font-normal text-muted-foreground">/ {ratingMax}</span>
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+
+            <div className="mt-1 grid gap-1.5 border-t pt-3">
+              <p className="text-xs font-medium text-muted-foreground">Estimated overall score</p>
+              <p className="text-2xl leading-none font-bold tabular-nums">
+                {estimatedScore == null ? "—" : estimatedScore.toFixed(1)}
+                <span className="text-base font-normal text-muted-foreground"> / {ratingMax}</span>
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Based on completed ratings (weighted)
+              </p>
+              <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-role-hr transition-[width] duration-500"
+                  style={{ width: `${estimatedScore == null ? 0 : (estimatedScore / ratingMax) * 100}%` }}
+                />
+              </div>
+            </div>
+          </section>
+
+          <div className="grid gap-1.5">
+            {primaryAction}
+            <p className="text-center text-[11px] text-muted-foreground">
+              Your progress is saved automatically
+            </p>
+          </div>
+
+          {/* Shown once for the whole form, always in view while rating. */}
+          <RatingGuide guide={appraisal.template.structure?.ratingGuide} />
+        </aside>
       </div>
+    </div>
   )
 
   const tabs: DetailTab[] = [
@@ -591,55 +686,79 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
     // the record around it, in the order it accumulates — what was written,
     // what was said, then the process, then the money.
     ...(isEditor
-      ? [{
-          id: "form",
-          label: viewer.canSubmitReview ? "Your review" : "Self-appraisal",
-          icon: PencilLineIcon,
-          render: renderForm,
-        }]
+      ? [
+          {
+            id: "form",
+            label: viewer.canSubmitReview ? "Your review" : "Self-appraisal",
+            icon: PencilLineIcon,
+            render: renderForm,
+          },
+        ]
       : []),
-    { id: "history", label: "Version history", icon: HistoryIcon,
-      render: () => <RevisionHistory appraisal={appraisal} /> },
-    { id: "comments", label: "Comments", icon: MessageSquareIcon,
-      render: () => <AppraisalComments appraisal={appraisal} /> },
+    {
+      id: "history",
+      label: "Version history",
+      icon: HistoryIcon,
+      render: () => <RevisionHistory appraisal={appraisal} />,
+    },
+    {
+      id: "comments",
+      label: "Comments",
+      icon: MessageSquareIcon,
+      render: () => <AppraisalComments appraisal={appraisal} />,
+    },
     // §21 — optional, and never a gate on the workflow.
-    { id: "feedback", label: "Additional feedback", icon: UsersRoundIcon,
-      render: () => <FeedbackRequestsPanel appraisal={appraisal} /> },
+    {
+      id: "feedback",
+      label: "Additional feedback",
+      icon: UsersRoundIcon,
+      render: () => <FeedbackRequestsPanel appraisal={appraisal} />,
+    },
   ]
 
   // The management apparatus, withheld from the subject.
   if (!subjectOnlyView) {
     tabs.push(
-      { id: "workflow", label: "Workflow", icon: GaugeIcon,
+      {
+        id: "workflow",
+        label: "Workflow",
+        icon: GaugeIcon,
         render: () => (
           <AppraisalWorkflowTimeline
             status={appraisal.status}
-            secondaryApplicable={appraisal.secondaryReviewApplicable}
+            reviewLevel={appraisal.reviewLevel}
+            reviewerNames={appraisal.reviewerNames}
             transitions={appraisal.transitions}
           />
-        ) },
-      { id: "reviewers", label: "Reviewers", icon: NetworkIcon,
-        render: () => <ManagerChain appraisal={appraisal} /> }
+        ),
+      },
+      {
+        id: "reviewers",
+        label: "Reviewers",
+        icon: NetworkIcon,
+        render: () => <ManagerChain appraisal={appraisal} />,
+      }
     )
   }
 
   tabs.push({
-    id: "deadlines", label: "Deadlines", icon: CalendarDaysIcon,
+    id: "deadlines",
+    label: "Deadlines",
+    icon: CalendarDaysIcon,
     render: () => (
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Deadline label="Self-appraisal" date={appraisal.cycle.employeeSubmissionDeadline} />
-        <Deadline label="Primary review" date={appraisal.cycle.primaryReviewDeadline} />
-        {appraisal.secondaryReviewApplicable && (
-          <Deadline label="Secondary review" date={appraisal.cycle.secondaryReviewDeadline} />
-        )}
-        <Deadline label="Finalization" date={appraisal.cycle.finalizationDeadline} />
+        <Deadline label="Manager reviews" date={appraisal.cycle.primaryReviewDeadline} />
+        <Deadline label="Final review" date={appraisal.cycle.finalizationDeadline} />
       </div>
     ),
   })
 
   if (!subjectOnlyView && appraisal.scoreOverrides.length > 0) {
     tabs.push({
-      id: "calibration", label: "Calibration", icon: GaugeIcon,
+      id: "calibration",
+      label: "Calibration",
+      icon: GaugeIcon,
       render: () => (
         <ul className="grid gap-2">
           {appraisal.scoreOverrides.map((override) => (
@@ -659,7 +778,6 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
     })
   }
 
-
   const requestedTab = searchParams.get("tab")
   const activeTab = tabs.find((tab) => tab.id === requestedTab) ?? tabs[0]
 
@@ -675,7 +793,11 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
       disabled={isPending || !canSubmit}
       onClick={submit}
     >
-      {isPending ? "Submitting…" : viewer.canSubmitReview ? "Submit review" : "Submit self-appraisal"}
+      {isPending
+        ? "Submitting…"
+        : viewer.canSubmitReview
+          ? "Submit review"
+          : "Submit self-appraisal"}
       <CheckIcon className="size-4" />
     </Button>
   ) : (
@@ -688,46 +810,50 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
   )
 
   return (
-    <div className="grid gap-4">
-      <AppraisalHeader
-        appraisal={appraisal}
-        saving={saveDraft.isPending}
-        savedAt={savedAt}
-        showSaveState={isEditor}
-      />
+    <RatingScaleContext value={ratingScale}>
+      <div className="grid gap-4">
+        <AppraisalHeader
+          appraisal={appraisal}
+          saving={saveDraft?.isPending ?? false}
+          savedAt={savedAt}
+          showSaveState={isEditor}
+        />
 
-      {/* One tab bar for the whole page. The form is the first tab rather
+        {/* One tab bar for the whole page. The form is the first tab rather
           than a slab above the strip — stacked, the two read as two separate
           windows on one screen. */}
-      <nav
-        aria-label="Appraisal sections"
-        className="-mx-1 flex gap-1 overflow-x-auto border-b px-1 pb-px"
-      >
-        {tabs.map((tab) => {
-          const Icon = tab.icon
-          const isActive = tab.id === activeTab.id
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              aria-current={isActive ? "page" : undefined}
-              onClick={() => selectTab(tab.id)}
-              className={cn(
-                "flex shrink-0 items-center gap-1.5 rounded-t-lg border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors",
-                isActive
-                  ? "border-role-hr font-semibold text-role-hr"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Icon className="size-4" />
-              {tab.label}
-            </button>
-          )
-        })}
-      </nav>
+        <nav
+          aria-label="Appraisal sections"
+          className="-mx-1 flex gap-1 overflow-x-auto border-b px-1 pb-px"
+        >
+          {tabs.map((tab) => {
+            const Icon = tab.icon
+            const isActive = tab.id === activeTab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                aria-current={isActive ? "page" : undefined}
+                onClick={() => selectTab(tab.id)}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-t-lg border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors",
+                  isActive
+                    ? "border-role-hr font-semibold text-role-hr"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Icon className="size-4" />
+                {tab.label}
+              </button>
+            )
+          })}
+        </nav>
 
-      <section className="rounded-xl border bg-card p-4 shadow-2xs sm:p-5">{activeTab.render()}</section>
-    </div>
+        <section className="rounded-xl border bg-card p-4 shadow-2xs sm:p-5">
+          {activeTab.render()}
+        </section>
+      </div>
+    </RatingScaleContext>
   )
 }
 
@@ -759,12 +885,17 @@ function Deadline({ label, date }: { label: string; date: string | null }) {
     <div className="grid gap-0.5">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-sm font-medium">
-        {date ? new Date(date).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—"}
+        {date
+          ? new Date(date).toLocaleDateString(undefined, {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })
+          : "—"}
       </p>
     </div>
   )
 }
-
 
 function AppraisalHeader({
   appraisal,
@@ -792,24 +923,29 @@ function AppraisalHeader({
           {initials}
         </span>
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold tracking-tight">{appraisal.employeeName}</h1>
+          <h1 className="truncate text-lg font-semibold tracking-tight">
+            {appraisal.employeeName}
+          </h1>
           <p className="truncate text-sm text-muted-foreground">
             {[employee?.designationTitle, employee?.departmentName].filter(Boolean).join(" · ") ||
               appraisal.template.name}
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {appraisal.employeeCode && <span>{appraisal.employeeCode}</span>}
-            {appraisal.primaryManagerName && <span>Reporting to {appraisal.primaryManagerName}</span>}
+            {appraisal.primaryManagerName && (
+              <span>Reporting to {appraisal.primaryManagerName}</span>
+            )}
           </div>
         </div>
       </div>
 
       <div className="flex shrink-0 flex-col items-end gap-1.5 text-right">
-        <AppraisalStatusBadge status={appraisal.status} />
+        <AppraisalStatusBadge status={appraisal.status} reviewLevel={appraisal.reviewLevel} />
         <p className="text-sm font-medium">{appraisal.cycleName}</p>
         {(appraisal.cycle.assessmentPeriodStart || appraisal.cycle.assessmentPeriodEnd) && (
           <p className="text-xs text-muted-foreground">
-            {formatDate(appraisal.cycle.assessmentPeriodStart)} – {formatDate(appraisal.cycle.assessmentPeriodEnd)}
+            {formatDate(appraisal.cycle.assessmentPeriodStart)} –{" "}
+            {formatDate(appraisal.cycle.assessmentPeriodEnd)}
           </p>
         )}
         {showSaveState && (
@@ -836,10 +972,15 @@ function AppraisalHeader({
 }
 
 function formatDate(value: string | null) {
-  return value ? new Date(value).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—"
+  return value
+    ? new Date(value).toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : "—"
 }
 
-/** The three lenses, and the template's own perspective definitions. */
 const MANAGER_RATING_SUFFIX = "__manager_rating"
 const MANAGER_SUMMARY_SUFFIX = "__manager_summary"
 
@@ -857,20 +998,22 @@ const MANAGER_SUMMARY_SUFFIX = "__manager_summary"
  * this is presentation of an absence rather than the guard itself.
  */
 function PerspectivesPanel({
-  rollup,
   templatePerspectives,
   canAssess,
   valueOf,
   onChange,
 }: {
-  rollup: { value: string; label: string; weight: number; targetWeight: number; average: number | null }[]
   templatePerspectives: NonNullable<AppraisalDetail["template"]["structure"]>["perspectives"]
   canAssess: boolean
   valueOf: (key: string) => string
   onChange: (key: string, next: string) => void
 }) {
   const defined = templatePerspectives ?? []
-  const keyFor = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")
+  const keyFor = (name: string) =>
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
 
   return (
     <div className="grid gap-4">
@@ -879,7 +1022,7 @@ function PerspectivesPanel({
         <p className="text-sm text-muted-foreground">
           {canAssess
             ? "Rate this employee against each perspective and record the evidence behind it."
-            : "How this appraisal is weighted, and how your own area ratings roll up across it."}
+            : "How this appraisal is weighted across the perspectives."}
         </p>
       </div>
 
@@ -908,21 +1051,22 @@ function PerspectivesPanel({
                       <p className="text-xs font-semibold">Manager rating</p>
                       <RatingSelect
                         value={Number(valueOf(base + MANAGER_RATING_SUFFIX)) || null}
-                        onChange={(rating) => onChange(base + MANAGER_RATING_SUFFIX, String(rating))}
+                        onChange={(rating) =>
+                          onChange(base + MANAGER_RATING_SUFFIX, String(rating))
+                        }
                       />
                     </div>
                     <div className="grid gap-1">
-                      <label
-                        htmlFor={`perspective-${base}`}
-                        className="text-xs font-semibold"
-                      >
+                      <label htmlFor={`perspective-${base}`} className="text-xs font-semibold">
                         Manager summary / evidence
                       </label>
                       <textarea
                         id={`perspective-${base}`}
                         rows={3}
                         value={valueOf(base + MANAGER_SUMMARY_SUFFIX)}
-                        onChange={(event) => onChange(base + MANAGER_SUMMARY_SUFFIX, event.target.value)}
+                        onChange={(event) =>
+                          onChange(base + MANAGER_SUMMARY_SUFFIX, event.target.value)
+                        }
                         placeholder="What supports this rating?"
                         className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
                       />
@@ -934,33 +1078,6 @@ function PerspectivesPanel({
           })}
         </ul>
       )}
-
-      <div className="grid gap-2">
-        <p className="text-xs font-semibold text-muted-foreground">
-          {canAssess ? "The employee's own area ratings, rolled up" : "Your area ratings, rolled up"}
-        </p>
-        <ul className="grid gap-2">
-          {rollup.map((lens) => (
-            <li key={lens.value} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{lens.label}</p>
-                <p className="text-xs text-muted-foreground">
-                  {lens.weight}% of this appraisal
-                  {lens.weight !== lens.targetWeight && ` (standard split is ${lens.targetWeight}%)`}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-lg leading-tight font-semibold tabular-nums">
-                  {lens.average != null ? lens.average.toFixed(1) : "—"}
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  {lens.average != null ? "average so far" : "not rated yet"}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
     </div>
   )
 }
@@ -988,7 +1105,9 @@ function FieldSection({
           <label htmlFor={`field-${field.key}`} className="text-sm font-medium">
             {field.label}
           </label>
-          {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
+          {field.description && (
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+          )}
           <textarea
             id={`field-${field.key}`}
             rows={4}
@@ -1012,7 +1131,6 @@ function FinalReviewPanel({
   valueOf,
   weightedScore,
   outstanding,
-  lensRollup,
   onGoToStep,
 }: {
   appraisal: AppraisalDetail
@@ -1022,9 +1140,10 @@ function FinalReviewPanel({
   valueOf: (key: string) => string
   weightedScore: number | null
   outstanding: { id: string; where: string; reason: string }[]
-  lensRollup: { value: string; label: string; weight: number; average: number | null }[]
   onGoToStep: (key: string) => void
 }) {
+  // The top of the template's own rating scale — not a fixed 5.
+  const ratingMax = useRatingScale().at(-1)?.value ?? 5
   const complete = outstanding.length === 0
   const totalQuestions = categories.reduce((sum, category) => sum + category.questions.length, 0)
 
@@ -1033,7 +1152,9 @@ function FinalReviewPanel({
       <div
         className={cn(
           "flex flex-wrap items-center gap-2 rounded-xl border px-4 py-3 text-sm",
-          complete ? "border-success/40 bg-success/5 text-success" : "border-warning/40 bg-warning/5 text-warning"
+          complete
+            ? "border-success/40 bg-success/5 text-success"
+            : "border-warning/40 bg-warning/5 text-warning"
         )}
       >
         {complete ? (
@@ -1047,7 +1168,12 @@ function FinalReviewPanel({
             <span>
               {outstanding.length} item{outstanding.length === 1 ? "" : "s"} still to finish
             </span>
-            <Button variant="outline" size="sm" className="ml-auto" onClick={() => onGoToStep("areas")}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={() => onGoToStep("areas")}
+            >
               Fix in Performance Areas
             </Button>
             {/* Named, not counted. Which one is missing is the whole question
@@ -1064,7 +1190,10 @@ function FinalReviewPanel({
       </div>
 
       <div className="grid gap-2 sm:grid-cols-3">
-        <Stat label="Weighted score" value={weightedScore != null ? weightedScore.toFixed(2) : "—"} />
+        <Stat
+          label="Weighted score"
+          value={weightedScore != null ? weightedScore.toFixed(2) : "—"}
+        />
         <Stat
           label="Questions rated"
           value={`${totalQuestions - outstanding.filter((i) => i.reason === "not rated").length} of ${totalQuestions}`}
@@ -1081,16 +1210,21 @@ function FinalReviewPanel({
             const ratings = category.questions
               .map((question) => answers[question.id]?.rating)
               .filter((rating): rating is number => rating != null)
-            const average = ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null
+            const average = ratings.length
+              ? ratings.reduce((a, b) => a + b, 0) / ratings.length
+              : null
             return (
-              <li key={category.id} className="flex items-center justify-between gap-2 rounded-lg border p-2.5 text-sm">
+              <li
+                key={category.id}
+                className="flex items-center justify-between gap-2 rounded-lg border p-2.5 text-sm"
+              >
                 <span className="min-w-0 truncate">{category.name}</span>
                 <span className="flex shrink-0 items-center gap-2">
                   <Badge variant="outline" className="tabular-nums">
                     {Number(category.weight)}%
                   </Badge>
                   <span className={cn("tabular-nums", average == null && "text-warning")}>
-                    {average != null ? `${average} / 5` : "Not rated"}
+                    {average != null ? `${average} / ${ratingMax}` : "Not rated"}
                   </span>
                 </span>
               </li>
@@ -1098,21 +1232,6 @@ function FinalReviewPanel({
           })}
         </ul>
       </SummaryBlock>
-
-      {lensRollup.length > 0 && (
-      <SummaryBlock title="Performance perspectives" onEdit={() => onGoToStep("perspectives")}>
-        <ul className="grid gap-1.5 sm:grid-cols-3">
-          {lensRollup.map((lens) => (
-            <li key={lens.value} className="grid gap-0.5 rounded-lg border p-2.5">
-              <p className="text-xs text-muted-foreground">{lens.label}</p>
-              <p className="text-lg leading-tight font-semibold tabular-nums">
-                {lens.average != null ? lens.average.toFixed(1) : "—"}
-              </p>
-            </li>
-          ))}
-        </ul>
-      </SummaryBlock>
-      )}
 
       {sections.map((section) => (
         <SummaryBlock
@@ -1137,8 +1256,12 @@ function FinalReviewPanel({
 
       <p className="text-xs text-muted-foreground">
         Submitting creates the next version and sends it on to{" "}
-        {appraisal.managers.primary?.fullName ?? "your primary manager"}. After that it is locked, and any change
-        has to come back as a correction.
+        {appraisal.viewer.canSubmitSelf
+          ? (appraisal.managers[0]?.employee?.fullName ?? "Admin / HR for the final review")
+          : appraisal.status === "manager_review" && appraisal.reviewLevel != null
+            ? (appraisal.managers[appraisal.reviewLevel]?.employee?.fullName ?? "Admin / HR for the final review")
+            : "the next step"}
+        . After that it is locked, and any change has to come back as a correction.
       </p>
     </div>
   )
@@ -1175,24 +1298,22 @@ function SummaryBlock({
   )
 }
 
-/** The reporting line this appraisal was snapshotted against. */
+/** The reviewer chain this appraisal was snapshotted against, then Admin/HR. */
 function ManagerChain({ appraisal }: { appraisal: AppraisalDetail }) {
-  const rows = [
-    ["Primary manager", appraisal.managers.primary],
-    ["Secondary manager", appraisal.managers.secondary],
-    ["Final manager", appraisal.managers.final],
-  ] as const
-
   return (
     <ul className="grid gap-2">
-      {rows.map(([label, manager]) =>
-        manager ? (
-          <li key={label} className="flex items-center justify-between gap-2 rounded-lg border p-2.5">
-            <span className="text-xs text-muted-foreground">{label}</span>
-            <span className="text-sm font-medium">{manager.fullName}</span>
+      {appraisal.managers.map(({ level, employee }) =>
+        employee ? (
+          <li key={level} className="flex items-center justify-between gap-2 rounded-lg border p-2.5">
+            <span className="text-xs text-muted-foreground">Level {level} manager</span>
+            <span className="text-sm font-medium">{employee.fullName}</span>
           </li>
         ) : null
       )}
+      <li className="flex items-center justify-between gap-2 rounded-lg border border-dashed p-2.5">
+        <span className="text-xs text-muted-foreground">Final review</span>
+        <span className="text-sm font-medium">Admin / HR</span>
+      </li>
     </ul>
   )
 }

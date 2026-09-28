@@ -38,6 +38,11 @@ end
 
 ActsAsTenant.with_tenant(company) do
   Roles::SeedDefaults.call(company)
+  EmploymentType.seed_defaults(company)
+  employment_types = {
+    full_time: "Full-time", part_time: "Part-time", contract: "Contract",
+    intern: "Intern", consultant: "Consultant"
+  }.transform_values { |name| company.employment_types.find_by!(name: name) }
 
   departments = {
     engineering: [ "Engineering", "Product & platform engineering" ],
@@ -158,7 +163,7 @@ ActsAsTenant.with_tenant(company) do
       department_id: person[:dept] && departments[person[:dept]].id,
       designation_id: person[:desig] && designations[person[:desig]].id,
       current_level: person[:level],
-      employment_type: person[:type],
+      employment_type_id: employment_types[person[:type]].id,
       date_of_joining: person[:joined].days.ago.to_date,
       date_of_birth: Date.parse(person[:dob]),
       gender: person[:gender],
@@ -193,7 +198,7 @@ ActsAsTenant.with_tenant(company) do
       department_id: departments[person[:dept]].id,
       designation_id: designations[person[:desig]].id,
       current_level: person[:level],
-      employment_type: :full_time,
+      employment_type_id: employment_types[:full_time].id,
       date_of_joining: person[:joined].days.ago.to_date,
       work_location: "Gurugram HQ",
       status: :active

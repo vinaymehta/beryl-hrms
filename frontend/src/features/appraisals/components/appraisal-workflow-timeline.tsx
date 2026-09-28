@@ -3,29 +3,56 @@
 import { CheckIcon } from "lucide-react"
 import { cn } from "cn"
 
-import { APPRAISAL_STATUSES, appraisalStatusMeta } from "@/features/appraisals/constants"
+import { appraisalStatusMeta } from "@/features/appraisals/constants"
 import type { AppraisalStatus, AppraisalTransition } from "@/types/appraisals"
 
 /**
  * The workflow as a progress rail, plus the real audit trail beneath it.
  *
- * The rail shows the CANONICAL path; `secondary_review` is dropped when this
- * appraisal doesn't run one, so an employee whose cycle has no secondary step
- * never sees a stage that will never happen.
+ * The rail is THIS appraisal's path: self-appraisal, then one step per manager
+ * in its reviewer chain (level 1 first), then Admin/HR's Final review,
+ * discussion, release and acknowledgement. Compensation approval is withdrawn
+ * from the workflow and drawn only for an old appraisal sitting in it.
  */
+type Step = { key: string; label: string; waitingOn: string | null }
+
+const TAIL: AppraisalStatus[] = ["final_review", "appraisal_discussion", "released", "employee_acknowledged", "closed"]
+
 export function AppraisalWorkflowTimeline({
   status,
-  secondaryApplicable,
+  reviewLevel,
+  reviewerNames,
   transitions,
 }: {
   status: AppraisalStatus
-  secondaryApplicable: boolean
+  reviewLevel: number | null
+  reviewerNames: string[]
   transitions: AppraisalTransition[]
 }) {
-  const path = APPRAISAL_STATUSES.filter((s) => s.value !== "draft").filter(
-    (s) => secondaryApplicable || s.value !== "secondary_review"
-  )
-  const currentIndex = path.findIndex((s) => s.value === status)
+  const path: Step[] = [
+    { key: "self_appraisal_open", label: "Self-appraisal open", waitingOn: "the employee" },
+    { key: "employee_submitted", label: "Submitted", waitingOn: null },
+    ...reviewerNames.map((name, index) => ({
+      key: `manager_review:${index + 1}`,
+      label: `Level ${index + 1} manager review`,
+      waitingOn: name,
+    })),
+    ...(status === "compensation_approval"
+      ? [{ key: "compensation_approval", label: "Compensation approval", waitingOn: "HR" }]
+      : []),
+    ...TAIL.map((value) => ({
+      key: value,
+      label: appraisalStatusMeta(value).label,
+      waitingOn:
+        value === "final_review" || value === "appraisal_discussion"
+          ? "Admin / HR"
+          : value === "released"
+            ? "the employee to acknowledge"
+            : null,
+    })),
+  ]
+  const currentKey = status === "manager_review" ? `manager_review:${reviewLevel}` : status
+  const currentIndex = path.findIndex((step) => step.key === currentKey)
 
   return (
     <div className="grid gap-5">
@@ -36,7 +63,7 @@ export function AppraisalWorkflowTimeline({
           const isLast = index === path.length - 1
 
           return (
-            <li key={step.value} className="relative flex gap-3 pb-4 last:pb-0">
+            <li key={step.key} className="relative flex gap-3 pb-4 last:pb-0">
               {!isLast && (
                 <span
                   aria-hidden
@@ -64,8 +91,8 @@ export function AppraisalWorkflowTimeline({
                 >
                   {step.label}
                 </p>
-                {current && step.owner && (
-                  <p className="text-xs text-muted-foreground">Waiting on the {step.owner}</p>
+                {current && step.waitingOn && (
+                  <p className="text-xs text-muted-foreground">Waiting on {step.waitingOn}</p>
                 )}
               </div>
             </li>
@@ -80,7 +107,9 @@ export function AppraisalWorkflowTimeline({
             {[...transitions].reverse().map((transition) => (
               <li key={transition.id} className="flex flex-wrap items-baseline gap-x-1.5 text-xs">
                 <span className="font-medium text-foreground">
-                  {appraisalStatusMeta(transition.toStatus).label}
+                  {transition.toStatus === "manager_review" && transition.notes
+                    ? transition.notes
+                    : appraisalStatusMeta(transition.toStatus).label}
                 </span>
                 <span className="text-muted-foreground">
                   by {transition.actorName ?? "system"} ·{" "}

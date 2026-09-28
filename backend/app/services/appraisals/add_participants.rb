@@ -46,14 +46,6 @@ module Appraisals
 
           next unless @cycle.started?
 
-          if employee.primary_manager_id.blank?
-            # Same rule StartCycle applies: an appraisal with nobody to review
-            # it would sit in the workflow forever, so it is refused and
-            # reported rather than created.
-            skipped << { employee_id: employee.id, name: employee.full_name, reason: "no primary manager assigned" }
-            next
-          end
-
           appraisals << create_appraisal(employee)
         end
 
@@ -86,8 +78,9 @@ module Appraisals
           company_id: @cycle.company_id,
           employee: employee,
           status: :self_appraisal_open,
+          reviewer_ids: employee.review_chain_ids,
           primary_manager_id: employee.primary_manager_id,
-          secondary_manager_id: @cycle.secondary_review_enabled? ? employee.secondary_manager_id : nil,
+          secondary_manager_id: employee.secondary_manager_id,
           final_manager_id: employee.final_manager_id
         )
         Workflow.record_transition(appraisal, from: nil, to: :self_appraisal_open, actor: @actor,

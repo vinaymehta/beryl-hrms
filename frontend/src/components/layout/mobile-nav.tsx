@@ -13,9 +13,9 @@ export function MobileNav() {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger
-        render={<Button variant="ghost" size="icon" className="md:hidden" aria-label="Open navigation" />}
+        render={<Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground md:hidden" aria-label="Open navigation" />}
       >
-        <MenuIcon className="size-5" />
+        <MenuIcon className="size-4.5" />
       </SheetTrigger>
       <SheetContent side="left" className="w-72 border-sidebar-border bg-sidebar p-0 text-sidebar-foreground">
         <SheetHeader className="border-b border-sidebar-border px-4 py-3">

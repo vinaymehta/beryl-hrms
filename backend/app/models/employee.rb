@@ -23,11 +23,6 @@ class Employee < ApplicationRecord
   # ArgumentError from the setter, which surfaces as a 500 rather than the 422
   # every other bad field on this form produces. allow_nil because the level
   # is genuinely optional: existing records have none.
-  # §3's employment TYPE, a different axis from `status` (the lifecycle above).
-  enum :employment_type,
-       { full_time: 0, part_time: 1, contract: 2, intern: 3, consultant: 4 },
-       prefix: :employment, validate: { allow_nil: true }
-
   enum :current_level,
        { intern: 0, junior: 1, senior: 2, lead: 3, manager: 4 },
        prefix: :level, validate: { allow_nil: true }
@@ -38,6 +33,9 @@ class Employee < ApplicationRecord
   belongs_to :user, optional: true, inverse_of: :employee_record
   belongs_to :department, optional: true
   belongs_to :designation, optional: true
+  # §3's employment TYPE, a different axis from `status` (the lifecycle above).
+  # A per-company list managed from All Settings — see EmploymentType.
+  belongs_to :employment_type, optional: true
   has_many :leave_requests, dependent: :destroy
   has_many :attendance_records, dependent: :destroy
   has_many :documents, dependent: :destroy
@@ -155,6 +153,10 @@ class Employee < ApplicationRecord
 
   validates :employee_code, presence: true,
             uniqueness: { scope: :company_id, message: "already in use" }
+  # Never below the company's Initial ID (Settings → Other → Initial ID).
+  # Checked only when the code changes, so records that predate the setting
+  # stay saveable.
+  validate :employee_code_not_below_initial, if: :will_save_change_to_employee_code?
   validates :first_name, :last_name, presence: true
 
   validates :gender, inclusion: { in: GENDERS, message: "must be male or female" },
@@ -200,6 +202,15 @@ class Employee < ApplicationRecord
 
   def project_manager_ids
     manager_assignments_for("project_manager").map(&:manager_id)
+  end
+
+  # Everyone who reviews this employee's appraisal, level 1 first: the 1st,
+  # 2nd and 3rd level managers, then every further level in tier order. Empty
+  # levels are skipped and a person is listed once. Snapshotted onto each
+  # appraisal when its cycle starts (Appraisal#reviewer_ids).
+  def review_chain_ids
+    further = manager_assignments_for("additional").sort_by { |a| [ a.tier.to_i, a.id ] }.map(&:manager_id)
+    [ primary_manager_id, secondary_manager_id, final_manager_id, *further ].compact.uniq
   end
 
   # The full §4 hierarchy as the API and the UI talk about it.
@@ -252,7 +263,7 @@ class Employee < ApplicationRecord
     "designation_id" => :designation_changed,
     "department_id" => :department_changed,
     "status" => :status_changed,
-    "employment_type" => :employment_type_changed,
+    "employment_type_id" => :employment_type_changed,
     "work_location" => :location_changed
   }.freeze
 
@@ -376,7 +387,7 @@ class Employee < ApplicationRecord
       when "designation_id" then Designation.find_by(id: raw)&.title
       when "department_id" then Department.find_by(id: raw)&.name
       when "status" then self.class.statuses.key(raw) || raw
-      when "employment_type" then self.class.employment_types.key(raw) || raw
+      when "employment_type_id" then EmploymentType.find_by(id: raw)&.name
       else raw.to_s
       end
     end
@@ -488,5 +499,31 @@ class Employee < ApplicationRecord
       return if assigned_manager_id("secondary").blank? && assigned_manager_id("final").blank?
 
       raise ManagerHierarchyError, "A primary manager is required before assigning a secondary or final manager"
+    end
+
+  # Why a code breaks the Initial ID rule, or nil when it doesn't.
+  #
+  # With an Initial ID of "ACM-001", a code must carry the same "ACM-" prefix
+  # and a number of at least 1 — "ACM-001" itself is the first valid one. An
+  # Initial ID with no trailing number sets no floor.
+  def self.employee_code_floor_error(company, code)
+    initial = company&.employee_code_initial.to_s.strip
+    code = code.to_s.strip
+    return nil if initial.blank? || code.blank?
+
+    floor = initial.match(Employees::NextCode::TRAILING_NUMBER)
+    return nil if floor.nil?
+
+    prefix, digits = floor.captures
+    candidate = code.match(Employees::NextCode::TRAILING_NUMBER)
+    return nil if candidate && candidate[1] == prefix && candidate[2].to_i >= digits.to_i
+
+    "must be #{initial} or higher"
+  end
+
+  private
+    def employee_code_not_below_initial
+      message = self.class.employee_code_floor_error(company, employee_code)
+      errors.add(:employee_code, message) if message
     end
 end

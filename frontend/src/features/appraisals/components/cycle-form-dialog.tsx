@@ -6,7 +6,6 @@ import { CalendarClockIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
@@ -68,7 +67,6 @@ function CycleForm({
   cycle?: AppraisalCycleDetail
 }) {
   const [values, setValues] = useState(() => initialValues(cycle))
-  const [secondaryEnabled, setSecondaryEnabled] = useState(cycle?.secondaryReviewEnabled ?? false)
   const [reviewType, setReviewType] = useState(cycle?.reviewType ?? "annual")
   const [eligibleIds, setEligibleIds] = useState<string[]>(
     () => (cycle?.eligibleEmployees ?? []).map((employee) => String(employee.id))
@@ -106,7 +104,6 @@ function CycleForm({
   function handleSubmit() {
     const payload = {
       ...values,
-      secondaryReviewEnabled: secondaryEnabled,
       reviewType,
       ...(locked ? {} : { eligibleEmployeeIds: eligibleIds }),
     }
@@ -200,14 +197,15 @@ function CycleForm({
             <div className="grid gap-3.5 sm:grid-cols-2">
               {field("startsOn", "Cycle starts", "date")}
               {field("employeeSubmissionDeadline", "Employee submission", "date")}
-              {field("primaryReviewDeadline", "Primary review", "date")}
-              {secondaryEnabled && field("secondaryReviewDeadline", "Secondary review", "date")}
-              {field("finalizationDeadline", "Finalization", "date")}
+              {field("primaryReviewDeadline", "Manager reviews", "date")}
+              {field("finalizationDeadline", "Final review (Admin/HR)", "date")}
             </div>
-            <Label className="flex items-center gap-2 text-sm font-normal">
-              <Checkbox checked={secondaryEnabled} onCheckedChange={(next) => setSecondaryEnabled(Boolean(next))} />
-              Run a secondary manager review in this cycle
-            </Label>
+            {/* No secondary switch: every manager level the employee has
+                reviews in turn, and an empty level is skipped. */}
+            <p className="text-xs text-muted-foreground">
+              Each employee&apos;s appraisal goes to every one of their manager levels in order, then to
+              Admin/HR for the final review.
+            </p>
           </section>
 
           <section className="grid gap-2 rounded-xl border bg-card p-4 shadow-2xs">
@@ -227,7 +225,7 @@ function CycleForm({
             <p className="text-xs text-muted-foreground">
               {locked
                 ? "This cycle has started — eligibility is fixed."
-                : "One appraisal is created per employee when the cycle starts. Anyone without a primary manager is reported back and skipped."}
+                : "One appraisal is created per employee when the cycle starts. It goes to each of their manager levels in turn, then to Admin/HR for the final review."}
             </p>
           </section>
         </div>

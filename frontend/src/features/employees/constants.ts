@@ -151,12 +151,3 @@ export const ADDITIONAL_MANAGER_RELATIONSHIPS: {
 export const MANAGER_LEVEL_LABELS: Record<string, string> = Object.fromEntries(
   [...MANAGER_LEVELS, ...ADDITIONAL_MANAGER_RELATIONSHIPS].map((level) => [level.value, level.label])
 )
-
-/** §3's employment TYPE — a different axis from the lifecycle `status`. */
-export const EMPLOYMENT_TYPES = [
-  { value: "full_time", label: "Full-time" },
-  { value: "part_time", label: "Part-time" },
-  { value: "contract", label: "Contract" },
-  { value: "intern", label: "Intern" },
-  { value: "consultant", label: "Consultant" },
-]

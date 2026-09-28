@@ -1,5 +1,10 @@
+# Redis in development too, not the in-process async adapter: notifications
+# are also raised from Sidekiq jobs (reminders), which run in another process
+# and could never reach an async subscriber.
 development:
-  adapter: async
+  adapter: redis
+  url: <%= ENV.fetch("REDIS_URL") { "redis://localhost:6390/0" } %>
+  channel_prefix: backend_development
 
 test:
   adapter: test

@@ -3,7 +3,8 @@
 import { cn } from "cn"
 import { InfoIcon, TriangleAlertIcon } from "lucide-react"
 
-import { RATING_SCALE, RATINGS_REQUIRING_COMMENT, SIGNIFICANT_RATING_GAP } from "@/features/appraisals/constants"
+import { RATINGS_REQUIRING_COMMENT, SIGNIFICANT_RATING_GAP } from "@/features/appraisals/constants"
+import { useRatingScale } from "@/features/appraisals/components/rating-select"
 import type { AppraisalTemplateQuestion } from "@/types/appraisals"
 
 export interface AnswerValue {
@@ -25,9 +26,11 @@ export function RatingScaleInput({
   disabled?: boolean
   labelledBy?: string
 }) {
+  // The template's scale when inside an appraisal (RatingScaleContext).
+  const scale = useRatingScale()
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" role="radiogroup" aria-labelledby={labelledBy}>
-      {RATING_SCALE.map((option) => {
+      {scale.map((option) => {
         const active = value === option.value
         return (
           <button

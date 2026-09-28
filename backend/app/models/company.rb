@@ -5,6 +5,7 @@ class Company < ApplicationRecord
   has_many :employees, dependent: :destroy
   has_many :departments, dependent: :destroy
   has_many :designations, dependent: :destroy
+  has_many :employment_types, dependent: :destroy
   has_many :roles, dependent: :destroy
   has_many :zoho_connections, dependent: :destroy
   has_many :calendly_connections, dependent: :destroy
@@ -33,6 +34,13 @@ class Company < ApplicationRecord
   validates :name, presence: true
   validates :slug, presence: true, uniqueness: true, format: { with: /\A[a-z0-9-]+\z/ }
   validates :timezone, presence: true, inclusion: { in: ActiveSupport::TimeZone.all.map(&:name) }
+
+  # The domain every work email must end with — or nil when none is set or the
+  # check has been switched off in Settings, meaning any valid address is
+  # accepted. The one reader everything that applies the rule goes through.
+  def enforced_work_email_domain
+    work_email_domain.presence if work_email_domain_enforced?
+  end
 
   private
     def generate_slug

@@ -20,6 +20,8 @@ module Api
       def mark_all_read
         authorize Notification, :index?
         policy_scope(Notification).unread.update_all(read_at: Time.current, updated_at: Time.current)
+        # update_all skips callbacks, so the other tabs are told here.
+        NotificationsChannel.notify(Current.user)
         head :no_content
       end
     end

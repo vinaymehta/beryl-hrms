@@ -2,9 +2,9 @@ import { AllSettingsWorkspace } from "@/features/settings/components/all-setting
 
 export const metadata = { title: "All Settings" }
 
-// Under (dashboard) on purpose, though it covers the shell entirely: that is
-// what gives it the authentication gate and the forced-password-change gate
-// without re-implementing either. See AllSettingsWorkspace.
+// Under (dashboard), so it renders inside the shell like any other page and
+// inherits the authentication and forced-password-change gates. Admin only —
+// see AllSettingsWorkspace.
 //
 // Next.js 16: searchParams is async — must be awaited, no synchronous access.
 export default async function AllSettingsPage({
@@ -14,12 +14,13 @@ export default async function AllSettingsPage({
 }) {
   const { section } = await searchParams
   const known = [
-    "departments_view",
-    "departments_edit",
-    "departments_delete",
+    "departments",
+    "job_titles",
+    "employment_types",
     "calendly",
     "mail",
     "initial_id",
+    "company",
   ] as const
   const initial = known.find((id) => id === section)
 

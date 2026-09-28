@@ -1,10 +1,11 @@
 class AppraisalTemplateCategory < ApplicationRecord
   acts_as_tenant(:company)
 
-  # The three performance lenses the scope names, with their headline split.
-  # Stored per category so a template can carry several categories per lens.
-  # Nil is a real state: "the source never said which perspective this is".
-  # Activation is where it becomes mandatory — see AppraisalTemplate.
+  # Legacy: the scope's three "lenses" (Past / Current / Future), once tagged
+  # on each category and required before activation. The company workbook has
+  # no such tag — its Performance Perspective block is a separate section the
+  # MANAGER fills in (see TemplateImport#wizard_sections) — so the tag is no
+  # longer asked for or required. Kept, optional, for templates that have one.
   enum :lens, { past: 0, current_capability: 1, future_readiness: 2 },
        prefix: true, validate: { allow_nil: true }
 

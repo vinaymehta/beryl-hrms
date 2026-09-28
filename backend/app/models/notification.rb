@@ -12,6 +12,10 @@ class Notification < ApplicationRecord
 
   validates :category, :title, presence: true
 
+  # Pushes "changed" to the owner's open tabs over NotificationsChannel, so the
+  # bell updates the moment one is raised or read — no polling.
+  after_commit -> { NotificationsChannel.notify(user) }, on: %i[create update destroy]
+
   scope :unread, -> { where(read_at: nil) }
   scope :newest_first, -> { order(created_at: :desc) }
 

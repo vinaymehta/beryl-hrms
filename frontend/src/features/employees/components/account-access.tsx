@@ -7,9 +7,7 @@ import {
   KeyRoundIcon,
   CheckCircle2Icon,
   ClockIcon,
-  CopyIcon,
 } from "lucide-react"
-import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -88,9 +86,6 @@ export function AccountAccess({
   // point rather than an imposition.
   const [forceChange, setForceChange] = useState(true)
   const [password, setPassword] = useState(() => generatePassword())
-  // The password that was actually sent, held so it can be read out to
-  // somebody whose mail hasn't arrived. Cleared as soon as the panel is left.
-  const [lastSent, setLastSent] = useState<string | null>(null)
 
   const account = employee.user
 
@@ -107,19 +102,11 @@ export function AccountAccess({
   const sentOn = formatDate(account.credentialsSentAt)
   const busy = invite.isPending || resetPassword.isPending
 
-  function onSent(sent: string) {
-    setLastSent(sent)
-    // A fresh one for the next press, so the same password is never sent twice.
+  // The sent password is not shown back: it is in the employee's inbox, and
+  // the success toast says where it went. A fresh one is readied for the next
+  // press, so the same password is never sent twice.
+  function onSent() {
     setPassword(generatePassword())
-  }
-
-  async function copy(value: string) {
-    try {
-      await navigator.clipboard.writeText(value)
-      toast.success("Password copied.")
-    } catch {
-      toast.error("Couldn't copy. Select it and copy manually.")
-    }
   }
 
   return (
@@ -167,29 +154,6 @@ export function AccountAccess({
 
       {canManage && (
         <div className="grid gap-3 border-t pt-4">
-          {/* Shown once, after sending. The same value is in the employee's
-              inbox — this is here for the call that starts "I never got it". */}
-          {lastSent && (
-            <div className="grid gap-1.5 rounded-lg border border-success/40 bg-success/5 p-3">
-              <p className="text-xs font-medium text-success">
-                Sent to {account.email}. This is the only time it&apos;s shown here.
-              </p>
-              <div className="flex items-center gap-2">
-                <code className="max-w-72 flex-1 truncate rounded bg-background px-2 py-1 font-mono text-sm">
-                  {lastSent}
-                </code>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => copy(lastSent)}
-                >
-                  <CopyIcon className="size-3.5" /> Copy
-                </Button>
-              </div>
-            </div>
-          )}
-
           <div className="grid gap-1.5">
             <Label htmlFor="account-password">Password to send</Label>
             {/* No Generate button here. Generating one belongs on the Add and
@@ -238,7 +202,7 @@ export function AccountAccess({
                 onClick={() =>
                   invite.mutate(
                     { id: employee.id, password, forcePasswordChange: forceChange },
-                    { onSuccess: (result) => onSent(result.password) }
+                    { onSuccess: onSent }
                   )
                 }
               >
@@ -278,8 +242,8 @@ export function AccountAccess({
                 resetPassword.mutate(
                   { id: employee.id, password, forcePasswordChange: forceChange },
                   {
-                    onSuccess: (result) => {
-                      onSent(result.password)
+                    onSuccess: () => {
+                      onSent()
                       setConfirmingReset(false)
                     },
                   }

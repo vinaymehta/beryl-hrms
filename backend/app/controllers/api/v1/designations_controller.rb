@@ -3,9 +3,10 @@ module Api
     class DesignationsController < Api::V1::BaseController
       def index
         authorize Designation
-        scope = policy_scope(Designation)
+        # Archived (deleted) job titles are left out, as DepartmentsController does.
+        scope = policy_scope(Designation).active
         scope = scope.where(department_id: params[:departmentId]) if params[:departmentId].present?
-        render_data(Api::V1::DesignationSerializer.new(scope.order(:title)).as_json)
+        render_data(Api::V1::DesignationSerializer.new(scope.order(created_at: :desc, id: :desc)).as_json)
       end
 
       def show

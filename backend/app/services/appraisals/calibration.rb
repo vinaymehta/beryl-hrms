@@ -39,14 +39,15 @@ module Appraisals
 
     private
       def appraisals
-        @cycle.appraisals
-              .includes(:employee, { employee: :designation }, :revisions, :primary_manager, :final_manager)
-              .order("employees.last_name")
+        @appraisals ||= @cycle.appraisals
+                                        .includes(:employee, { employee: :designation }, :revisions)
+                                        .order("employees.last_name")
+                                        .to_a
       end
 
       def build_row(appraisal)
         self_score = score_for(appraisal, "self_appraisal")
-        manager_score = score_for(appraisal, "primary_review")
+        manager_score = score_for(appraisal, "manager_review", level: 1)
         gap = self_score && manager_score ? (self_score - manager_score).round(2) : nil
 
         {
@@ -64,14 +65,21 @@ module Appraisals
           overridden: appraisal.overridden?,
           gap: gap,
           flagged: gap.present? && gap.abs >= SIGNIFICANT_GAP,
-          primary_manager: appraisal.primary_manager&.full_name,
-          final_manager: appraisal.final_manager&.full_name,
+          # The first and last manager levels of the reviewer chain.
+          primary_manager: reviewer_names[appraisal.reviewer_ids.first],
+          final_manager: reviewer_names[appraisal.reviewer_ids.last],
           released: appraisal.released?
         }
       end
 
-      def score_for(appraisal, stage)
-        appraisal.revisions.select { |revision| revision.stage == stage }
+      # Every reviewer on every appraisal in the cohort, loaded once.
+      def reviewer_names
+        @reviewer_names ||= Employee.where(id: appraisals.flat_map(&:reviewer_ids).uniq)
+                                    .to_h { |employee| [ employee.id, employee.full_name ] }
+      end
+
+      def score_for(appraisal, stage, level: nil)
+        appraisal.revisions.select { |revision| revision.stage == stage && (level.nil? || revision.review_level == level) }
                  .max_by(&:version_number)&.calculated_score&.to_f
       end
 

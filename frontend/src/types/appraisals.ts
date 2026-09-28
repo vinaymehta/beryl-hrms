@@ -14,9 +14,15 @@ export type AppraisalStatus =
   | "released"
   | "employee_acknowledged"
   | "closed"
+  /** One step per manager level — `reviewLevel` says which. */
+  | "manager_review"
 
-/** Which party authored a revision. V1 self → V2 primary → V3 secondary → Final. */
-export type AppraisalStage = "self_appraisal" | "primary_review" | "secondary_review" | "final_review"
+/**
+ * Which party authored a revision: the employee, one manager level
+ * (`reviewLevel`), or Admin/HR's Final review. primary/secondary_review are the
+ * old fixed stages, still found on historical rows.
+ */
+export type AppraisalStage = "self_appraisal" | "manager_review" | "primary_review" | "secondary_review" | "final_review"
 
 /** The three performance lenses (Past 60 / Current 25 / Future 15). */
 export type AppraisalLens = "past" | "current_capability" | "future_readiness"
@@ -116,9 +122,11 @@ export interface AppraisalSummary {
   effectiveScore: string | null
   releasedAt: string | null
   acknowledgedAt: string | null
-  secondaryReviewApplicable: boolean
+  /** The manager level whose turn it is, while `status` is manager_review. */
+  reviewLevel: number | null
+  /** The reviewer chain, level 1 first. */
+  reviewerNames: string[]
   primaryManagerName: string | null
-  finalManagerName: string | null
   currentVersion: number | null
 }
 
@@ -137,6 +145,8 @@ export interface AppraisalRevision {
   versionNumber: number
   label: string
   stage: AppraisalStage
+  /** The manager level that wrote it, for a manager_review revision. */
+  reviewLevel?: number | null
   submittedAt: string
   calculatedScore: string | null
   authorName: string | null
@@ -215,6 +225,8 @@ export interface AppraisalViewer {
   isSubject: boolean
   isAdministrator: boolean
   canSaveSelfDraft: boolean
+  /** A reviewer at their own stage — may save their review in progress. */
+  canSaveReviewDraft: boolean
   canSubmitSelf: boolean
   canSubmitReview: boolean
   canReturnForCorrection: boolean
@@ -256,14 +268,13 @@ export interface AppraisalDetail extends AppraisalSummary {
   compensation: AppraisalCompensationDecision | null
   /** Empty unless the viewer may record a promotion. */
   designationOptions: { id: string; title: string }[]
-  managers: {
-    primary: EmployeeSummary | null
-    secondary: EmployeeSummary | null
-    final: EmployeeSummary | null
-  }
+  /** The reviewer chain, level 1 first. */
+  managers: { level: number; employee: EmployeeSummary | null }[]
   viewer: AppraisalViewer
   /** Null for everyone but the employee, and once they have submitted. */
   selfAppraisalDraft: SelfAppraisalDraft | null
+  /** The viewer's own unsubmitted review at the current stage. Same shape. */
+  reviewDraft: SelfAppraisalDraft | null
 }
 
 export interface AppraisalListParams {
