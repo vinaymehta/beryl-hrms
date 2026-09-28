@@ -138,6 +138,27 @@ module Api
         render_detail(appraisal)
       end
 
+      # Discussion: Admin/HR record the increment and whether to promote, having
+      # read every level's recommendation. Stored on the appraisal's
+      # compensation decision; the workflow does not move — Release does that.
+      def discussion
+        appraisal = find_appraisal
+        authorize appraisal, :save_discussion?
+
+        decision = appraisal.compensation_decision || appraisal.build_compensation_decision
+        promote = ActiveModel::Type::Boolean.new.cast(params[:promote])
+        decision.assign_attributes(
+          actor_user: Current.user,
+          approved_increment_percentage: params[:increment_percentage].presence,
+          promotion_recommendation: if promote.nil? then :none elsif promote then :recommended else :not_recommended end,
+          proposed_designation_id: promote ? params[:proposed_designation_id].presence : nil,
+          promotion_reason: params[:promotion_reason].presence
+        )
+        decision.save!
+        ::Audit::Record.call(action: "appraisal.discussion_saved", auditable: appraisal, request: request)
+        render_detail(appraisal)
+      end
+
       # A reviewer's own independent version, at the stage they own.
       def submit_review
         appraisal = find_appraisal

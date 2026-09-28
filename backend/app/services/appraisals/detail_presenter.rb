@@ -34,6 +34,7 @@ module Appraisals
         "scoreOverrides" => Api::V1::AppraisalScoreOverrideSerializer.new(@appraisal.score_overrides.to_a).as_json,
         "selfAppraisalDraft" => self_appraisal_draft,
         "reviewDraft" => review_draft,
+        "discussion" => discussion_payload,
         # The subject's own compact record, for the page header (job title,
         # department, employee code). Same serializer the reporting line
         # already uses, so it carries no more than a manager's entry does —
@@ -91,6 +92,25 @@ module Appraisals
           "responses" => draft["responses"] || {},
           "step" => draft["step"],
           "savedAt" => draft["saved_at"]
+        }
+      end
+
+      # The Discussion step's decision — Admin/HR only, never the employee.
+      def discussion_payload
+        return nil unless @policy.administrator?
+
+        decision = @appraisal.compensation_decision
+        promote = case decision&.promotion_recommendation
+        when "recommended" then true
+        when "not_recommended" then false
+        end
+        {
+          "incrementPercentage" => decision&.approved_increment_percentage&.to_s,
+          "promote" => promote,
+          "proposedDesignationId" => decision&.proposed_designation_id&.to_s,
+          "proposedDesignationTitle" => decision&.proposed_designation&.title,
+          "promotionReason" => decision&.promotion_reason,
+          "canEdit" => @policy.save_discussion?
         }
       end
 

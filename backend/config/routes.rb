@@ -111,6 +111,8 @@ Rails.application.routes.draw do
           # self-appraisal can save as it goes without minting V-numbers.
           patch :save_draft
           patch :save_review_draft
+          # Admin/HR's increment and promotion choice at the Discussion step.
+          patch :discussion
           # A reviewer's independent version at the stage they own.
           post :submit_review
           patch :advance

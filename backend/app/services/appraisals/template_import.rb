@@ -97,6 +97,12 @@ module Appraisals
       label.to_s.downcase.gsub(/[^a-z0-9]+/, "_").gsub(/\A_+|_+\z/, "").presence || "field"
     end
 
+    # Who answers a Final Review field: the employee for one that says so in
+    # its label, every manager level otherwise.
+    def self.final_field_audience(label)
+      label.to_s.match?(/\bemployee\b/i) ? "employee" : "reviewer"
+    end
+
     def self.call(...) = new(...).call
 
     def initialize(file:)
@@ -319,11 +325,14 @@ module Appraisals
             key: "final_review",
             kind: "long_text",
             title: banner_title(:final_review) || "Final review",
-            caption: "Completed by the reviewer",
-            # Not the employee's to fill in — the workbook puts these under a
-            # FINAL REVIEW banner, which is the manager's part of the form.
-            audience: "reviewer",
-            fields: final_review.map { |field| field.slice(:key, :label).merge(input: "textarea") }
+            caption: "Final comments and recommendation",
+            # Mixed audience, decided per field: "Employee Final Comments" is
+            # the employee's, the rest (Manager Final Comments, Promotion
+            # Recommendation) every manager level answers. Admin/HR then see
+            # all of them side by side in the Discussion step.
+            fields: final_review.map do |field|
+              field.slice(:key, :label).merge(input: "textarea", audience: self.class.final_field_audience(field[:label]))
+            end
           }
         end
 

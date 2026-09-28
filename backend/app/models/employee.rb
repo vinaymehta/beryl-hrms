@@ -138,13 +138,6 @@ class Employee < ApplicationRecord
 
   # The minimum age at which somebody may be added.
   MINIMUM_AGE_YEARS = 22
-  # How far ahead a joining date may be set. Beyond this it is a plan, not a
-  # start date, and it is nearly always a typo in the year.
-  MAX_JOINING_DAYS_AHEAD = 30
-
-  GENDERS = %w[male female].freeze
-  WORK_LOCATIONS = %w[Faridabad Delhi Gurgaon].freeze
-
   # +91 optional, then a ten-digit number starting 6-9, which is every mobile
   # series India issues. Spaces and dashes are tolerated in what is typed and
   # stripped before this runs.
@@ -159,10 +152,9 @@ class Employee < ApplicationRecord
   validate :employee_code_not_below_initial, if: :will_save_change_to_employee_code?
   validates :first_name, :last_name, presence: true
 
-  validates :gender, inclusion: { in: GENDERS, message: "must be male or female" },
-            allow_blank: true, if: :will_save_change_to_gender?
-  validates :work_location, inclusion: { in: WORK_LOCATIONS, message: "isn't one of the available locations" },
-            allow_blank: true, if: :will_save_change_to_work_location?
+  # Gender, work location and the joining-date window are the employee FORM's
+  # rules only (frontend schemas.ts), not the model's — so seeds, imports and
+  # historical records with other values still save.
   validates :postal_code, format: { with: POSTAL_CODE, message: "must be exactly 6 digits" },
             allow_blank: true, if: :will_save_change_to_postal_code?
   validates :phone, format: { with: INDIAN_PHONE, message: "must be a valid Indian mobile number" },
@@ -178,7 +170,6 @@ class Employee < ApplicationRecord
             allow_blank: true, if: :will_save_change_to_personal_email?
 
   validate :date_of_birth_meets_minimum_age, if: :will_save_change_to_date_of_birth?
-  validate :date_of_joining_within_window, if: :will_save_change_to_date_of_joining?
 
   # Typed with spaces, dashes or brackets; stored as digits so two people who
   # entered the same number the same way are stored the same way.
@@ -323,16 +314,6 @@ class Employee < ApplicationRecord
         errors.add(:date_of_birth, "can't be in the future")
       elsif date_of_birth > self.class.minimum_birth_date
         errors.add(:date_of_birth, "must be at least #{MINIMUM_AGE_YEARS} years ago")
-      end
-    end
-
-    def date_of_joining_within_window
-      return if date_of_joining.blank?
-
-      if date_of_joining < Date.current
-        errors.add(:date_of_joining, "can't be in the past")
-      elsif date_of_joining > Date.current + MAX_JOINING_DAYS_AHEAD.days
-        errors.add(:date_of_joining, "can't be more than #{MAX_JOINING_DAYS_AHEAD} days from today")
       end
     end
 

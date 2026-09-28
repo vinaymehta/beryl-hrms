@@ -33,6 +33,9 @@ class AppraisalPolicy < ApplicationPolicy
   def save_review_draft? = submit_review?
 
   # A reviewer submitting their own independent version, at the stage they own.
+  # The Discussion step's increment / promotion choice: Admin/HR, before release.
+  def save_discussion? = administrator? && record.appraisal_discussion?
+
   # Only at a step that takes a review — a manager level or the Final review.
   # Discussion is a checkpoint before release, with no form: Admin/HR still
   # own it (advance, return, release), but there is nothing to submit there.

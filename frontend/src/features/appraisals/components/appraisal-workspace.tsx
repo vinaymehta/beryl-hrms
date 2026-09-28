@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button"
 import { AppraisalStatusBadge } from "@/features/appraisals/components/appraisal-badges"
 import { AppraisalWorkflowTimeline } from "@/features/appraisals/components/appraisal-workflow-timeline"
 import { PerformanceAreaList } from "@/features/appraisals/components/performance-area-list"
+import { DiscussionPanel } from "@/features/appraisals/components/discussion-panel"
 import {
   RatingGuide,
   RatingScaleContext,
@@ -43,6 +44,7 @@ import {
 import {
   NARRATIVE_FIELDS,
   ratingScaleFrom,
+  templateFieldAudience,
   type NarrativeKey,
 } from "@/features/appraisals/constants"
 import {
@@ -106,11 +108,35 @@ function fallbackSection(keys: NarrativeKey[], id: string, title: string): Templ
  * A hardcoded field the template does not define is simply not in the list, so
  * it is never rendered — which is the "hide it" half of the rule.
  */
-function narrativeSections(template: AppraisalDetail["template"], forReviewer: boolean) {
+type FormRole = "employee" | "manager" | "admin"
+
+/** From the Discussion step on, Admin/HR see the Discussion tab. */
+const DISCUSSION_ONWARDS: AppraisalDetail["status"][] = [
+  "appraisal_discussion",
+  "released",
+  "employee_acknowledged",
+  "closed",
+]
+
+function narrativeSections(template: AppraisalDetail["template"], role: FormRole) {
   const defined = (template.structure?.wizardSections ?? []).filter(
     (section) => section.kind === "long_text" && section.fields.length > 0
   )
-  const own = defined.filter((section) => forReviewer || section.audience !== "reviewer")
+  // Each field is asked of whoever answers it. The Final Review block is the
+  // mixed one: the employee writes their final comments, every manager level
+  // writes theirs and a promotion recommendation, and Admin/HR — who read all
+  // of those at Discussion — are not asked them again in the Final review.
+  const own = defined
+    .filter((section) => !(role === "admin" && section.key === "final_review"))
+    .map((section) => ({
+      ...section,
+      fields: section.fields.filter((field) => {
+        const audience = templateFieldAudience(section.key, field, section.audience)
+        if (audience === "both") return true
+        return role === "employee" ? audience === "employee" : audience === "reviewer"
+      }),
+    }))
+    .filter((section) => section.fields.length > 0)
 
   if (own.length === 0) {
     return {
@@ -188,9 +214,10 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
   const categories = appraisal.template.categories
   // A reviewer resumes their own review draft; the employee their self draft.
   const draft = forReviewer ? appraisal.reviewDraft : appraisal.selfAppraisalDraft
+  const formRole: FormRole = !forReviewer ? "employee" : appraisal.status === "final_review" ? "admin" : "manager"
   const sections = useMemo(
-    () => narrativeSections(appraisal.template, forReviewer),
-    [appraisal.template, forReviewer]
+    () => narrativeSections(appraisal.template, formRole),
+    [appraisal.template, formRole]
   )
 
   const submitSelf = useSubmitSelfAppraisal(appraisal.id)
@@ -692,6 +719,18 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
             label: viewer.canSubmitReview ? "Your review" : "Self-appraisal",
             icon: PencilLineIcon,
             render: renderForm,
+          },
+        ]
+      : []),
+    // Admin/HR's Discussion: first in line once the reviews are done, and kept
+    // afterwards as the record of what was decided. Never the employee's.
+    ...(appraisal.discussion && DISCUSSION_ONWARDS.includes(appraisal.status)
+      ? [
+          {
+            id: "discussion",
+            label: "Discussion",
+            icon: MessageSquareIcon,
+            render: () => <DiscussionPanel appraisal={appraisal} />,
           },
         ]
       : []),

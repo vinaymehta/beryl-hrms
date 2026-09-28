@@ -62,6 +62,18 @@ export function useSaveSelfAppraisalDraft(id: string) {
   })
 }
 
+export function useSaveDiscussion(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (values: Parameters<typeof appraisalsApi.saveDiscussion>[1]) => appraisalsApi.saveDiscussion(id, values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appraisals", id] })
+      toast.success("Discussion saved.")
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't save the discussion.")),
+  })
+}
+
 export function useSaveReviewDraft(id: string) {
   const queryClient = useQueryClient()
   return useMutation({

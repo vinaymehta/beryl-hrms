@@ -188,3 +188,19 @@ export const REVIEW_TYPES = [
   { value: "promotion", label: "Promotion review" },
   { value: "ad_hoc", label: "Ad-hoc review" },
 ]
+
+/**
+ * Who answers a template field. The Final Review block mixes both: a field
+ * whose label names the employee ("Employee Final Comments") is theirs, the
+ * rest every manager level answers. An explicit `audience` on the field wins;
+ * templates imported before fields carried one are read by label.
+ */
+export function templateFieldAudience(
+  sectionKey: string,
+  field: { label: string; audience?: "reviewer" | "employee" | null },
+  sectionAudience?: "reviewer" | "employee" | null
+): "reviewer" | "employee" | "both" {
+  if (field.audience) return field.audience
+  if (sectionKey === "final_review") return /\bemployee\b/i.test(field.label) ? "employee" : "reviewer"
+  return sectionAudience === "reviewer" ? "reviewer" : "both"
+}

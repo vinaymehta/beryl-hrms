@@ -275,6 +275,8 @@ export interface AppraisalDetail extends AppraisalSummary {
   selfAppraisalDraft: SelfAppraisalDraft | null
   /** The viewer's own unsubmitted review at the current stage. Same shape. */
   reviewDraft: SelfAppraisalDraft | null
+  /** Admin/HR's Discussion decision; null for everyone else. */
+  discussion: AppraisalDiscussion | null
 }
 
 export interface AppraisalListParams {
@@ -427,6 +429,8 @@ export interface TemplateField {
   description?: string | null
   weight?: number | null
   input?: string
+  /** Who answers it, when a section mixes both (the Final Review block). */
+  audience?: "reviewer" | "employee" | null
 }
 
 /**
@@ -515,4 +519,15 @@ export interface Calibration {
     released: number
     distribution: Record<string, number>
   }
+}
+
+/** The Discussion step's choice, made by Admin/HR before release. */
+export interface AppraisalDiscussion {
+  incrementPercentage: string | null
+  /** true = promote, false = not promoting, null = not decided yet. */
+  promote: boolean | null
+  proposedDesignationId: string | null
+  proposedDesignationTitle: string | null
+  promotionReason: string | null
+  canEdit: boolean
 }

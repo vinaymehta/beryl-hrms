@@ -68,7 +68,16 @@ export function withDerivedSections(structure: TemplateStructure): TemplateStruc
       title: prior?.title || defaults.title,
       caption: prior?.caption ?? defaults.caption,
       ...(defaults.audience ? { audience: defaults.audience } : {}),
-      fields: filled.map((row) => ({ key: fieldKey(row.label), label: row.label, input: "textarea" })),
+      fields: filled.map((row) => ({
+        key: fieldKey(row.label),
+        label: row.label,
+        input: "textarea",
+        // The Final Review block is answered field by field: the employee's
+        // own final comments by them, the rest by every manager level.
+        ...(key === "final_review"
+          ? { audience: /\bemployee\b/i.test(row.label) ? ("employee" as const) : ("reviewer" as const) }
+          : {}),
+      })),
     })
   }
   longText("development", structure.developmentFields, {
@@ -77,8 +86,7 @@ export function withDerivedSections(structure: TemplateStructure): TemplateStruc
   })
   longText("final_review", structure.finalReviewFields, {
     title: "Final review",
-    caption: "Completed by the reviewer",
-    audience: "reviewer",
+    caption: "Final comments and recommendation",
   })
 
   return { ...structure, wizardSections: sections }
@@ -169,7 +177,7 @@ export function ImportedSectionsEditor({
 
       <LabelList
         label="Final review fields"
-        hint="Completed by the manager."
+        hint="A field naming the employee is theirs; the rest every manager answers. Admin/HR see all of them at Discussion."
         rows={finalReview}
         placeholder="Overall manager comments"
         onChange={(rows) => update({ finalReviewFields: rows })}
