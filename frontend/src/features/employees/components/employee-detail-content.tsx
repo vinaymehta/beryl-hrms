@@ -28,10 +28,8 @@ import { API_ORIGIN } from "@/lib/api-client"
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
 } from "@/components/ui/sheet"
+import { PanelBody, PanelFooter, PanelHeader } from "@/components/ui/panel"
 import {
   Dialog,
   DialogContent,
@@ -346,25 +344,19 @@ export function EmployeeDetailContent({
 
       <Sheet open={editOpen} onOpenChange={setEditOpen}>
         <SheetContent side="right" className="w-full p-0 flex flex-col gap-0 sm:w-[45vw] sm:min-w-180 sm:max-w-275">
-          <SheetHeader className="border-b bg-role-hr/5 pr-14">
-            <div className="flex items-center gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-role-hr/12 text-role-hr">
-                <PencilIcon className="size-5" />
-              </span>
-              <div>
-                <SheetTitle className="text-lg">Edit employee</SheetTitle>
-                <SheetDescription>Update {employee.firstName}&apos;s profile, reporting managers and access.</SheetDescription>
-              </div>
-            </div>
-          </SheetHeader>
-          <div className="flex-1 overflow-y-auto bg-muted/30 p-4">
+          <PanelHeader
+            icon={PencilIcon}
+            title="Edit employee"
+            description={<>Update {employee.firstName}&apos;s profile, reporting managers and access.</>}
+          />
+          <PanelBody>
             <EmployeeForm
               employee={employee}
               isPending={updateEmployee.isPending}
               onSubmit={(values) => updateEmployee.mutate(values, { onSuccess: () => setEditOpen(false) })}
             />
-          </div>
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t bg-background p-4 shadow-[0_-1px_8px_rgba(0,0,0,0.04)]">
+          </PanelBody>
+          <PanelFooter>
             <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>
               Cancel
             </Button>
@@ -377,7 +369,7 @@ export function EmployeeDetailContent({
               <PencilIcon className="size-4" />
               {updateEmployee.isPending ? "Saving…" : "Save changes"}
             </Button>
-          </div>
+          </PanelFooter>
         </SheetContent>
       </Sheet>
 

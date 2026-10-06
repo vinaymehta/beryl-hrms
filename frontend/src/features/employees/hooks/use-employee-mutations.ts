@@ -199,9 +199,9 @@ export function useCreateEmploymentType() {
     mutationFn: (values: EmploymentTypeFormValues) => employmentTypesApi.create(values),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["employment-types"] })
-      toast.success("Employee type created.")
+      toast.success("Designation created.")
     },
-    onError: (error) => toast.error(errorMessage(error, "Couldn't create that employee type.")),
+    onError: (error) => toast.error(errorMessage(error, "Couldn't create that designation.")),
   })
 }
 
@@ -213,9 +213,9 @@ export function useUpdateEmploymentType() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["employment-types"] })
       queryClient.invalidateQueries({ queryKey: ["employees"] })
-      toast.success("Employee type updated.")
+      toast.success("Designation updated.")
     },
-    onError: (error) => toast.error(errorMessage(error, "Couldn't update that employee type.")),
+    onError: (error) => toast.error(errorMessage(error, "Couldn't update that designation.")),
   })
 }
 
@@ -226,8 +226,8 @@ export function useDeleteEmploymentType() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["employment-types"] })
       queryClient.invalidateQueries({ queryKey: ["employees"] })
-      toast.success("Employee type deleted.")
+      toast.success("Designation deleted.")
     },
-    onError: (error) => toast.error(errorMessage(error, "Couldn't delete that employee type.")),
+    onError: (error) => toast.error(errorMessage(error, "Couldn't delete that designation.")),
   })
 }

@@ -63,9 +63,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   if (user?.mustChangePassword) return <RequiredPasswordChange />
 
   return (
-    <div className="flex min-h-svh">
+    // A fixed-height frame: only <main> scrolls, so the sidebar and top bar
+    // never scroll away. Side panels (Sheet, side="right") are placed just
+    // below the top bar and dim only what is right of the sidebar — which is
+    // only correct if those two are always on screen.
+    <div className="flex h-svh overflow-hidden">
       <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Topbar />
         <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>

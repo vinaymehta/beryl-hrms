@@ -36,7 +36,8 @@ module Api
         authorize Employee
         scope = policy_scope(Employee).includes(
           :department, :designation, :employment_type,
-          { manager_assignments: { manager: %i[department designation] } },
+          { profile_photo_attachment: :blob },
+          { manager_assignments: { manager: [ :department, :designation, { profile_photo_attachment: :blob } ] } },
           { user: :roles }
         )
         scope = scope.where(department_id: params[:departmentId]) if params[:departmentId].present?

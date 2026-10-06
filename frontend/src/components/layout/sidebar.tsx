@@ -3,6 +3,7 @@
 import Link from "next/link"
 
 import { SidebarNav } from "@/components/layout/sidebar-nav"
+import { BrandMark } from "@/components/brand/brand-mark"
 
 /**
  * The desktop sidebar. Always on, on every route — Settings used to collapse
@@ -17,10 +18,7 @@ export function Sidebar() {
         href="/"
         className="flex h-14 items-center gap-2.5 border-b border-sidebar-border px-4 font-semibold tracking-tight text-sidebar-foreground"
       >
-        <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-accent-foreground text-sm text-primary-foreground shadow-sm shadow-primary/30">
-          H
-        </span>
-        HR Platform
+        <BrandMark />
       </Link>
       <div className="flex-1 overflow-y-auto py-3">
         <SidebarNav />

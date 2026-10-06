@@ -4,12 +4,13 @@ import { useState } from "react"
 import { CalendarClockIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { PanelBody, PanelFooter, PanelHeader, PanelSection } from "@/components/ui/panel"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
+  Sheet, SheetContent,
 } from "@/components/ui/sheet"
 import { REVIEW_TYPES } from "@/features/appraisals/constants"
 import { useAppraisalTemplates } from "@/features/appraisals/hooks/use-appraisals"
@@ -115,30 +116,16 @@ function CycleForm({
 
   return (
     <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:w-[45vw] sm:min-w-160 sm:max-w-240">
-        <SheetHeader className="border-b bg-role-hr/5 pr-14">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-role-hr/12 text-role-hr">
-              <CalendarClockIcon className="size-5" />
-            </span>
-            <div>
-              <SheetTitle className="text-lg">{isEdit ? "Edit cycle" : "New appraisal cycle"}</SheetTitle>
-              <SheetDescription>
-                Name it, pick a template, set the deadlines, and choose who is in it.
-              </SheetDescription>
-            </div>
-          </div>
-        </SheetHeader>
+        <PanelHeader
+          icon={CalendarClockIcon}
+          title={isEdit ? "Edit cycle" : "New appraisal cycle"}
+          description="Name it, pick a template, set the deadlines, and choose who is in it."
+        />
 
-        {/* Block layout, not `grid flex-1`. As a grid that is ALSO the flex-1
-            scroll container this had a definite height, so its auto rows were
-            compressed — and because each card sets `overflow-hidden`, their
-            automatic minimum size resolves to 0 (min-height:auto only applies
-            when overflow is visible), so nothing stopped them collapsing to the
-            header. Every card rendered 40px tall once there were a few of them.
-            `space-y-4` gives the same rhythm with content-sized children. */}
-        <div className="flex-1 space-y-4 overflow-y-auto bg-muted/30 p-4">
-          <section className="grid gap-3.5 rounded-xl border bg-card p-4 shadow-2xs">
-            <h3 className="text-sm font-semibold">Cycle</h3>
+        {/* PanelBody is block layout, not a grid — see the note there on why a
+            grid scroll container collapses its cards. */}
+        <PanelBody>
+          <PanelSection title="Cycle">
             {field("name", "Name")}
             <div className="grid gap-1.5">
               <Label htmlFor="cycle-review-type">Review type</Label>
@@ -190,10 +177,9 @@ function CycleForm({
               {field("assessmentPeriodStart", "Assessment period from", "date")}
               {field("assessmentPeriodEnd", "Assessment period to", "date")}
             </div>
-          </section>
+          </PanelSection>
 
-          <section className="grid gap-3.5 rounded-xl border bg-card p-4 shadow-2xs">
-            <h3 className="text-sm font-semibold">Deadlines</h3>
+          <PanelSection title="Deadlines">
             <div className="grid gap-3.5 sm:grid-cols-2">
               {field("startsOn", "Cycle starts", "date")}
               {field("employeeSubmissionDeadline", "Employee submission", "date")}
@@ -206,10 +192,9 @@ function CycleForm({
               Each employee&apos;s appraisal goes to every one of their manager levels in order, then to
               Admin/HR for the final review.
             </p>
-          </section>
+          </PanelSection>
 
-          <section className="grid gap-2 rounded-xl border bg-card p-4 shadow-2xs">
-            <h3 className="text-sm font-semibold">Eligible employees</h3>
+          <PanelSection title="Eligible employees">
             <MultiSelect
               options={employeeOptions}
               value={eligibleIds}
@@ -227,10 +212,10 @@ function CycleForm({
                 ? "This cycle has started — eligibility is fixed."
                 : "One appraisal is created per employee when the cycle starts. It goes to each of their manager levels in turn, then to Admin/HR for the final review."}
             </p>
-          </section>
-        </div>
+          </PanelSection>
+        </PanelBody>
 
-        <div className="flex shrink-0 items-center justify-end gap-2 border-t bg-background p-4">
+        <PanelFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
@@ -241,7 +226,7 @@ function CycleForm({
           >
             {isPending ? "Saving…" : isEdit ? "Save cycle" : "Create cycle"}
           </Button>
-        </div>
+        </PanelFooter>
     </SheetContent>
   )
 }

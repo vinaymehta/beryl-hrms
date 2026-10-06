@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { PlusIcon, PlayIcon, PencilIcon, Trash2Icon, CalendarClockIcon, UsersIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -18,7 +19,7 @@ import {
 } from "@/components/ui/dialog"
 import { CycleStatusBadge } from "@/features/appraisals/components/appraisal-badges"
 import { CycleFormDialog } from "@/features/appraisals/components/cycle-form-dialog"
-import { useAppraisalCycles, useAppraisalCycle } from "@/features/appraisals/hooks/use-appraisals"
+import { useAppraisalCycles, useAppraisalCycle, useAppraisalTemplates } from "@/features/appraisals/hooks/use-appraisals"
 import {
   useStartAppraisalCycle,
   useCloseAppraisalCycle,
@@ -81,6 +82,12 @@ export function AppraisalCyclesView({ onOpenCycle }: { onOpenCycle: (cycleId: st
   const [formOpen, setFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const canManage = usePermission(PERMISSIONS.appraisalCyclesManage)
+  const canManageTemplates = usePermission(PERMISSIONS.appraisalTemplatesManage)
+  const router = useRouter()
+  // A cycle can only be created on an ACTIVE template — the form's template
+  // picker offers nothing else — so with none, the form is a dead end.
+  const { data: activeTemplates, isLoading: templatesLoading } = useAppraisalTemplates("active", canManage)
+  const [needsTemplate, setNeedsTemplate] = useState(false)
 
   const { data: cycles, isLoading, isError, refetch } = useAppraisalCycles()
   const { data: editingCycle } = useAppraisalCycle(editingId)
@@ -90,6 +97,12 @@ export function AppraisalCyclesView({ onOpenCycle }: { onOpenCycle: (cycleId: st
   const closeCycle = useCloseAppraisalCycle()
 
   function openNew() {
+    // Still loading counts as "has one": the form's own picker fills in as the
+    // list arrives, and blocking on a request in flight would just be a delay.
+    if (!templatesLoading && (activeTemplates?.length ?? 0) === 0) {
+      setNeedsTemplate(true)
+      return
+    }
     setEditingId(null)
     setFormOpen(true)
   }
@@ -235,6 +248,29 @@ export function AppraisalCyclesView({ onOpenCycle }: { onOpenCycle: (cycleId: st
           ))}
         </div>
       )}
+
+      <Dialog open={needsTemplate} onOpenChange={setNeedsTemplate}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create an appraisal template first</DialogTitle>
+            <DialogDescription>
+              Every cycle is run on a template — it holds the questions and rating scale each employee and
+              manager answers. There is no active template yet, so there is nothing to build a cycle on.
+              {canManageTemplates
+                ? " Create one (or activate a draft), then come back to start the cycle."
+                : " Ask an Admin or HR to create one, then come back to start the cycle."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline">Cancel</Button>} />
+            {canManageTemplates && (
+              <Button className="gap-1.5" onClick={() => router.push("/appraisals/templates/new")}>
+                <PlusIcon className="size-4" /> Create template
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
         <DialogContent>

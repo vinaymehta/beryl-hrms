@@ -36,10 +36,12 @@ Rails.application.configure do
   # reach, so photos silently failed to load.
   config.active_storage.resolve_model_to_route = :rails_storage_proxy
 
-  # Outgoing mail. Three modes, in precedence order:
+  # Outgoing mail. Four modes, in precedence order:
   #
   #   MAIL_TRANSPORT=zoho  — the Zoho Mail API, through the OAuth connection
   #                          the app already holds. No SMTP credentials needed.
+  #   MAIL_TRANSPORT=resend — Resend's SMTP relay; needs RESEND_API_KEY and a
+  #                          MAIL_FROM on a domain verified in Resend.
   #   SMTP_ADDRESS set     — ordinary SMTP.
   #   neither              — letter_opener, which has been in the Gemfile's
   #                          development group all along but was never actually
@@ -59,6 +61,18 @@ Rails.application.configure do
     # OAuth connection the Mail feature reads and sends with. No second set of
     # credentials to provision. See Zoho::MailDelivery.
     config.action_mailer.delivery_method = :zoho
+    config.action_mailer.raise_delivery_errors = true
+  elsif ENV.fetch("MAIL_TRANSPORT", nil) == "resend"
+    # Same settings as production — see the note there.
+    config.action_mailer.delivery_method = :smtp
+    config.action_mailer.smtp_settings = {
+      address: "smtp.resend.com",
+      port: 587,
+      user_name: "resend",
+      password: ENV["RESEND_API_KEY"].presence,
+      authentication: :plain,
+      enable_starttls_auto: true
+    }.compact
     config.action_mailer.raise_delivery_errors = true
   elsif ENV["SMTP_ADDRESS"].present?
     config.action_mailer.delivery_method = :smtp

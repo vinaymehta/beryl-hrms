@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { PlusIcon, EyeIcon, PencilIcon, Trash2Icon } from "lucide-react"
+import { PlusIcon, EyeIcon, PencilIcon, Trash2Icon, Building2Icon, BriefcaseIcon, IdCardIcon } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -19,6 +19,8 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Sheet, SheetClose, SheetContent } from "@/components/ui/sheet"
+import { PanelBody, PanelFooter, PanelHeader, PanelSection } from "@/components/ui/panel"
 import {
   Dialog,
   DialogContent,
@@ -53,7 +55,7 @@ import {
 } from "@/features/employees/schemas"
 
 /**
- * Create and edit in one dialog.
+ * Create and edit in one side panel.
  *
  * The two differ only in where the values start and which mutation runs, and
  * two near-identical forms would be two places to keep the validation, the
@@ -90,46 +92,51 @@ function DepartmentDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{editing ? `Edit ${department.name}` : "New department"}</DialogTitle>
-          <DialogDescription>Departments group employees and designations for reporting.</DialogDescription>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+        <PanelHeader
+          icon={Building2Icon}
+          title={editing ? `Edit ${department.name}` : "New department"}
+          description="Departments group employees and designations for reporting."
+        />
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4" noValidate>
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <DialogFooter>
-              <DialogClose render={<Button variant="outline">Cancel</Button>} />
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
+            <PanelBody>
+              <PanelSection title="Details">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Name</FormLabel>
+                      <FormControl><Input {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description</FormLabel>
+                      <FormControl><Input {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </PanelSection>
+            </PanelBody>
+            <PanelFooter>
+              <SheetClose render={<Button type="button" variant="outline">Cancel</Button>} />
               <Button type="submit" disabled={saving} onClick={form.handleSubmit(onSubmit)}>
                 {saving ? "Saving…" : editing ? "Save changes" : "Create"}
               </Button>
-            </DialogFooter>
+            </PanelFooter>
           </form>
         </Form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -269,7 +276,7 @@ function BulkDeleteDepartmentsDialog({
   )
 }
 
-/** Create and edit a job title, in one dialog like DepartmentDialog. */
+/** Create and edit a job title, in one panel like DepartmentDialog. */
 function JobTitleDialog({
   designation,
   onOpenChange,
@@ -298,57 +305,62 @@ function JobTitleDialog({
   }
 
   return (
-    <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{editing ? `Edit ${designation.title}` : "New job title"}</DialogTitle>
-          <DialogDescription>Job titles sit within a department.</DialogDescription>
-        </DialogHeader>
+    <Sheet open onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+        <PanelHeader
+          icon={BriefcaseIcon}
+          title={editing ? `Edit ${designation.title}` : "New job title"}
+          description="Job titles sit within a department."
+        />
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4" noValidate>
-            <FormField
-              control={form.control}
-              name="title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Title</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="departmentId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Department</FormLabel>
-                  <Select
-                    items={departments?.map((d) => ({ value: String(d.id), label: d.name }))}
-                    value={field.value || null}
-                    onValueChange={(v) => field.onChange(v ?? "")}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="w-full"><SelectValue placeholder="Select department" /></SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {departments?.map((d) => <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <DialogFooter>
-              <DialogClose render={<Button variant="outline">Cancel</Button>} />
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
+            <PanelBody>
+              <PanelSection title="Details">
+                <FormField
+                  control={form.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Title</FormLabel>
+                      <FormControl><Input {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="departmentId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Department</FormLabel>
+                      <Select
+                        items={departments?.map((d) => ({ value: String(d.id), label: d.name }))}
+                        value={field.value || null}
+                        onValueChange={(v) => field.onChange(v ?? "")}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full"><SelectValue placeholder="Select department" /></SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {departments?.map((d) => <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </PanelSection>
+            </PanelBody>
+            <PanelFooter>
+              <SheetClose render={<Button type="button" variant="outline">Cancel</Button>} />
               <Button type="submit" disabled={saving} onClick={form.handleSubmit(onSubmit)}>
                 {saving ? "Saving…" : editing ? "Save changes" : "Create"}
               </Button>
-            </DialogFooter>
+            </PanelFooter>
           </form>
         </Form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -377,46 +389,51 @@ function EmploymentTypeDialog({
   }
 
   return (
-    <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{editing ? `Edit ${employmentType.name}` : "New employee type"}</DialogTitle>
-          <DialogDescription>Offered on the employee form, e.g. Full-time or Contract.</DialogDescription>
-        </DialogHeader>
+    <Sheet open onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+        <PanelHeader
+          icon={IdCardIcon}
+          title={editing ? `Edit ${employmentType.name}` : "New designation"}
+          description="Offered as Designation on the employee form."
+        />
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4" noValidate>
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <DialogFooter>
-              <DialogClose render={<Button variant="outline">Cancel</Button>} />
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
+            <PanelBody>
+              <PanelSection title="Details">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Name</FormLabel>
+                      <FormControl><Input {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description</FormLabel>
+                      <FormControl><Input {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </PanelSection>
+            </PanelBody>
+            <PanelFooter>
+              <SheetClose render={<Button type="button" variant="outline">Cancel</Button>} />
               <Button type="submit" disabled={saving} onClick={form.handleSubmit(onSubmit)}>
                 {saving ? "Saving…" : editing ? "Save changes" : "Create"}
               </Button>
-            </DialogFooter>
+            </PanelFooter>
           </form>
         </Form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -551,7 +568,7 @@ export function AddEmploymentTypeButton() {
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)}>
-        <PlusIcon /> Add employee type
+        <PlusIcon /> Add designation
       </Button>
       {open && <EmploymentTypeDialog onOpenChange={setOpen} />}
     </>
@@ -749,11 +766,11 @@ export function EmploymentTypesManager() {
   return (
     <Card>
       <CardContent className="grid gap-3 pt-6">
-        <p className="text-sm text-muted-foreground">{types?.length ?? 0} total employee types</p>
+        <p className="text-sm text-muted-foreground">{types?.length ?? 0} total designations</p>
         {isLoading ? (
           <Skeleton className="h-24 w-full" />
         ) : !types?.length ? (
-          <p className="text-sm text-muted-foreground">No employee types yet.</p>
+          <p className="text-sm text-muted-foreground">No designations yet.</p>
         ) : (
           <div className="grid gap-2">
             {types.map((t) => (

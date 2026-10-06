@@ -1,7 +1,7 @@
 import { RecruitmentWorkspace } from "@/features/recruitment/components/recruitment-workspace"
 
 export const metadata = {
-  title: "Recruitment | HR Platform",
+  title: "Recruitment",
   description: "AI-powered recruitment intelligence, resume processing, and candidate matching.",
 }
 

@@ -121,7 +121,7 @@ function Workspace({ initialSection }: { initialSection?: SettingsSectionId }) {
   if (section !== null) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-background">
-        <header className="flex h-16 shrink-0 items-center gap-3 border-b bg-surface px-4">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-surface px-4">
           <Button
             size="icon-sm"
             variant="outline"

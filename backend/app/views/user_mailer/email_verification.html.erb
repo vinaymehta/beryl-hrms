@@ -2,4 +2,5 @@
 
 <p>Welcome! Please confirm your email address to finish setting up your account. This link expires in 24 hours.</p>
 
-<p><%= link_to "Verify your email", @url %></p>
+<%= mail_button "Verify your email", @url %>
+<%= mail_fallback_link @url %>

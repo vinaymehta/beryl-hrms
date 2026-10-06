@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import {
   MailIcon,
   InboxIcon,
@@ -13,7 +13,6 @@ import {
   MailCheckIcon,
   Trash2Icon,
   XIcon,
-  FilterIcon,
   type LucideIcon,
 } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
@@ -33,7 +32,10 @@ import { MessageList, MessageListSkeleton } from "@/features/mail/components/mes
 import { MessageReadingPane } from "@/features/mail/components/message-reading-pane"
 import { ComposeMailDialog } from "@/features/mail/components/compose-mail-dialog"
 import { MailReauthAlert, MailRateLimitedAlert } from "@/features/mail/components/mail-status-alert"
-import { MailDateFilter } from "@/features/mail/components/mail-date-filter"
+import { FilterPanel } from "@/components/ui/filter-panel"
+import { PanelOptionList, PanelSection } from "@/components/ui/panel"
+import { DatePicker } from "@/components/ui/date-picker"
+import { Label } from "@/components/ui/label"
 import {
   DEFAULT_MAIL_DATE_RANGE_PRESET,
   MAIL_DATE_RANGE_PRESETS,
@@ -76,99 +78,10 @@ interface Kpi {
   onClick?: () => void
 }
 
-/** Compact trigger button, styled to match the "Filters" pill used
- *  elsewhere (Resumes list / Scan Mail) — sits in the header next to Sync
- *  Now / Compose. There is always an active range (the Default 15-day
- *  window on load), so the button names it rather than showing a badge. */
-function MailFilterButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      data-filter-trigger
-      onClick={onClick}
-      className={cn("h-8 gap-1.5 rounded-full text-xs", active && "border-accent-mail text-accent-mail bg-accent-mail/5")}
-    >
-      <FilterIcon className="size-3.5" />
-      {label}
-    </Button>
-  )
-}
-
-/**
- * The Mail page's date filter — the single source of truth for which slice
- * of history is fetched from Zoho. Applying a range re-fetches exactly that
- * range (message list and every count), stores nothing, and never touches
- * ZohoAutoScanJob, which keeps picking up only newly received mail on its
- * own cursor regardless of what is selected here.
- */
-function MailFilterPanel({
-  preset: initialPreset,
-  customFrom: initialCustomFrom,
-  customTo: initialCustomTo,
-  onApply,
-  onClose,
-}: {
-  preset: MailDateRangePreset
-  customFrom: string
-  customTo: string
-  onApply: (next: { preset: MailDateRangePreset; customFrom: string; customTo: string; range: MailDateRange }) => void
-  onClose: () => void
-}) {
-  const panelRef = useRef<HTMLDivElement>(null)
-  const [preset, setPreset] = useState<MailDateRangePreset>(initialPreset)
-  const [customFrom, setCustomFrom] = useState(initialCustomFrom)
-  const [customTo, setCustomTo] = useState(initialCustomTo)
-  const [resolvedRange, setResolvedRange] = useState<MailDateRange | null>(
-    resolveMailDateRange(initialPreset, { from: initialCustomFrom, to: initialCustomTo })
-  )
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      const target = e.target as Node
-      if (panelRef.current?.contains(target)) return
-      // The Select's dropdown options render in a portal attached to
-      // document.body, outside panelRef's DOM subtree entirely — without
-      // this check, picking a preset registers as an "outside" click and
-      // closes the whole popover before Apply can ever be pressed.
-      if (target instanceof Element && (target.closest('[data-slot="select-content"]') || target.closest('[data-filter-trigger]'))) return
-      onClose()
-    }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [onClose])
-
-  function handleApply() {
-    if (!resolvedRange) return
-    onApply({ preset, customFrom, customTo, range: resolvedRange })
-    onClose()
-  }
-
-  return (
-    <div
-      ref={panelRef}
-      className="absolute right-0 top-full z-50 mt-2 flex w-max flex-col gap-2 rounded-lg bg-popover p-3 text-popover-foreground shadow-lg ring-1 ring-foreground/10"
-    >
-      <p className="whitespace-nowrap text-xs font-medium text-foreground">Show mail from</p>
-      <div className="flex items-start gap-2">
-        <MailDateFilter
-          preset={preset}
-          customFrom={customFrom}
-          customTo={customTo}
-          onChange={({ preset: p, customFrom: f, customTo: t, resolved }) => {
-            setPreset(p)
-            setCustomFrom(f)
-            setCustomTo(t)
-            setResolvedRange(resolved)
-          }}
-        />
-        <Button size="sm" className="h-8 shrink-0 text-xs" disabled={!resolvedRange} onClick={handleApply}>
-          Apply
-        </Button>
-      </div>
-    </div>
-  )
+/** Local calendar date — no mail exists from the future, so the range stops here. */
+function todayIso() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
 export function MailWorkspace() {
@@ -185,7 +98,6 @@ export function MailWorkspace() {
 
   const [composeOpen, setComposeOpen] = useState(false)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
-  const [rangeFilterOpen, setRangeFilterOpen] = useState(false)
 
   // The single source of truth for how much mail history is fetched from
   // Zoho — defaults to the last 15 days, drives both the message list and
@@ -197,6 +109,19 @@ export function MailWorkspace() {
   const [dateFilter, setDateFilter] = useState<MailDateRange | null>(() =>
     resolveMailDateRange(DEFAULT_MAIL_DATE_RANGE_PRESET)
   )
+
+  // Applied as it is picked. A custom range only takes effect once both ends
+  // are set; until then the previous range stays on screen.
+  function applyRange(preset: MailDateRangePreset, from: string, to: string) {
+    setDatePreset(preset)
+    setCustomFrom(from)
+    setCustomTo(to)
+    const range = resolveMailDateRange(preset, { from, to })
+    if (!range) return
+    setDateFilter(range)
+    setSearchQuery(undefined)
+    setPage(1)
+  }
 
   // What the Filters button names — the preset's own label, or the actual
   // dates once a custom range is in effect.
@@ -393,29 +318,48 @@ export function MailWorkspace() {
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="relative">
-            <MailFilterButton
-              active={rangeFilterOpen}
-              label={activeRangeLabel}
-              onClick={() => setRangeFilterOpen((v) => !v)}
-            />
-            {rangeFilterOpen && (
-              <MailFilterPanel
-                preset={datePreset}
-                customFrom={customFrom}
-                customTo={customTo}
-                onApply={({ preset, customFrom: f, customTo: t, range }) => {
-                  setDatePreset(preset)
-                  setCustomFrom(f)
-                  setCustomTo(t)
-                  setDateFilter(range)
-                  setSearchQuery(undefined)
-                  setPage(1)
-                }}
-                onClose={() => setRangeFilterOpen(false)}
+          <FilterPanel
+            label={activeRangeLabel}
+            ariaLabel="Filter mail by date"
+            title="Filter mail"
+            description="Changes apply immediately — the list and every count re-fetch for the range."
+            activeCount={datePreset === DEFAULT_MAIL_DATE_RANGE_PRESET ? 0 : 1}
+            onReset={() => applyRange(DEFAULT_MAIL_DATE_RANGE_PRESET, "", "")}
+            accentClassName="border-accent-mail text-accent-mail bg-accent-mail/5"
+            badgeClassName="bg-accent-mail text-white"
+            className="h-8"
+          >
+            <PanelSection title="Show mail from" flush>
+              <PanelOptionList
+                label="Show mail from"
+                options={MAIL_DATE_RANGE_PRESETS}
+                allLabel={null}
+                value={datePreset}
+                onChange={(next) => applyRange(next ?? DEFAULT_MAIL_DATE_RANGE_PRESET, customFrom, customTo)}
               />
-            )}
-          </div>
+              {datePreset === "custom" && (
+                <div className="grid grid-cols-2 gap-3 border-t p-4">
+                  {(["from", "to"] as const).map((end) => (
+                    <div key={end} className="grid gap-1.5">
+                      <Label htmlFor={`mail-date-${end}`} className="text-xs font-normal text-muted-foreground">
+                        {end === "from" ? "From" : "To"}
+                      </Label>
+                      <DatePicker
+                        id={`mail-date-${end}`}
+                        value={end === "from" ? customFrom : customTo}
+                        min={end === "to" ? customFrom || undefined : undefined}
+                        max={end === "from" ? customTo || todayIso() : todayIso()}
+                        placeholder="dd/mm/yyyy"
+                        onChange={(value) =>
+                          applyRange("custom", end === "from" ? value : customFrom, end === "to" ? value : customTo)
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </PanelSection>
+          </FilterPanel>
           <Button
             variant="outline"
             onClick={async () => {

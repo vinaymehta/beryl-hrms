@@ -102,26 +102,46 @@ Rails.application.configure do
   # Zoho for mail should not have to also provision SMTP credentials for the
   # same mailbox; leaving this branch out of production would mean the
   # feature worked locally and silently fell back to SMTP once shipped.
+  #
+  # MAIL_TRANSPORT=resend sends through Resend (resend.com) over its SMTP
+  # relay — the same :smtp delivery as below, with Resend's host and the API
+  # key as the password, so only RESEND_API_KEY and MAIL_FROM need setting.
+  # MAIL_FROM must be on a domain verified in the Resend dashboard.
   config.action_mailer.delivery_method = ENV["MAIL_TRANSPORT"] == "zoho" ? :zoho : :smtp
   config.action_mailer.perform_deliveries = true
   # Deliberately loud. These are transactional mails a candidate is waiting on,
   # so a failure should surface as a retrying Sidekiq job rather than being
   # swallowed into a success the admin never questions.
   config.action_mailer.raise_delivery_errors = true
-  config.action_mailer.smtp_settings = {
-    address: ENV["SMTP_ADDRESS"].presence,
-    port: ENV.fetch("SMTP_PORT", 587).to_i,
-    user_name: ENV["SMTP_USERNAME"].presence,
-    password: ENV["SMTP_PASSWORD"].presence,
-    authentication: :plain,
-    enable_starttls_auto: true
-  }.compact
+  config.action_mailer.smtp_settings =
+    if ENV["MAIL_TRANSPORT"] == "resend"
+      {
+        address: "smtp.resend.com",
+        port: 587,
+        user_name: "resend",
+        password: ENV["RESEND_API_KEY"].presence,
+        authentication: :plain,
+        enable_starttls_auto: true
+      }.compact
+    else
+      {
+        address: ENV["SMTP_ADDRESS"].presence,
+        port: ENV.fetch("SMTP_PORT", 587).to_i,
+        user_name: ENV["SMTP_USERNAME"].presence,
+        password: ENV["SMTP_PASSWORD"].presence,
+        authentication: :plain,
+        enable_starttls_auto: true
+      }.compact
+    end
 
   # Without a host, ActionMailer quietly falls back to localhost:25 — the exact
   # silent failure this block exists to end. Say so once, at boot, rather than
   # letting it be discovered through candidates who never got their email.
   config.after_initialize do
-    if ENV["SMTP_ADDRESS"].blank? && ENV["MAIL_TRANSPORT"] != "zoho"
+    if ENV["MAIL_TRANSPORT"] == "resend" && ENV["RESEND_API_KEY"].blank?
+      Rails.logger.warn("[mail] MAIL_TRANSPORT=resend but RESEND_API_KEY is not set — outgoing mail WILL fail.")
+    end
+    if ENV["SMTP_ADDRESS"].blank? && !%w[zoho resend].include?(ENV["MAIL_TRANSPORT"])
       Rails.logger.warn("[mail] SMTP_ADDRESS is not set — outgoing mail WILL fail. Set SMTP_ADDRESS/PORT/USERNAME/PASSWORD, or MAIL_TRANSPORT=zoho.")
     end
     if ENV["MAIL_FROM"].blank? && ENV["MAIL_TRANSPORT"] != "zoho"

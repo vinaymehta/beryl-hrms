@@ -7,7 +7,7 @@
   <tr><td style="color:#666;">Interview</td><td><%= @when_text %></td></tr>
 </table>
 
-<p><%= link_to "Give your feedback", @feedback_url %></p>
+<%= mail_button "Give your feedback", @feedback_url %>
 
 <p>It takes about a minute — an overall rating, whether you&rsquo;d recommend moving forward, and any comments.</p>
 

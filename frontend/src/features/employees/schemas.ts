@@ -11,6 +11,8 @@ const EMPLOYEE_LEVEL_VALUES = ["intern", "junior", "senior", "lead", "manager"] 
  */
 export const MINIMUM_AGE_YEARS = 22
 export const MAX_JOINING_DAYS_AHEAD = 30
+/** How far back a joining date may go — for recording people who joined long ago. */
+export const MAX_JOINING_YEARS_BACK = 50
 export const GENDERS = ["male", "female"] as const
 export const WORK_LOCATIONS = ["Faridabad", "Delhi", "Gurgaon"] as const
 /** +91 optional, then a ten-digit Indian mobile. Punctuation is stripped first. */
@@ -39,8 +41,16 @@ export function minimumBirthDate(today = new Date()) {
   return d
 }
 
-const isoDate = (d: Date) => d.toISOString().slice(0, 10)
+// Local calendar date, not toISOString(): that is the UTC date, which in India
+// is still yesterday until 05:30 — and disagreed with the date picker's "today".
+const isoDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 export const todayIso = () => isoDate(new Date())
+export const minJoiningIso = () => {
+  const d = new Date()
+  d.setFullYear(d.getFullYear() - MAX_JOINING_YEARS_BACK)
+  return isoDate(d)
+}
 export const maxJoiningIso = () => {
   const d = new Date()
   d.setDate(d.getDate() + MAX_JOINING_DAYS_AHEAD)
@@ -51,7 +61,7 @@ export const maxBirthDateIso = () => isoDate(minimumBirthDate())
 /**
  * The form's rules, built for one MODE.
  *
- * The date windows — joining today..+30 days, and a 22nd birthday already past
+ * The date windows — joining within the last 50 years up to +30 days, and a 22nd birthday already past
  * — are HIRING rules. They describe somebody being taken on, so they apply
  * when adding a person and not when editing one who is already here: half the
  * directory joined last year, and applying the window to them makes their
@@ -62,16 +72,37 @@ export const maxBirthDateIso = () => isoDate(minimumBirthDate())
  * Employee scopes the same rules to the field actually CHANGING
  * (`if: :will_save_change_to_date_of_joining?`), so the two agree.
  */
-export function buildEmployeeFormSchema({ isNew }: { isNew: boolean }) {
+export function buildEmployeeFormSchema({
+  isNew,
+  workEmailDomain = () => null,
+}: {
+  isNew: boolean
+  /**
+   * A getter, not a value: the domain is fetched, so it is usually not known
+   * yet when the form builds this schema. Read at validation time instead.
+   */
+  workEmailDomain?: () => string | null
+}) {
   return baseEmployeeFields
+    .superRefine((values, ctx) => {
+      // Worded identically to Employees::AccountProvisioner#reject_foreign_domain.
+      const domain = workEmailDomain()
+      if (domain && values.workEmail && !values.workEmail.toLowerCase().endsWith(`@${domain.toLowerCase()}`)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["workEmail"],
+          message: `Work email must end with @${domain}`,
+        })
+      }
+    })
     .superRefine((values, ctx) => {
       if (!isNew) return
 
-      if (values.dateOfJoining && (values.dateOfJoining < todayIso() || values.dateOfJoining > maxJoiningIso())) {
+      if (values.dateOfJoining && (values.dateOfJoining < minJoiningIso() || values.dateOfJoining > maxJoiningIso())) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["dateOfJoining"],
-          message: `Joining date must be today or within the next ${MAX_JOINING_DAYS_AHEAD} days`,
+          message: `Joining date must be within the last ${MAX_JOINING_YEARS_BACK} years or the next ${MAX_JOINING_DAYS_AHEAD} days`,
         })
       }
       if (values.dateOfBirth && values.dateOfBirth > maxBirthDateIso()) {

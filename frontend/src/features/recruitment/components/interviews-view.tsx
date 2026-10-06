@@ -9,8 +9,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FilterPanel } from "@/components/ui/filter-panel"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { PanelOptionList, PanelSection } from "@/components/ui/panel"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
@@ -67,7 +66,6 @@ const STAGE_FILTER_OPTIONS: { label: string; value: CandidateStatus }[] = [
 ]
 
 /** The same two stages, plus "All", in the shape the panel's Select wants. */
-const STAGE_SELECT_ITEMS = [{ label: "All stages", value: "all" }, ...STAGE_FILTER_OPTIONS]
 
 // Only the Filter's own stages light it up — a tab selection is shown by the
 // tab, not by a count on a control that didn't set it.
@@ -173,31 +171,20 @@ export function InterviewsView() {
             accentClassName="border-role-recruitment text-role-recruitment bg-role-recruitment/5"
             badgeClassName="bg-role-recruitment text-role-recruitment-foreground"
           >
-            <div className="grid gap-1.5">
-              <Label htmlFor="interviews-stage">Stage</Label>
-              <Select
-                items={STAGE_SELECT_ITEMS}
+            <PanelSection title="Stage" flush>
+              <PanelOptionList
+                label="Stage"
+                options={STAGE_FILTER_OPTIONS}
                 // Bound to `stage` itself, not to a filter-only subset: on the
                 // Feedback Received tab nothing here is chosen, which is the
                 // truth — that tab's stage is not one of these two.
-                value={stage || "all"}
-                onValueChange={(v) => {
-                  setStage((!v || v === "all" ? "" : v) as CandidateStatus | "")
+                value={isFilterStage(stage) ? stage : undefined}
+                onChange={(v) => {
+                  setStage((v ?? "") as CandidateStatus | "")
                   setPage(1)
                 }}
-              >
-                <SelectTrigger id="interviews-stage" aria-label="Filter by stage" className="h-9 w-full">
-                  <SelectValue placeholder="Stage" />
-                </SelectTrigger>
-                <SelectContent>
-                  {STAGE_SELECT_ITEMS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              />
+            </PanelSection>
           </FilterPanel>
         </div>
 

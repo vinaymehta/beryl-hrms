@@ -83,7 +83,7 @@ module Zoho
       def body_html(message)
         part = message.html_part || message.text_part
         body = (part || message).body&.decoded.to_s
-        return body if message.html_part
+        return MailBranding.with_hosted_images(message, body) if message.html_part
 
         # A text-only mail still has to arrive as something a mail client will
         # lay out, since the API sends mailFormat: "html" either way.

@@ -211,6 +211,23 @@ class Employee < ApplicationRecord
   # lists them separately, and an employee's department head must not be
   # treated as their final reviewer.
   def manager_hierarchy
+    # Same reasoning as #assigned_manager_id: the list endpoint preloads
+    # `manager_assignments: :manager`, but the scoped has_one/has_many
+    # associations below are separate caches that preload never fills — so on
+    # a page of 25 employees they were six queries per row.
+    if manager_assignments.loaded?
+      by_level = manager_assignments.group_by(&:manager_level)
+      single = ->(level) { by_level[level]&.first&.manager }
+      return {
+        "primary" => single.call("primary"),
+        "secondary" => single.call("secondary"),
+        "final" => single.call("final"),
+        "department_head" => single.call("department_head"),
+        "project_managers" => Array(by_level["project_manager"]).sort_by(&:id).map(&:manager),
+        "additional_managers" => Array(by_level["additional"]).sort_by { |a| [ a.tier.to_i, a.id ] }.map(&:manager)
+      }
+    end
+
     {
       "primary" => primary_manager,
       "secondary" => secondary_manager,

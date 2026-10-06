@@ -12,9 +12,8 @@ import { cn } from "cn"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
 import { FilterPanel } from "@/components/ui/filter-panel"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { PanelOptionList, PanelSection } from "@/components/ui/panel"
 import { useDebounced } from "@/hooks/use-debounced"
 import { AppraisalList } from "@/features/appraisals/components/appraisal-list"
 import { AppraisalCyclesView } from "@/features/appraisals/components/appraisal-cycles-view"
@@ -142,10 +141,6 @@ export function AppraisalsWorkspace() {
 
   // Every cycle, newest first — the same order the Cycles tab shows them in.
   const { data: allCycles } = useAppraisalCycles()
-  const cycleItems = [
-    { value: "all", label: "All cycles" },
-    ...(allCycles ?? []).map((cycle) => ({ value: cycle.id, label: cycle.name })),
-  ]
   // Paging and searching are server-side, so both live here and go out as
   // query params rather than filtering what has already arrived.
   const [perPage, setPerPage] = useState(10)
@@ -282,23 +277,14 @@ export function AppraisalsWorkspace() {
                   accentClassName="border-role-hr text-role-hr bg-role-hr/5"
                   badgeClassName="bg-role-hr text-role-hr-foreground"
                 >
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="appraisal-filter-cycle">Cycle</Label>
-                    <Select
-                      items={cycleItems}
-                      value={cycleFilter ?? "all"}
-                      onValueChange={(v) => setCycleFilter(!v || v === "all" ? undefined : v)}
-                    >
-                      <SelectTrigger id="appraisal-filter-cycle" aria-label="Filter by cycle" className="h-9 w-full">
-                        <SelectValue placeholder="Cycle" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {cycleItems.map((cycle) => (
-                          <SelectItem key={cycle.value} value={cycle.value}>{cycle.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <PanelSection title="Cycle" flush>
+                    <PanelOptionList
+                      label="Cycle"
+                      options={(allCycles ?? []).map((cycle) => ({ value: cycle.id, label: cycle.name }))}
+                      value={cycleFilter}
+                      onChange={setCycleFilter}
+                    />
+                  </PanelSection>
                 </FilterPanel>
                 {cycleFilter && (
                   <Button

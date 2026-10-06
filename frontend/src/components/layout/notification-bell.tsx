@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { BellIcon, CheckCheckIcon } from "lucide-react"
 import Link from "next/link"
 import { cn } from "cn"
@@ -32,11 +33,15 @@ export function NotificationBell() {
   const markAllRead = useMarkNotificationsRead()
   const markRead = useMarkNotificationRead()
 
+  // Controlled, because the rows are plain links/buttons rather than menu
+  // items — the menu would otherwise stay open over the page you just opened.
+  const [open, setOpen] = useState(false)
+
   const notifications = data?.data ?? []
   const unreadCount = data?.meta.unreadCount ?? 0
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger
         render={<Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground" aria-label="Notifications" />}
       >
@@ -98,20 +103,21 @@ export function NotificationBell() {
               // only way to clear the badge is "Mark all read", which forces a
               // choice between losing track of the unopened ones and living
               // with a badge that never goes down.
-              const open = () => {
+              const openNotification = () => {
                 if (!notification.readAt) markRead.mutate(notification.id)
+                setOpen(false)
               }
 
               return (
                 <li key={notification.id} className="rounded-md">
                   {notification.actionUrl ? (
-                    <Link href={notification.actionUrl} onClick={open}>
+                    <Link href={notification.actionUrl} onClick={openNotification}>
                       {content}
                     </Link>
                   ) : notification.readAt ? (
                     content
                   ) : (
-                    <button type="button" onClick={open} className="w-full text-left">
+                    <button type="button" onClick={openNotification} className="w-full text-left">
                       {content}
                     </button>
                   )}

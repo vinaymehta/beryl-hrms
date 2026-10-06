@@ -13,7 +13,7 @@ module Api
         def index
           authorize CandidateResume
 
-          scope = policy_scope(CandidateResume).includes(:candidate).order(created_at: :desc)
+          scope = policy_scope(CandidateResume).includes(:candidate, file_attachment: :blob).order(created_at: :desc)
 
           if params[:status].present? || params[:processingStatus].present?
             st = params[:status] || params[:processingStatus]

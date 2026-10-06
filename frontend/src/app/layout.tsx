@@ -16,10 +16,10 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "HR Platform",
-    template: "%s · HR Platform",
+    default: "Beryl Systems HRMS",
+    template: "%s · Beryl Systems",
   },
-  description: "HR management and business operations platform.",
+  description: "Beryl Systems HR management — people, appraisals and recruitment.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -10,10 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
 } from "@/components/ui/sheet"
+import { PanelBody, PanelFooter, PanelHeader } from "@/components/ui/panel"
 import { EmployeeTable } from "@/features/employees/components/employee-table"
 import { EmployeeFilters } from "@/features/employees/components/employee-filters"
 import { EmployeeForm } from "@/features/employees/components/employee-form"
@@ -218,30 +216,20 @@ export default function EmployeesPage() {
 
       <Sheet open={addOpen} onOpenChange={setAddOpen}>
         <SheetContent side="right" className="w-full p-0 flex flex-col gap-0 sm:w-[45vw] sm:min-w-180 sm:max-w-275">
-          <SheetHeader className="border-b bg-role-hr/5 pr-14">
-            <div className="flex items-center gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-role-hr/12 text-role-hr">
-                <PlusIcon className="size-5" />
-              </span>
-              <div>
-                <SheetTitle className="text-lg">Add employee</SheetTitle>
-                <SheetDescription>
-                  Create the profile, set their reporting managers, and optionally invite them to sign in.
-                </SheetDescription>
-              </div>
-            </div>
-          </SheetHeader>
-          {/* Muted backdrop so the white section cards read as distinct panels
-              rather than merging into one long sheet. */}
-          <div className="flex-1 overflow-y-auto bg-muted/30 p-4">
+          <PanelHeader
+            icon={PlusIcon}
+            title="Add employee"
+            description={<>Create the profile, set their reporting managers, and optionally invite them to sign in.</>}
+          />
+          <PanelBody>
             <EmployeeForm
               isPending={createEmployee.isPending}
               onSubmit={(values) =>
                 createEmployee.mutate(values, { onSuccess: () => setAddOpen(false) })
               }
             />
-          </div>
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t bg-background p-4 shadow-[0_-1px_8px_rgba(0,0,0,0.04)]">
+          </PanelBody>
+          <PanelFooter>
             <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>
               Cancel
             </Button>
@@ -254,7 +242,7 @@ export default function EmployeesPage() {
               <PlusIcon className="size-4" />
               {createEmployee.isPending ? "Adding…" : "Add employee"}
             </Button>
-          </div>
+          </PanelFooter>
         </SheetContent>
       </Sheet>
     </div>

@@ -1,1 +1,10 @@
+<%= MailBranding::NAME.upcase %> HRMS
+
 <%= yield %>
+
+--
+<%= MailBranding::NAME %> HRMS
+Questions? Write to <%= MailBranding::CONTACT %>.
+We will never ask for your password by email. Don't forward sign-in links or passwords.
+
+© <%= Time.current.year %> <%= MailBranding::NAME %>. All rights reserved.

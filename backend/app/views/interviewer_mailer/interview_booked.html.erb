@@ -12,7 +12,7 @@
 </table>
 
 <% if @join_url.present? %>
-  <p><%= link_to "Join the interview", @join_url %></p>
+  <%= mail_button "Join the interview", @join_url %>
   <p style="color:#666;font-size:12px;">You&rsquo;ve also been added as a guest on the calendar invitation.</p>
 <% else %>
   <p style="color:#666;font-size:13px;">You&rsquo;ve been added as a guest on the calendar invitation &mdash; the joining details are on that invite.</p>

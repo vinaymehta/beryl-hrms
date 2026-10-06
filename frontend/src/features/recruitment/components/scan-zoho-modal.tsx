@@ -10,11 +10,8 @@ import type { DateRangePreset } from "../lib/date-range-presets"
 import {
   Sheet,
   SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
 } from "@/components/ui/sheet"
+import { PanelBody, PanelFooter, PanelHeader } from "@/components/ui/panel"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import {
@@ -22,7 +19,6 @@ import {
   Loader2Icon,
   CheckCircle2Icon,
   ShieldCheckIcon,
-  ZapIcon,
   LockIcon,
   SettingsIcon,
   ArrowRightIcon,
@@ -36,27 +32,7 @@ interface ScanZohoModalProps {
   onOpenChange: (open: boolean) => void
 }
 
-function FeatureHighlight({ icon: Icon, label, caption }: { icon: React.ElementType; label: string; caption: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-role-recruitment/10 text-role-recruitment">
-        <Icon className="size-4" />
-      </span>
-      <div className="min-w-0">
-        <p className="truncate text-xs font-semibold text-foreground">{label}</p>
-        <p className="truncate text-[11px] text-muted-foreground">{caption}</p>
-      </div>
-    </div>
-  )
-}
 
-function SectionNumber({ n }: { n: number }) {
-  return (
-    <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-role-recruitment text-xs font-bold text-role-recruitment-foreground">
-      {n}
-    </span>
-  )
-}
 
 export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
   const { data: connections, isLoading: connectionsLoading } = useQuery({
@@ -131,46 +107,20 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
   return (
     <Sheet open={open} onOpenChange={handleClose}>
       <SheetContent side="right" className="w-full sm:w-[45vw] sm:min-w-180 sm:max-w-275 flex flex-col p-0 gap-0 overflow-hidden">
-        {/* Hero header — gradient icon chip + decorative blurred accent
-            blobs, using Recruitment's own role-recruitment token. */}
-        <SheetHeader className="relative overflow-hidden border-b bg-gradient-to-br from-role-recruitment/8 to-transparent pr-14">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -right-8 -top-10 size-36 rounded-full bg-role-recruitment/15 blur-2xl"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute right-16 top-4 size-16 rounded-full bg-role-recruitment/20 blur-xl"
-          />
-          <div className="relative flex items-center gap-3">
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-role-recruitment to-fuchsia-700 text-role-recruitment-foreground shadow-sm">
-              <MailSearchIcon className="size-6" />
-            </span>
-            <div>
-              <SheetTitle className="text-xl font-bold">Scan Mail</SheetTitle>
-              <SheetDescription className="text-xs text-muted-foreground">
-                Detect and import resumes from recent inbox attachments.
-              </SheetDescription>
-            </div>
-          </div>
+        <PanelHeader
+          icon={MailSearchIcon}
+          title="Scan mail"
+          description="Detect and import resumes from recent inbox attachments."
+        />
 
-          <div className="relative mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
-            <FeatureHighlight icon={MailSearchIcon} label="Find Resumes" caption="Scan email attachments" />
-            <FeatureHighlight icon={ShieldCheckIcon} label="Secure & Private" caption="Only authorized mailboxes" />
-            <FeatureHighlight icon={ZapIcon} label="Save Time" caption="Import directly to pipeline" />
-          </div>
-        </SheetHeader>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <PanelBody>
           {/* Section 1 — Mailbox connection */}
-          <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5">
-                <SectionNumber n={1} />
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground">Select Mailbox Connection</h3>
-                  <p className="text-xs text-muted-foreground">Choose the mailbox you want to scan for resumes.</p>
-                </div>
+          <div className="space-y-3 rounded-lg border bg-card p-4">
+            {/* The shared panel label strip (see ui/panel.tsx), drawn edge to edge. */}
+            <div className="-mx-4 -mt-4 flex items-center justify-between gap-2 border-b px-4 py-3">
+              <div className="min-w-0">
+                <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Select Mailbox Connection</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">Choose the mailbox you want to scan for resumes.</p>
               </div>
               <Link
                 href="/settings/mail"
@@ -228,14 +178,12 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
 
           {/* Section 2 — Date range, tucked behind a Filters toggle (same
               pattern as the Resumes list) instead of always taking up space. */}
-          <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5">
-                <SectionNumber n={2} />
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground">Date Range to Scan</h3>
-                  <p className="text-xs text-muted-foreground">Select the time period to look for resumes.</p>
-                </div>
+          <div className="space-y-3 rounded-lg border bg-card p-4">
+            {/* The shared panel label strip (see ui/panel.tsx), drawn edge to edge. */}
+            <div className="-mx-4 -mt-4 flex items-center justify-between gap-2 border-b px-4 py-3">
+              <div className="min-w-0">
+                <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Date Range to Scan</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">Select the time period to look for resumes.</p>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 <Button
@@ -317,7 +265,7 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
             </div>
           )}
 
-          <div className="flex items-start gap-3 rounded-xl border bg-muted/20 p-4">
+          <div className="flex items-start gap-3 rounded-lg border bg-card p-4">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-role-recruitment/10 text-role-recruitment">
               <ShieldCheckIcon className="size-4" />
             </span>
@@ -329,19 +277,18 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
               </p>
             </div>
           </div>
-        </div>
+        </PanelBody>
 
-        <SheetFooter className="m-0 border-t bg-background p-3 shrink-0">
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <PanelFooter className="justify-between">
+          <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
             <LockIcon className="size-3" />
             We don&apos;t read or store your emails. We only process attachments to extract resumes.
           </div>
           <div className="flex items-center justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={handleClose} disabled={scanZohoMail.isPending}>
+            <Button variant="outline" onClick={handleClose} disabled={scanZohoMail.isPending}>
               Close
             </Button>
             <Button
-              size="sm"
               onClick={handleScan}
               disabled={!selectedConnectionId || !resolvedRange || scanZohoMail.isPending || activeConnections.length === 0}
               className="gap-1.5 bg-gradient-to-r from-role-recruitment to-fuchsia-700 text-role-recruitment-foreground hover:opacity-90"
@@ -360,7 +307,7 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
               )}
             </Button>
           </div>
-        </SheetFooter>
+        </PanelFooter>
       </SheetContent>
     </Sheet>
   )

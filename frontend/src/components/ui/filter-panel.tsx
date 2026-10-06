@@ -4,13 +4,8 @@ import { useState } from "react"
 import { FilterIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+import { PanelBody, PanelFooter, PanelHeader } from "@/components/ui/panel"
+import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { cn } from "cn"
 
 interface FilterPanelProps {
@@ -21,8 +16,10 @@ interface FilterPanelProps {
   /** Matching accent for the count badge. */
   badgeClassName?: string
   onReset?: () => void
-  /** Labels the trigger for assistive tech; the visible text is always "Filter". */
+  /** Labels the trigger for assistive tech. */
   ariaLabel?: string
+  /** Visible trigger text. "Filter" unless the view names its current filter (Mail's date range). */
+  label?: React.ReactNode
   /** Heading inside the panel. Defaults to a generic one. */
   title?: string
   description?: string
@@ -44,9 +41,10 @@ interface FilterPanelProps {
  * has room to label things, sits beside the list rather than over it, and
  * gets focus trapping and dismissal from Sheet.
  *
- * Callers supply only the controls and their accent color — the geometry,
- * the header and the Clear/Show footer are fixed here, so every module's
- * filter is literally the same size and shape.
+ * Callers supply only the controls — one PanelSection per filter, usually a
+ * PanelOptionList — and their accent color. The geometry, the header and the
+ * Clear all/Done footer are fixed here, so every module's filter is literally
+ * the same size and shape.
  */
 export function FilterPanel({
   activeCount = 0,
@@ -54,6 +52,7 @@ export function FilterPanel({
   badgeClassName,
   onReset,
   ariaLabel = "Filter",
+  label = "Filter",
   title = "Filters",
   description,
   className,
@@ -77,7 +76,7 @@ export function FilterPanel({
         )}
       >
         <FilterIcon className="size-3.5" />
-        Filter
+        {label}
         {activeCount > 0 && (
           <span
             className={cn(
@@ -91,33 +90,26 @@ export function FilterPanel({
       </Button>
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-96">
-          <SheetHeader className="border-b pr-14">
-            <SheetTitle className="text-lg">{title}</SheetTitle>
-            <SheetDescription>
-              {description ??
-                "Narrows the list on the server, so it applies across every page — not just this one."}
-            </SheetDescription>
-          </SheetHeader>
-
-          {/* content-start so a panel with two controls doesn't space them
-              down the whole height of the screen. */}
-          <div className="grid flex-1 content-start gap-4 overflow-y-auto p-4">{children}</div>
-
-          <div className="flex shrink-0 items-center justify-between gap-2 border-t bg-background p-4">
+        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+          {/* Every control applies the moment it changes — the list behind the
+              panel is already filtered, so the footer only closes it. */}
+          <PanelHeader icon={FilterIcon} title={title} description={description ?? "Changes apply immediately."} />
+          <PanelBody>{children}</PanelBody>
+          {/* Clear all at the left edge, Done at the right — as it has always been. */}
+          <PanelFooter className="justify-between">
             <Button
               type="button"
               variant="ghost"
-              size="sm"
               onClick={onReset}
               disabled={!onReset || activeCount === 0}
+              className="text-muted-foreground"
             >
               Clear all
             </Button>
-            <Button type="button" size="sm" onClick={() => setOpen(false)}>
-              Show results
+            <Button type="button" onClick={() => setOpen(false)} className="min-w-20">
+              Done
             </Button>
-          </div>
+          </PanelFooter>
         </SheetContent>
       </Sheet>
     </>

@@ -1,29 +1,17 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useForm, type FieldErrors } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import {
-  UserIcon,
-  BriefcaseIcon,
-  PhoneIcon,
-  MapPinIcon,
-  ShieldAlertIcon,
-  NetworkIcon,
-  KeyRoundIcon,
-  InfoIcon,
-  LockIcon,
-  PlusIcon,
-  RefreshCwIcon,
-  XIcon,
-  type LucideIcon,
-} from "lucide-react"
+import { InfoIcon, LockIcon, PlusIcon, RefreshCwIcon, XIcon } from "lucide-react"
 import { cn } from "cn"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DatePicker } from "@/components/ui/date-picker"
+import { PanelSection } from "@/components/ui/panel"
 import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
@@ -44,6 +32,8 @@ import {
   buildEmployeeFormSchema,
   maxBirthDateIso,
   maxJoiningIso,
+  minJoiningIso,
+  MAX_JOINING_YEARS_BACK,
   todayIso,
   MAX_JOINING_DAYS_AHEAD,
   WORK_LOCATIONS,
@@ -141,28 +131,6 @@ function photoUrl(path: string | null) {
   return path ? `${API_ORIGIN}${path}` : undefined
 }
 
-function SectionHeader({
-  icon: Icon,
-  title,
-  subtitle,
-}: {
-  icon: LucideIcon
-  title: string
-  subtitle: string
-}) {
-  return (
-    <div className="flex items-start gap-2.5 border-b px-4 py-3">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-role-hr/12 text-role-hr">
-        <Icon className="size-4" />
-      </span>
-      <div className="min-w-0">
-        <h3 className="text-sm leading-tight font-semibold text-foreground">{title}</h3>
-        <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
-      </div>
-    </div>
-  )
-}
-
 /**
  * One titled block of the form. Card-shaped rather than a bare `<fieldset>`
  * so a long HR profile reads as a sequence of discrete steps — the form runs
@@ -170,21 +138,19 @@ function SectionHeader({
  * exactly the "half-styled" shape this screen is meant not to be.
  */
 function FormSection({
-  icon,
   title,
   subtitle,
   children,
 }: {
-  icon: LucideIcon
   title: string
   subtitle: string
   children: React.ReactNode
 }) {
+  // The shared panel card (uppercase label strip) — the same one the filters use.
   return (
-    <section className="overflow-hidden rounded-xl border bg-card shadow-2xs">
-      <SectionHeader icon={icon} title={title} subtitle={subtitle} />
-      <div className="grid gap-3.5 p-4">{children}</div>
-    </section>
+    <PanelSection title={title} description={subtitle}>
+      {children}
+    </PanelSection>
   )
 }
 
@@ -298,6 +264,18 @@ function ManagerSlotField({
   )
 }
 
+/** Phone and postal code are digits only — anything else is dropped as it is typed or pasted. */
+const digitsOnly = (value: string) => value.replace(/\D/g, "")
+/**
+ * A mobile number as its ten digits. No maxLength on the input: the browser
+ * would cut a pasted "+91 98765 43210" at ten characters, before the
+ * punctuation is gone. The +91 / 91 country code is dropped instead.
+ */
+const mobileDigits = (value: string) => {
+  const digits = digitsOnly(value)
+  return (digits.length > 10 && digits.startsWith("91") ? digits.slice(2) : digits).slice(0, 10)
+}
+
 export function EmployeeForm({
   employee,
   onSubmit,
@@ -347,10 +325,24 @@ export function EmployeeForm({
     canManageManagers
   )
 
+  // Read through a ref by the schema, because the domain arrives after the
+  // form (and its resolver) already exists — see buildEmployeeFormSchema.
+  const workEmailDomainRef = useRef(workEmailDomain)
+  useEffect(() => {
+    workEmailDomainRef.current = workEmailDomain
+  }, [workEmailDomain])
+
   const form = useForm<EmployeeFormValues>({
+    // Live: a field is checked as it is typed in and again when it is left,
+    // so a mistake shows under the field on the spot instead of only after
+    // Save. Save still runs the full check (handleSubmit/reportInvalid) for
+    // anything never touched.
+    mode: "all",
     // Built per mode: the joining-date and age windows are hiring rules and
     // must not fire on somebody who is already here — see the schema.
-    resolver: zodResolver(buildEmployeeFormSchema({ isNew: !employee })),
+    resolver: zodResolver(
+      buildEmployeeFormSchema({ isNew: !employee, workEmailDomain: () => workEmailDomainRef.current })
+    ),
     defaultValues: {
       firstName: employee?.firstName ?? "",
       lastName: employee?.lastName ?? "",
@@ -743,7 +735,6 @@ export function EmployeeForm({
       <form onSubmit={form.handleSubmit(handleSubmit, reportInvalid)} className="grid gap-4" noValidate id="employee-form">
         <fieldset disabled={isPending} className="grid gap-4">
           <FormSection
-            icon={UserIcon}
             title="Personal information"
             subtitle="Who this person is on the records"
           >
@@ -810,7 +801,7 @@ export function EmployeeForm({
                           typed-in date, and the server decides regardless. */}
                       {/* Capped for a NEW hire only. On an existing record the
                           cap would make their own stored date unpickable. */}
-                      <Input type="date" max={employee ? undefined : maxBirthDateIso()} {...field} />
+                      <DatePicker max={employee ? undefined : maxBirthDateIso()} placeholder="dd/mm/yyyy" clearable {...field} />
                     </FormControl>
                     <FormMessage />
                     {!employee && <FieldHint>Employees must be at least 22 years old.</FieldHint>}
@@ -849,7 +840,6 @@ export function EmployeeForm({
           </FormSection>
 
           <FormSection
-            icon={BriefcaseIcon}
             title="Job details"
             subtitle="Where they sit in the organisation"
           >
@@ -877,9 +867,10 @@ export function EmployeeForm({
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                {/* Designation IS the job title — there is deliberately no
-                    separate "job title" field to keep out of step with it. */}
-                <Label htmlFor="employee-designation">Job title (designation)</Label>
+                {/* The Designation model IS the job title. Shown as "Job title"
+                    only: "Designation" is the label of the employment-type
+                    field below, by the business's own naming. */}
+                <Label htmlFor="employee-designation">Job title</Label>
                 <Select
                   items={designations?.map((d) => ({ value: String(d.id), label: d.title }))}
                   value={form.watch("designationId") || null}
@@ -903,7 +894,7 @@ export function EmployeeForm({
 
             <div className="grid gap-3.5 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <Label htmlFor="employee-employment-type">Employment type</Label>
+                <Label htmlFor="employee-employment-type">Designation</Label>
                 <Select
                   items={employmentTypes?.map((t) => ({ value: String(t.id), label: t.name }))}
                   value={form.watch("employmentTypeId") || null}
@@ -950,17 +941,18 @@ export function EmployeeForm({
                   <FormItem>
                     <FormLabel>Date of joining</FormLabel>
                     <FormControl>
-                      <Input
-                        type="date"
-                        min={employee ? undefined : todayIso()}
+                      <DatePicker
+                        min={employee ? undefined : minJoiningIso()}
                         max={employee ? undefined : maxJoiningIso()}
+                        clearable={!!employee}
                         {...field}
                       />
                     </FormControl>
                     <FormMessage />
                     {!employee && (
                       <FieldHint>
-                        Today, or any date in the next {MAX_JOINING_DAYS_AHEAD} days.
+                        Any date in the last {MAX_JOINING_YEARS_BACK} years, or up to{" "}
+                        {MAX_JOINING_DAYS_AHEAD} days ahead.
                       </FieldHint>
                     )}
                   </FormItem>
@@ -970,7 +962,6 @@ export function EmployeeForm({
           </FormSection>
 
           <FormSection
-            icon={NetworkIcon}
             title="Reporting manager"
             subtitle="Who this employee reports to, and in what order"
           >
@@ -1212,7 +1203,6 @@ export function EmployeeForm({
           </FormSection>
 
           <FormSection
-            icon={KeyRoundIcon}
             title="System access & roles"
             subtitle="The login account behind this profile"
           >
@@ -1306,7 +1296,12 @@ export function EmployeeForm({
                     aria-label="Roles"
                     options={roleOptions}
                     value={selectedRoleIds}
-                    onChange={(next) => form.setValue("roleIds", next)}
+                    onChange={(next) => {
+                      form.setValue("roleIds", next)
+                      // "A work email is needed before roles can be assigned"
+                      // lives on the email field, so re-check it as roles change.
+                      void form.trigger("workEmail")
+                    }}
                     isLoading={rolesLoading}
                     searchable={false}
                     placeholder="Employee (default)"
@@ -1344,7 +1339,7 @@ export function EmployeeForm({
             )}
           </FormSection>
 
-          <FormSection icon={PhoneIcon} title="Contact" subtitle="How to reach them personally">
+          <FormSection title="Contact" subtitle="How to reach them personally">
             <div className="grid gap-3.5 sm:grid-cols-2">
               <FormField
                 control={form.control}
@@ -1353,7 +1348,13 @@ export function EmployeeForm({
                   <FormItem>
                     <FormLabel>Phone</FormLabel>
                     <FormControl>
-                      <Input type="tel" {...field} placeholder="98765 43210" />
+                      <Input
+                        type="tel"
+                        inputMode="numeric"
+                        {...field}
+                        onChange={(event) => field.onChange(mobileDigits(event.target.value))}
+                        placeholder="9876543210"
+                      />
                     </FormControl>
                     <FormMessage />
                     <FieldHint>Indian mobile number, with or without +91.</FieldHint>
@@ -1376,7 +1377,7 @@ export function EmployeeForm({
             </div>
           </FormSection>
 
-          <FormSection icon={MapPinIcon} title="Address" subtitle="Current residential address">
+          <FormSection title="Address" subtitle="Current residential address">
             <FormField
               control={form.control}
               name="addressLine1"
@@ -1484,6 +1485,7 @@ export function EmployeeForm({
                     <FormControl>
                       <Input
                         {...field}
+                        onChange={(event) => field.onChange(digitsOnly(event.target.value))}
                         inputMode="numeric"
                         maxLength={6}
                         placeholder="6 digits"
@@ -1497,7 +1499,6 @@ export function EmployeeForm({
           </FormSection>
 
           <FormSection
-            icon={ShieldAlertIcon}
             title="Emergency contact"
             subtitle="Who to reach in an emergency"
           >
@@ -1522,7 +1523,13 @@ export function EmployeeForm({
                   <FormItem>
                     <FormLabel>Contact phone</FormLabel>
                     <FormControl>
-                      <Input type="tel" {...field} placeholder="98765 43210" />
+                      <Input
+                        type="tel"
+                        inputMode="numeric"
+                        {...field}
+                        onChange={(event) => field.onChange(mobileDigits(event.target.value))}
+                        placeholder="9876543210"
+                      />
                     </FormControl>
                     <FormMessage />
                     <FieldHint>Indian mobile number, with or without +91.</FieldHint>

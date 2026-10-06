@@ -6,6 +6,8 @@ import { CheckCircle2Icon, SendIcon, UndoIcon, SlidersHorizontalIcon } from "luc
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Sheet, SheetClose, SheetContent } from "@/components/ui/sheet"
+import { PanelBody, PanelFooter, PanelHeader, PanelSection } from "@/components/ui/panel"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose,
 } from "@/components/ui/dialog"
@@ -189,36 +191,42 @@ export function AppraisalActions({ appraisal }: { appraisal: AppraisalDetail }) 
         </DialogContent>
       </Dialog>
 
-      <Dialog open={ackOpen} onOpenChange={setAckOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Acknowledge your appraisal</DialogTitle>
-            <DialogDescription>
-              This records that you have read it, with the date and your name. It is not an agreement or a
-              rating of its own.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-1.5">
-            <Label htmlFor="ack-note">Anything to add? (optional)</Label>
-            <textarea
-              id="ack-note"
-              rows={3}
-              value={ackNote}
-              onChange={(event) => setAckNote(event.target.value)}
-              className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-            />
-          </div>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline">Cancel</Button>} />
+      <Sheet open={ackOpen} onOpenChange={setAckOpen}>
+        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+          <PanelHeader
+            icon={CheckCircle2Icon}
+            title="Acknowledge your appraisal"
+            description="Records that you have read it, with the date and your name."
+          />
+          <PanelBody>
+            <PanelSection title="Acknowledgement">
+              <p className="text-sm text-muted-foreground">
+                This records that you have read it, with the date and your name. It is not an agreement or a
+                rating of its own.
+              </p>
+              <div className="grid gap-1.5">
+                <Label htmlFor="ack-note">Anything to add? (optional)</Label>
+                <textarea
+                  id="ack-note"
+                  rows={4}
+                  value={ackNote}
+                  onChange={(event) => setAckNote(event.target.value)}
+                  className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                />
+              </div>
+            </PanelSection>
+          </PanelBody>
+          <PanelFooter>
+            <SheetClose render={<Button variant="outline">Cancel</Button>} />
             <Button
               disabled={acknowledge.isPending}
               onClick={() => acknowledge.mutate(ackNote, { onSuccess: () => setAckOpen(false) })}
             >
-              Acknowledge
+              {acknowledge.isPending ? "Acknowledging…" : "Acknowledge"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </PanelFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

@@ -26,7 +26,7 @@ class UserMailer < ApplicationMailer
     @company_name = user.company&.name
     @must_change = user.must_change_password?
     @sign_in_url = "#{frontend_base_url}/login"
-    mail(to: user.email_address, subject: "Your sign-in details for #{@company_name.presence || 'the HR portal'}")
+    mail(to: user.email_address, subject: "Your sign-in details for #{@company_name.presence || "#{MailBranding::NAME} HRMS"}")
   end
 
   def email_verification(user)

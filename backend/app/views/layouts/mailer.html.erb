@@ -1,13 +1,99 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light only">
+    <meta name="supported-color-schemes" content="light">
+    <title><%= message.subject %></title>
+    <%# Defaults for the plain <p>/<a>/<h2>/<table> the templates use. Clients
+        that drop <style> still get readable mail — every rule that shapes the
+        layout is inline below. %>
     <style>
-      /* Email styles need to be inline */
+      body { margin: 0; padding: 0; }
+      .mail-content p { margin: 0 0 16px; }
+      .mail-content h2 { margin: 0 0 12px; font-size: 20px; line-height: 1.35; font-weight: 700; color: #111827; }
+      .mail-content a { color: #111111; }
+      .mail-content table { font-size: 14px; }
+      @media (max-width: 620px) {
+        .mail-pad { padding-left: 20px !important; padding-right: 20px !important; }
+      }
     </style>
   </head>
 
-  <body>
-    <%= yield %>
+  <% font = "'Helvetica Neue',Helvetica,Arial,sans-serif" %>
+  <body style="margin:0;padding:0;background:#f3f4f6;-webkit-text-size-adjust:100%">
+    <%# Preview text: the line inboxes show beside the subject. Hidden in the
+        message itself. Without it, clients preview the first text they find —
+        the wordmark. %>
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">
+      <%= message.subject %> — <%= MailBranding::NAME %> HRMS&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;
+    </div>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f3f4f6">
+      <tr>
+        <td align="center" style="padding:40px 12px">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+            <%# Accent bar, in the logo's black. %>
+            <tr><td style="height:4px;line-height:4px;font-size:0;background:#111111">&nbsp;</td></tr>
+
+            <%# Header: the BS roundel and the wordmark, as in the app's sidebar. %>
+            <tr>
+              <td class="mail-pad" style="padding:24px 36px;border-bottom:1px solid #eef0f3">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="vertical-align:middle">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                        <tr>
+                          <% logo = attachments[MailBranding::LOGO_FILE] %>
+                          <% if logo %>
+                            <td style="vertical-align:middle;padding-right:12px">
+                              <img src="<%= logo.url %>" width="40" height="40" alt="<%= MailBranding::NAME %>" style="display:block;border:0;border-radius:50%">
+                            </td>
+                          <% end %>
+                          <td style="vertical-align:middle;font-family:<%= font %>;font-size:16px;font-weight:700;letter-spacing:.08em;color:#111111;text-transform:uppercase">
+                            <%= MailBranding::NAME %>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                    <td align="right" style="vertical-align:middle;font-family:<%= font %>;font-size:11px;font-weight:600;letter-spacing:.12em;color:#9ca3af;text-transform:uppercase">
+                      HRMS
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <%# The message itself. %>
+            <tr>
+              <td class="mail-pad mail-content" style="padding:36px;font-family:<%= font %>;font-size:15px;line-height:1.65;color:#374151">
+                <%= yield %>
+              </td>
+            </tr>
+
+            <%# Footer: who sent it, where to write back, and the one security rule
+                every one of these messages needs. %>
+            <tr>
+              <td class="mail-pad" style="padding:22px 36px;background:#f9fafb;border-top:1px solid #eef0f3;font-family:<%= font %>;font-size:12px;line-height:1.7;color:#6b7280">
+                <strong style="color:#374151"><%= MailBranding::NAME %> HRMS</strong><br>
+                Questions? Write to
+                <a href="mailto:<%= MailBranding::CONTACT %>" style="color:#374151;text-decoration:underline"><%= MailBranding::CONTACT %></a>.<br>
+                We will never ask for your password by email. Don't forward sign-in links or passwords.
+              </td>
+            </tr>
+          </table>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px">
+            <tr>
+              <td align="center" style="padding:18px 12px 0;font-family:<%= font %>;font-size:11px;line-height:1.6;color:#9ca3af">
+                &copy; <%= Time.current.year %> <%= MailBranding::NAME %>. All rights reserved.<br>
+                This is an automated message from your HR workspace.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   </body>
 </html>

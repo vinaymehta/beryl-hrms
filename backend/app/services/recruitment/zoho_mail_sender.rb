@@ -68,13 +68,15 @@ module Recruitment
       # only has one. Zoho is told mailFormat: html either way, and plain text
       # renders acceptably as HTML for these short messages.
       def html_body
-        (@mail.html_part&.body || @mail.text_part&.body || @mail.body).to_s
+        MailBranding.with_hosted_images(@mail, (@mail.html_part&.body || @mail.text_part&.body || @mail.body).to_s)
       end
 
       # Each attachment has to be pushed to Zoho first; the descriptors come
-      # back and are referenced on send.
+      # back and are referenced on send. Inline parts (the header logo) are left
+      # out — html_body points those at the hosted copy, and uploading them
+      # would add the logo to every mail as a stray attachment.
       def upload_attachments(token, account_id)
-        @mail.attachments.map do |attachment|
+        @mail.attachments.reject(&:inline?).map do |attachment|
           @client.upload_attachment(
             access_token: token,
             account_id: account_id,

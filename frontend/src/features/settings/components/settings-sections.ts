@@ -76,8 +76,8 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: "employment_types",
     group: "department",
-    label: "Employee Types",
-    description: "Full-time, Contract and the rest — the types offered on the employee form.",
+    label: "Designations",
+    description: "The designations offered on the employee form.",
     href: "/all-settings?section=employment_types",
     icon: BriefcaseIcon,
     permission: PERMISSIONS.employmentTypesView,
@@ -138,7 +138,7 @@ export const SETTINGS_GROUPS: {
   {
     id: "department",
     label: "Department",
-    description: "Departments, job titles and employee types.",
+    description: "Departments, job titles and designations.",
     icon: Building2Icon,
     tint: { header: "bg-emerald-500/8", icon: "bg-emerald-500/15 text-emerald-600" },
   },

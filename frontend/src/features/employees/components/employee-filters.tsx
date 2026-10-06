@@ -3,9 +3,8 @@
 import { SearchIcon } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { FilterPanel } from "@/components/ui/filter-panel"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { PanelOptionList, PanelSection } from "@/components/ui/panel"
 import { useDepartments } from "@/features/employees/hooks/use-employees"
 import type { EmployeeListParams, EmployeeStatus } from "@/types/employees"
 
@@ -33,11 +32,7 @@ export function EmployeeFilters({
 
   const activeFilterCount = (params.departmentId ? 1 : 0) + (params.status ? 1 : 0)
 
-  const departmentItems = [
-    { value: "all", label: "All departments" },
-    ...(departments?.map((d) => ({ value: d.id, label: d.name })) ?? []),
-  ]
-  const statusItems = [{ value: "all", label: "All statuses" }, ...STATUS_OPTIONS]
+  const departmentItems = departments?.map((d) => ({ value: String(d.id), label: d.name })) ?? []
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -62,45 +57,23 @@ export function EmployeeFilters({
         accentClassName="border-role-hr text-role-hr bg-role-hr/5"
         badgeClassName="bg-role-hr text-role-hr-foreground"
       >
-        <div className="grid gap-1.5">
-          <Label htmlFor="filter-department">Department</Label>
-          <Select
-            items={departmentItems}
-            value={params.departmentId ?? "all"}
-            onValueChange={(v) =>
-              onChange({ ...params, departmentId: !v || v === "all" ? undefined : v, page: 1 })
-            }
-          >
-            <SelectTrigger id="filter-department" aria-label="Filter by department" className="h-9 w-full">
-              <SelectValue placeholder="Department" />
-            </SelectTrigger>
-            <SelectContent>
-              {departmentItems.map((d) => (
-                <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <PanelSection title="Department" flush>
+          <PanelOptionList
+            label="Department"
+            options={departmentItems}
+            value={params.departmentId}
+            onChange={(departmentId) => onChange({ ...params, departmentId, page: 1 })}
+          />
+        </PanelSection>
 
-        <div className="grid gap-1.5">
-          <Label htmlFor="filter-status">Status</Label>
-          <Select
-            items={statusItems}
-            value={params.status ?? "all"}
-            onValueChange={(v) =>
-              onChange({ ...params, status: !v || v === "all" ? undefined : (v as EmployeeStatus), page: 1 })
-            }
-          >
-            <SelectTrigger id="filter-status" aria-label="Filter by status" className="h-9 w-full">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              {statusItems.map((s) => (
-                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <PanelSection title="Status" flush>
+          <PanelOptionList
+            label="Status"
+            options={STATUS_OPTIONS}
+            value={params.status}
+            onChange={(status) => onChange({ ...params, status, page: 1 })}
+          />
+        </PanelSection>
       </FilterPanel>
     </div>
   )

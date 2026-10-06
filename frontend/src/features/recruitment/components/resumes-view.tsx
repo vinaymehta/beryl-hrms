@@ -3,15 +3,15 @@
 import { useState } from "react"
 import { useResumes, useResumeMutations } from "../hooks"
 import { ResumeDetailPanel } from "./resume-detail-panel"
-import { DateRangeFilter } from "./date-range-filter"
-import type { DateRangePreset } from "../lib/date-range-presets"
+import { DATE_RANGE_PRESETS, resolveDateRangePreset, type DateRangePreset } from "../lib/date-range-presets"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FilterPanel } from "@/components/ui/filter-panel"
 import { Label } from "@/components/ui/label"
+import { DatePicker } from "@/components/ui/date-picker"
+import { PanelOptionList, PanelSection } from "@/components/ui/panel"
 import {
   Dialog,
   DialogContent,
@@ -261,35 +261,60 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
             accentClassName="border-role-recruitment text-role-recruitment bg-role-recruitment/5"
             badgeClassName="bg-role-recruitment text-role-recruitment-foreground"
           >
-            <DateRangeFilter
-              preset={datePreset}
-              customFrom={customFrom}
-              customTo={customTo}
-              allowClear
-              onChange={({ preset, customFrom: f, customTo: t, resolved }) => {
-                setDatePreset(preset)
-                setCustomFrom(f)
-                setCustomTo(t)
-                setDateRange(resolved)
-                setPage(1)
-              }}
-            />
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="resumes-sort">Sort by</Label>
-              <Select items={SORT_OPTIONS} value={sortBy} onValueChange={(v) => { setSortBy(v || ""); setPage(1) }}>
-                <SelectTrigger id="resumes-sort" aria-label="Sort resumes" className="h-9 w-full">
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SORT_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
+            <PanelSection title="Date received" flush>
+              <PanelOptionList
+                label="Date received"
+                options={DATE_RANGE_PRESETS}
+                allLabel="All time"
+                value={datePreset || undefined}
+                onChange={(next) => {
+                  setDatePreset(next ?? "")
+                  setDateRange(
+                    !next ? null : resolveDateRangePreset(next, next === "custom" ? { from: customFrom, to: customTo } : undefined)
+                  )
+                  setPage(1)
+                }}
+              />
+              {datePreset === "custom" && (
+                <div className="grid grid-cols-2 gap-3 border-t p-4">
+                  {(["from", "to"] as const).map((end) => (
+                    <div key={end} className="grid gap-1.5">
+                      <Label htmlFor={`resumes-date-${end}`} className="text-xs font-normal text-muted-foreground">
+                        {end === "from" ? "From" : "To"}
+                      </Label>
+                      <DatePicker
+                        id={`resumes-date-${end}`}
+                        value={end === "from" ? customFrom : customTo}
+                        min={end === "to" ? customFrom || undefined : undefined}
+                        max={end === "from" ? customTo || undefined : undefined}
+                        placeholder="dd/mm/yyyy"
+                        clearable
+                        onChange={(value) => {
+                          const next = { from: end === "from" ? value : customFrom, to: end === "to" ? value : customTo }
+                          setCustomFrom(next.from)
+                          setCustomTo(next.to)
+                          setDateRange(resolveDateRangePreset("custom", next))
+                          setPage(1)
+                        }}
+                      />
+                    </div>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
+                </div>
+              )}
+            </PanelSection>
+
+            <PanelSection title="Sort by" flush>
+              <PanelOptionList
+                label="Sort by"
+                options={SORT_OPTIONS}
+                allLabel={null}
+                value={sortBy}
+                onChange={(v) => {
+                  setSortBy(v ?? "")
+                  setPage(1)
+                }}
+              />
+            </PanelSection>
           </FilterPanel>
         </div>
 
