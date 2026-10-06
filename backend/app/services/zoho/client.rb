@@ -13,8 +13,8 @@ module Zoho
       client_id: ENV.fetch("ZOHO_CLIENT_ID", nil),
       client_secret: ENV.fetch("ZOHO_CLIENT_SECRET", nil),
       redirect_uri: ENV.fetch("ZOHO_REDIRECT_URI", nil),
-      accounts_base_url: ENV.fetch("ZOHO_ACCOUNTS_BASE_URL", "https://accounts.zoho.com"),
-      api_base_url: ENV.fetch("ZOHO_API_BASE_URL", "https://mail.zoho.com/api")
+      accounts_base_url: ENV.fetch("ZOHO_ACCOUNTS_BASE_URL"),
+      api_base_url: ENV.fetch("ZOHO_API_BASE_URL")
     )
       @client_id = client_id
       @client_secret = client_secret

@@ -19,7 +19,10 @@ Rails.application.configure do
   # config.asset_host = "http://assets.example.com"
 
   # Store uploaded files on the local file system (see config/storage.yml for options).
-  config.active_storage.service = :s3_compatible # real S3/R2, via S3_* env vars
+  # S3/R2 when S3_BUCKET/S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY are set, otherwise
+  # the server's own disk (backend/storage — keep it on a persistent volume and
+  # in backups). See lib/storage_service.rb.
+  config.active_storage.service = StorageService.service
 
   # Blob routes (used directly in <img src> for employee profile photos)
   # stream through Rails instead of 302-ing to a presigned storage URL.
@@ -138,6 +141,12 @@ Rails.application.configure do
   # silent failure this block exists to end. Say so once, at boot, rather than
   # letting it be discovered through candidates who never got their email.
   config.after_initialize do
+    if StorageService.s3_configured?
+      Rails.logger.info("[storage] uploads go to S3 bucket #{ENV['S3_BUCKET']}")
+    else
+      Rails.logger.warn("[storage] S3 is not configured (#{StorageService::REQUIRED_ENV.join('/')}) — uploads are " \
+                        "stored on this server's disk in #{Rails.root.join('storage')}. Back it up.")
+    end
     if ENV["MAIL_TRANSPORT"] == "resend" && ENV["RESEND_API_KEY"].blank?
       Rails.logger.warn("[mail] MAIL_TRANSPORT=resend but RESEND_API_KEY is not set — outgoing mail WILL fail.")
     end

@@ -2,6 +2,7 @@ require_relative "boot"
 # Plain require, not autoload: config/environments/production.rb reads this at
 # boot, before the autoload paths exist.
 require_relative "../lib/frontend_origins"
+require_relative "../lib/storage_service"
 
 require "rails"
 # Pick the frameworks you want:

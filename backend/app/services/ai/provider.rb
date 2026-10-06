@@ -17,7 +17,7 @@ module Ai
     def self.for(name = nil)
       return Ai::MockProvider.new if Rails.env.test?
 
-      selected = (name || ENV.fetch("AI_PROVIDER", "openai")).to_s.downcase
+      selected = (name || ENV.fetch("AI_PROVIDER")).to_s.downcase
       selected = ALIASES.fetch(selected, selected)
 
       provider = build(selected)

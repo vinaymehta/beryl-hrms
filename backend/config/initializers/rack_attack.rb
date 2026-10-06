@@ -28,5 +28,5 @@ Rack::Attack.cache.store =
   if Rails.env.test?
     ActiveSupport::Cache::MemoryStore.new
   else
-    ActiveSupport::Cache::RedisCacheStore.new(url: ENV.fetch("REDIS_URL", "redis://localhost:6390/0"))
+    ActiveSupport::Cache::RedisCacheStore.new(url: ENV.fetch("REDIS_URL"))
   end

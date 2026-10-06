@@ -33,11 +33,11 @@
 # is waiting on Postgres or the Zoho API rather than burning CPU, so threads
 # are cheap. Keep RAILS_MAX_THREADS and DATABASE_POOL in step: the pool must
 # be >= this, or threads just queue on connections instead.
-threads_count = ENV.fetch("RAILS_MAX_THREADS", 8).to_i
+threads_count = ENV.fetch("RAILS_MAX_THREADS").to_i
 threads threads_count, threads_count
 
 # Specifies the `port` that Puma will listen on to receive requests; default is 3000.
-port ENV.fetch("PORT", 3000)
+port ENV.fetch("PORT")
 
 # Allow puma to be restarted by `bin/rails restart` command.
 plugin :tmp_restart

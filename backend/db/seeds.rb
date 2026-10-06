@@ -1,242 +1,113 @@
-# Seeds the global permission catalog (app/services/permissions/catalog.rb).
-# Idempotent — safe to re-run; new keys are added, nothing is removed
-# automatically (a permission a role still references shouldn't vanish
-# out from under it just because it was dropped from the catalog file).
+# Seeds, in two parts:
+#
+#   1. The permission catalog — always, everywhere. Required for the app to work.
+#   2. A test company with five logins (Admin, HR, Accounts, Manager, Employee)
+#      — only when SEED_* is filled in .env. Nothing about them is written here:
+#      every email, the shared password and the company come from the
+#      environment, so the same file is safe to run on any server.
+#
+#   bin/rails db:seed
+#
+# Idempotent. Re-running adds what is missing and never changes what exists:
+# a user that is already there keeps its password, profile and roles.
+
+# --- 1. Permissions ---------------------------------------------------------
+# New keys are added; nothing is removed automatically (a permission a role
+# still references shouldn't vanish because it was dropped from the catalog).
 Permissions::Catalog.each_definition do |key:, resource:, action:|
   Permission.find_or_create_by!(key: key) do |permission|
     permission.resource = resource
     permission.action = action
   end
 end
-
 puts "Seeded #{Permission.count} permissions."
 
-# --- Demo data ------------------------------------------------------------
-# One demo company with ten employees, ACM-001 to ACM-010, each with a login
-# and a filled-in profile — enough to exercise the directory, the reporting
-# hierarchy and a full appraisal cycle against real-looking records.
-#
-# IDEMPOTENT PER RECORD, not all-or-nothing. This used to bail out entirely if
-# the company already existed, which meant a developer who had already seeded
-# could never pick up newly added demo people without dropping their database.
-# Now each row is found-or-created, and — this is the important part — an
-# existing row is only ever TOPPED UP:
-#
-#   * an existing User's email and password are never touched, so the admin
-#     login you already use keeps working;
-#   * an existing Employee keeps every field that already has a value, and
-#     only its blanks are filled.
-#
-# So re-running adds what is missing and overwrites nothing.
-DEMO_SLUG = "acme-corporation".freeze
-DEMO_PASSWORD = "Password123!".freeze
+# --- 2. Test company and users ----------------------------------------------
+env = ->(key) { ENV[key].to_s.strip.presence }
 
-company = Company.find_or_create_by!(slug: DEMO_SLUG) do |c|
-  c.name = "Acme Corporation"
-  c.timezone = "UTC"
+# Who to create. Each line needs its SEED_*_EMAIL; one left blank is skipped.
+# `manager` is the employee-role login the others report to — the person who
+# reviews appraisals at the first level.
+SEED_USERS = [
+  { key: "ADMIN",    role: "admin",    first: "Admin",    level: :manager },
+  { key: "HR",       role: "hr",       first: "HR",       level: :lead },
+  { key: "ACCOUNTS", role: "account",  first: "Accounts", level: :senior },
+  { key: "MANAGER",  role: "employee", first: "Manager",  level: :manager },
+  { key: "EMPLOYEE", role: "employee", first: "Employee", level: :junior }
+].freeze
+
+company_name = env.call("SEED_COMPANY_NAME")
+password = env.call("SEED_PASSWORD")
+people = SEED_USERS.filter_map { |u| (email = env.call("SEED_#{u[:key]}_EMAIL")) && u.merge(email: email.downcase) }
+
+if company_name.nil? || password.nil? || people.empty?
+  puts "Skipped test users: set SEED_COMPANY_NAME, SEED_PASSWORD and at least one SEED_*_EMAIL in .env " \
+       "(see .env.example)."
+  return
+end
+if password.length < User::MINIMUM_PASSWORD_LENGTH
+  abort "SEED_PASSWORD must be at least #{User::MINIMUM_PASSWORD_LENGTH} characters."
+end
+
+company = Company.find_or_create_by!(slug: env.call("SEED_COMPANY_SLUG") || company_name.parameterize) do |c|
+  c.name = company_name
+  c.timezone = env.call("SEED_COMPANY_TIMEZONE") || "Kolkata" # a Rails zone name, e.g. Kolkata, London
+end
+# Employee codes follow the company's own starting code (Settings → Initial ID).
+if company.employee_code_initial.blank?
+  start = env.call("SEED_EMPLOYEE_CODE_START") or abort "Set SEED_EMPLOYEE_CODE_START in .env, e.g. BS-001."
+  company.update!(employee_code_initial: start)
 end
 
 ActsAsTenant.with_tenant(company) do
   Roles::SeedDefaults.call(company)
   EmploymentType.seed_defaults(company)
-  employment_types = {
-    full_time: "Full-time", part_time: "Part-time", contract: "Contract",
-    intern: "Intern", consultant: "Consultant"
-  }.transform_values { |name| company.employment_types.find_by!(name: name) }
+  full_time = company.employment_types.find_by(name: "Full-time")
 
-  departments = {
-    engineering: [ "Engineering", "Product & platform engineering" ],
-    people_ops: [ "People Operations", "HR & talent" ],
-    finance: [ "Finance", "Accounting & payroll" ]
-  }.transform_values do |(name, description)|
-    company.departments.find_or_create_by!(name: name) { |d| d.description = description }
-  end
-
-  designations = {
-    swe: [ "Software Engineer", :engineering ],
-    senior_swe: [ "Senior Software Engineer", :engineering ],
-    eng_manager: [ "Engineering Manager", :engineering ],
-    hr_manager: [ "HR Manager", :people_ops ],
-    hr_partner: [ "HR Business Partner", :people_ops ],
-    accountant: [ "Accountant", :finance ],
-    finance_lead: [ "Finance Lead", :finance ]
-  }.transform_values do |(title, department_key)|
-    company.designations.find_or_create_by!(title: title) { |d| d.department = departments[department_key] }
-  end
-
-  # The four e-mails at the top are the ones already in use — they are listed
-  # here so the seed knows about them, NOT so it can rewrite them.
-  demo_people = [
-    { code: "ACM-001", email: "admin@acme.test", role: "admin", first: "Ava", last: "Nolan",
-      dept: nil, desig: nil, level: :manager, type: :full_time, joined: 1_500,
-      dob: "1984-03-12", gender: "Female", phone: "+91 98100 10001", location: "Gurugram HQ",
-      city: "Gurugram", state: "Haryana", postal: "122002",
-      kin: [ "Rohan Nolan", "+91 98100 90001" ] },
-    { code: "ACM-002", email: "hr@acme.test", role: "hr", first: "Priya", last: "Menon",
-      dept: :people_ops, desig: :hr_manager, level: :lead, type: :full_time, joined: 1_200,
-      dob: "1988-07-24", gender: "Female", phone: "+91 98100 10002", location: "Gurugram HQ",
-      city: "Gurugram", state: "Haryana", postal: "122002",
-      kin: [ "Arun Menon", "+91 98100 90002" ] },
-    { code: "ACM-003", email: "accounts@acme.test", role: "account", first: "Marcus", last: "Lee",
-      dept: :finance, desig: :accountant, level: :senior, type: :full_time, joined: 900,
-      dob: "1986-11-02", gender: "Male", phone: "+91 98100 10003", location: "Gurugram HQ",
-      city: "Noida", state: "Uttar Pradesh", postal: "201301",
-      kin: [ "Helen Lee", "+91 98100 90003" ] },
-    { code: "ACM-004", email: "employee@acme.test", role: "employee", first: "Sofia", last: "Reyes",
-      dept: :engineering, desig: :swe, level: :junior, type: :full_time, joined: 400,
-      dob: "1997-05-18", gender: "Female", phone: "+91 98100 10004", location: "Remote — Pune",
-      city: "Pune", state: "Maharashtra", postal: "411014",
-      kin: [ "Elena Reyes", "+91 98100 90004" ] },
-    { code: "ACM-005", email: "daniel.osei@acme.test", role: "employee", first: "Daniel", last: "Osei",
-      dept: :engineering, desig: :eng_manager, level: :manager, type: :full_time, joined: 1_100,
-      dob: "1983-09-30", gender: "Male", phone: "+91 98100 10005", location: "Gurugram HQ",
-      city: "Gurugram", state: "Haryana", postal: "122018",
-      kin: [ "Abena Osei", "+91 98100 90005" ] },
-    { code: "ACM-006", email: "yuki.tanaka@acme.test", role: "hr", first: "Yuki", last: "Tanaka",
-      dept: :people_ops, desig: :hr_partner, level: :senior, type: :full_time, joined: 600,
-      dob: "1991-01-15", gender: "Female", phone: "+91 98100 10006", location: "Bengaluru",
-      city: "Bengaluru", state: "Karnataka", postal: "560103",
-      kin: [ "Haruto Tanaka", "+91 98100 90006" ] },
-    { code: "ACM-007", email: "aarav.sharma@acme.test", role: "employee", first: "Aarav", last: "Sharma",
-      dept: :engineering, desig: :senior_swe, level: :senior, type: :full_time, joined: 800,
-      dob: "1990-06-08", gender: "Male", phone: "+91 98100 10007", location: "Gurugram HQ",
-      city: "Delhi", state: "Delhi", postal: "110016",
-      kin: [ "Kavita Sharma", "+91 98100 90007" ] },
-    { code: "ACM-008", email: "elena.petrova@acme.test", role: "employee", first: "Elena", last: "Petrova",
-      dept: :engineering, desig: :swe, level: :junior, type: :full_time, joined: 240,
-      dob: "1996-12-21", gender: "Female", phone: "+91 98100 10008", location: "Remote — Goa",
-      city: "Panaji", state: "Goa", postal: "403001",
-      kin: [ "Mikhail Petrov", "+91 98100 90008" ] },
-    { code: "ACM-009", email: "omar.haddad@acme.test", role: "employee", first: "Omar", last: "Haddad",
-      dept: :engineering, desig: :swe, level: :intern, type: :intern, joined: 90,
-      dob: "2002-04-05", gender: "Male", phone: "+91 98100 10009", location: "Remote — Hyderabad",
-      city: "Hyderabad", state: "Telangana", postal: "500081",
-      kin: [ "Layla Haddad", "+91 98100 90009" ] },
-    { code: "ACM-010", email: "grace.miller@acme.test", role: "account", first: "Grace", last: "Miller",
-      dept: :finance, desig: :finance_lead, level: :lead, type: :full_time, joined: 1_000,
-      dob: "1985-08-19", gender: "Female", phone: "+91 98100 10010", location: "Gurugram HQ",
-      city: "Gurugram", state: "Haryana", postal: "122001",
-      kin: [ "Peter Miller", "+91 98100 90010" ] }
-  ]
-
-  # Assign only where the record has nothing yet. Anything a person (or an
-  # earlier seed) already put there wins — this never overwrites.
-  fill_blanks = lambda do |record, attributes|
-    patch = attributes.reject { |name, _| record.read_attribute(name).present? }
-    record.assign_attributes(patch) if patch.any?
-    record
-  end
-
+  created = []
   employees = {}
-  created_users = []
-  reused_users = []
 
-  demo_people.each do |person|
+  people.each do |person|
     user = company.users.find_by(email_address: person[:email])
     if user.nil?
       user = company.users.create!(
-        email_address: person[:email],
-        password: DEMO_PASSWORD,
-        first_name: person[:first],
-        last_name: person[:last],
-        status: :active,
-        email_verified_at: Time.current
+        email_address: person[:email], password: password,
+        first_name: person[:first], last_name: "User",
+        status: :active, email_verified_at: Time.current
       )
-      created_users << person[:email]
-    else
-      # Deliberately NOT touching email_address or password_digest: whatever
-      # this login's password has been changed to is the password it keeps.
-      reused_users << person[:email]
+      user.user_roles.find_or_create_by!(role: company.roles.find_by!(slug: person[:role]), company: company)
+      created << person[:email]
     end
 
-    role = company.roles.find_by!(slug: person[:role])
-    user.user_roles.find_or_create_by!(role: role, company: company)
-
-    employee = company.employees.find_or_initialize_by(employee_code: person[:code])
-    # first/last are NOT NULL, so a brand-new record needs them before the
-    # blank-filling pass, which only ever touches empty columns.
-    employee.first_name ||= person[:first]
-    employee.last_name ||= person[:last]
-
-    fill_blanks.call(employee, {
-      user_id: user.id,
-      department_id: person[:dept] && departments[person[:dept]].id,
-      designation_id: person[:desig] && designations[person[:desig]].id,
-      current_level: person[:level],
-      employment_type_id: employment_types[person[:type]].id,
-      date_of_joining: person[:joined].days.ago.to_date,
-      date_of_birth: Date.parse(person[:dob]),
-      gender: person[:gender],
-      phone: person[:phone],
-      personal_email: "#{person[:first].downcase}.#{person[:last].downcase}@example.com",
-      work_location: person[:location],
-      address_line1: "#{rand(1..99)} Sector #{rand(1..60)}",
-      city: person[:city],
-      state: person[:state],
-      postal_code: person[:postal],
-      country: "India",
-      emergency_contact_name: person[:kin].first,
-      emergency_contact_phone: person[:kin].last,
-      status: :active
-    })
-    employee.save!
-    employees[person[:code]] = employee
+    employee = company.employees.find_by(user_id: user.id) ||
+      company.employees.create!(
+        user: user, employee_code: Employees::NextCode.call(company: company),
+        first_name: user.first_name, last_name: user.last_name,
+        current_level: person[:level], employment_type: full_time,
+        date_of_joining: Date.current, status: :active
+      )
+    employees[person[:key]] = employee
   end
 
-  # Two employees with no login at all, kept because User and Employee are
-  # deliberately separate models — not everyone on the payroll has an account,
-  # and the UI has to cope with that. They moved out to ACM-011/012 when
-  # ACM-005 and ACM-006 were given logins of their own.
-  [
-    { code: "ACM-011", first: "Ishaan", last: "Verma", dept: :engineering, desig: :swe, level: :junior, joined: 150 },
-    { code: "ACM-012", first: "Meera", last: "Nair", dept: :people_ops, desig: :hr_partner, level: :senior, joined: 320 }
-  ].each do |person|
-    employee = company.employees.find_or_initialize_by(employee_code: person[:code])
-    employee.first_name ||= person[:first]
-    employee.last_name ||= person[:last]
-    fill_blanks.call(employee, {
-      department_id: departments[person[:dept]].id,
-      designation_id: designations[person[:desig]].id,
-      current_level: person[:level],
-      employment_type_id: employment_types[:full_time].id,
-      date_of_joining: person[:joined].days.ago.to_date,
-      work_location: "Gurugram HQ",
-      status: :active
-    })
-    employee.save!
-    employees[person[:code]] = employee
-  end
-
-  # Reporting hierarchy: Employee → Primary → (optional) Secondary → Final.
-  # Deep enough that an appraisal cycle has real chains to walk — ACM-009's
-  # final manager is ACM-005 rather than the Admin, so not every appraisal
-  # funnels to the same person.
+  # Reporting lines, so an appraisal cycle has a chain to walk: the Employee
+  # reports to the Manager; everyone's final reviewer is the Admin. Only set
+  # where nobody has assigned a manager yet.
+  admin = employees["ADMIN"]
   {
-    "ACM-002" => { "primary" => "ACM-001", "final" => "ACM-001" },
-    "ACM-003" => { "primary" => "ACM-001", "final" => "ACM-001" },
-    "ACM-004" => { "primary" => "ACM-005", "secondary" => "ACM-006", "final" => "ACM-001" },
-    "ACM-005" => { "primary" => "ACM-002", "final" => "ACM-001" },
-    "ACM-006" => { "primary" => "ACM-002", "final" => "ACM-001" },
-    "ACM-007" => { "primary" => "ACM-005", "final" => "ACM-001" },
-    "ACM-008" => { "primary" => "ACM-005", "secondary" => "ACM-007", "final" => "ACM-001" },
-    "ACM-009" => { "primary" => "ACM-007", "final" => "ACM-005" },
-    "ACM-010" => { "primary" => "ACM-003", "final" => "ACM-001" },
-    "ACM-011" => { "primary" => "ACM-005", "final" => "ACM-001" },
-    "ACM-012" => { "primary" => "ACM-002", "final" => "ACM-001" }
-  }.each do |code, slots|
-    employees[code].assign_managers!(slots.transform_values { |manager_code| employees[manager_code].id })
+    "HR" => employees["ADMIN"], "ACCOUNTS" => employees["ADMIN"],
+    "MANAGER" => employees["ADMIN"], "EMPLOYEE" => employees["MANAGER"]
+  }.each do |key, primary|
+    employee = employees[key]
+    next if employee.nil? || primary.nil? || employee.manager_hierarchy_complete?
+
+    slots = { "primary" => primary.id }
+    slots["final"] = admin.id if admin && admin != primary
+    employee.assign_managers!(slots)
   end
 
-  puts "Seeded demo company '#{company.name}' (#{company.slug})."
-  puts "  #{created_users.size} login(s) created, #{reused_users.size} left exactly as they were."
-  puts
-  puts "Demo logins — password for NEWLY created accounts is #{DEMO_PASSWORD}"
-  puts "(an account that already existed keeps whatever password it has now):"
-  demo_people.each do |person|
-    note = created_users.include?(person[:email]) ? "new" : "existing"
-    puts format("  %-8s %-26s %-9s %-16s (%s)",
-                person[:code], person[:email], person[:role], "#{person[:first]} #{person[:last]}", note)
+  puts "Seeded test company '#{company.name}' (#{company.slug})."
+  people.each do |person|
+    status = created.include?(person[:email]) ? "created, password from SEED_PASSWORD" : "already existed — unchanged"
+    puts format("  %-8s %-34s %s", person[:role], person[:email], status)
   end
-  puts "  ACM-011  (no login)               —         Ishaan Verma"
-  puts "  ACM-012  (no login)               —         Meera Nair"
 end

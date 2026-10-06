@@ -27,7 +27,9 @@ Rails.application.configure do
   config.cache_store = :memory_store
 
   # Store uploaded files on the local file system (see config/storage.yml for options).
-  config.active_storage.service = :s3_compatible # MinIO or S3-compatible, via S3_* env vars
+  # S3 (or MinIO) when S3_BUCKET/S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY are set,
+  # otherwise files go to backend/storage on this machine. See lib/storage_service.rb.
+  config.active_storage.service = StorageService.service
 
   # Blob routes (used directly in <img src> for employee profile photos)
   # stream through Rails instead of 302-ing to a presigned storage URL.
