@@ -4,6 +4,8 @@ module Api
     # their own. One row exists per company already — the Company itself — so
     # this is a singular endpoint over that, not a collection.
     class CompanySettingsController < Api::V1::BaseController
+      rescue_from ::Appraisals::SalaryStructure::InvalidRules, with: :render_unprocessable
+
       def show
         authorize current_company, policy_class: CompanySettingPolicy
         render_data(payload)
@@ -26,6 +28,18 @@ module Api
         end
         if params.key?(:work_email_domain_enforced)
           changes[:work_email_domain_enforced] = ActiveModel::Type::Boolean.new.cast(params[:work_email_domain_enforced])
+        end
+
+        # The appraisal letter's legal name. Blank goes back to the company
+        # name (Company#letter_legal_name) rather than to an empty sign-off.
+        changes[:legal_name] = params[:legal_name].to_s.strip.presence if params.key?(:legal_name)
+        if params.key?(:salary_structure_rules)
+          # Merged over what is stored, so the form may send only the fields
+          # it changed; stored complete and as plain numbers.
+          given = params[:salary_structure_rules]
+          given = given.respond_to?(:to_unsafe_h) ? given.to_unsafe_h : {}
+          rules = ::Appraisals::SalaryStructure.normalize_rules(current_company.salary_structure_rules.merge(given))
+          changes[:salary_structure_rules] = rules.transform_values { |value| ::Appraisals::SalaryStructure.storable(value) }
         end
 
         before = current_company.attributes.slice(*changes.keys.map(&:to_s))
@@ -56,7 +70,13 @@ module Api
             # shown even while the check is off.
             companyName: current_company.name,
             workEmailDomainSetting: current_company.work_email_domain,
-            workEmailDomainEnforced: current_company.work_email_domain_enforced
+            workEmailDomainEnforced: current_company.work_email_domain_enforced,
+            # The appraisal letter: who it is written for, and the rules that
+            # pre-fill its compensation table at the Discussion step.
+            legalName: current_company.letter_legal_name,
+            salaryStructureRules: current_company.salary_rules.to_h do |key, value|
+              [ key.camelize(:lower), ::Appraisals::SalaryStructure.storable(value) ]
+            end
           }
         end
     end

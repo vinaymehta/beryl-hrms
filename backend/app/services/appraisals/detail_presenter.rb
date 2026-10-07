@@ -6,9 +6,13 @@ module Appraisals
   # one file rather than scattered across serializers and React components:
   #
   #   • revisions        — filtered by AppraisalPolicy#visible_revision_stages.
-  #                        An employee gets their own V1 before release, and
-  #                        their V1 plus the final version after it. A manager's
-  #                        ratings never reach them early.
+  #                        An employee gets their own V1, before release and
+  #                        after it. A manager's ratings never reach them.
+  #   • scores           — blanked for the subject (AppraisalPolicy#
+  #                        hide_scores?), with the score overrides and the
+  #                        transition notes that would give them away.
+  #   • letter           — the appraisal letter's status, for whoever
+  #                        AppraisalPolicy#view_letter? lets open it.
   #   • comments         — through AppraisalCommentPolicy::Scope, so a
   #                        management_only row is excluded by the QUERY.
   #   • template         — always the CYCLE's frozen template, never the newest.
@@ -25,16 +29,18 @@ module Appraisals
     end
 
     def call
-      Api::V1::AppraisalSummarySerializer.new(@appraisal).as_json.merge(
+      summary_params = { hide_scores_for_employee_id: (@appraisal.employee_id if @policy.hide_scores?) }
+      Api::V1::AppraisalSummarySerializer.new(@appraisal, params: summary_params).as_json.merge(
         "cycle" => Api::V1::AppraisalCycleSerializer.new(@appraisal.appraisal_cycle).as_json,
         "template" => template_payload,
         "revisions" => Api::V1::AppraisalRevisionSerializer.new(visible_revisions).as_json,
         "comments" => Api::V1::AppraisalCommentSerializer.new(visible_comments).as_json,
-        "transitions" => Api::V1::AppraisalTransitionSerializer.new(@appraisal.transitions.to_a).as_json,
-        "scoreOverrides" => Api::V1::AppraisalScoreOverrideSerializer.new(@appraisal.score_overrides.to_a).as_json,
+        "transitions" => transitions_payload,
+        "scoreOverrides" => score_overrides_payload,
         "selfAppraisalDraft" => self_appraisal_draft,
         "reviewDraft" => review_draft,
         "discussion" => discussion_payload,
+        "letter" => letter_payload,
         # The subject's own compact record, for the page header (job title,
         # department, employee code). Same serializer the reporting line
         # already uses, so it carries no more than a manager's entry does —
@@ -96,6 +102,12 @@ module Appraisals
       end
 
       # The Discussion step's decision — Admin/HR only, never the employee.
+      #
+      # Shaped after the appraisal letter's compensation table: the current and
+      # new MONTHLY gross, the monthly breakdown that adds up to the new one,
+      # and the dates the letter states. `salaryRules` travels with it so the
+      # form can re-split the breakdown live as the new gross changes, with the
+      # same arithmetic as Appraisals::SalaryStructure.
       def discussion_payload
         return nil unless @policy.administrator?
 
@@ -104,24 +116,65 @@ module Appraisals
         when "recommended" then true
         when "not_recommended" then false
         end
-        pay_record = latest_pay_record
+        prefill = prefilled_monthly_gross
         {
-          # Previous income: what was saved, or — until something is — the
-          # employee's latest pay record, so Admin/HR start from the real figure.
-          "currentCompensation" => (decision&.current_compensation || pay_record&.annual_compensation)&.to_s,
-          "currentCompensationPrefilled" => decision&.current_compensation.nil? && pay_record&.annual_compensation.present?,
+          # Current monthly gross: what was saved, or — until something is —
+          # the employee's latest pay record over twelve, so Admin/HR start
+          # from the real figure.
+          "currentCompensation" => (decision&.current_compensation || prefill)&.to_s,
+          "currentCompensationPrefilled" => decision&.current_compensation.nil? && prefill.present?,
           "incrementPercentage" => decision&.approved_increment_percentage&.to_s,
+          # New monthly gross.
           "approvedCompensation" => decision&.approved_compensation&.to_s,
-          # Pay records carry no incentive column, so there is nothing to
-          # pre-fill the current incentive from.
-          "currentIncentive" => decision&.current_incentive&.to_s,
-          "approvedIncentive" => decision&.approved_incentive&.to_s,
+          "breakdown" => decision&.breakdown&.to_h { |key, value| [ key.camelize(:lower), value ] },
+          "effectiveDate" => decision&.effective_date&.iso8601,
+          "nextAppraisalOn" => decision&.next_appraisal_on&.iso8601,
           "promote" => promote,
           "proposedDesignationId" => decision&.proposed_designation_id&.to_s,
           "proposedDesignationTitle" => decision&.proposed_designation&.title,
           "promotionReason" => decision&.promotion_reason,
-          "canEdit" => @policy.save_discussion?
+          "canEdit" => @policy.save_discussion?,
+          "salaryRules" => @appraisal.company.salary_rules.to_h do |key, value|
+            [ key.camelize(:lower), SalaryStructure.storable(value) ]
+          end
         }
+      end
+
+      # The latest pay record is annual; the letter's table is monthly.
+      def prefilled_monthly_gross
+        annual = latest_pay_record&.annual_compensation
+        annual && (annual / 12).round
+      end
+
+      # The letter's state, for the sign panel and Admin/HR's "Signed on …"
+      # line. Never the letter itself — that is streamed by
+      # AppraisalsController#letter, after the same policy check.
+      def letter_payload
+        return nil unless @policy.view_letter?
+
+        {
+          "available" => @appraisal.letter_pdf.attached?,
+          "signed" => @appraisal.letter_signed?,
+          "signedAt" => @appraisal.signed_at&.iso8601,
+          "signedName" => @appraisal.signed_name,
+          "signatureMethod" => @appraisal.signature_method,
+          "sha256" => @appraisal.letter_sha256
+        }
+      end
+
+      # A transition's note can say what the subject must not see ("score
+      # calibrated down after the final review"), so for them the move stays
+      # and the note goes.
+      def transitions_payload
+        rows = Api::V1::AppraisalTransitionSerializer.new(@appraisal.transitions.to_a).as_json
+        @policy.hide_scores? ? rows.map { |row| row.merge("notes" => nil) } : rows
+      end
+
+      # An override IS a score, with its reason — nothing in it is theirs to see.
+      def score_overrides_payload
+        return [] if @policy.hide_scores?
+
+        Api::V1::AppraisalScoreOverrideSerializer.new(@appraisal.score_overrides.to_a).as_json
       end
 
       # The employee's most recent compensation record that states an amount,
@@ -231,7 +284,10 @@ module Appraisals
           "canAdvance" => @policy.advance?,
           "canOverrideScore" => @policy.override_score?,
           "canRelease" => @policy.release?,
-          "canAcknowledge" => @policy.acknowledge?,
+          # Signing the letter is the acknowledgement; canAcknowledge stays,
+          # meaning the same, for anything still reading it.
+          "canSign" => @policy.sign?,
+          "canAcknowledge" => @policy.sign?,
           "canSetManagementOnlyComment" => AppraisalCommentPolicy.new(@user, @appraisal).may_set_management_only?,
           "visibleRevisionStages" => @policy.visible_revision_stages
         }

@@ -91,6 +91,15 @@ class Appraisal < ApplicationRecord
           dependent: :destroy,
           inverse_of: :appraisal
 
+  # The appraisal letter. `letter_pdf` is the one issued at release (its
+  # SHA-256 is letter_sha256); `signed_letter_pdf` is that letter with the
+  # employee's signature placed and the audit page added; `employee_signature`
+  # is the PNG/JPG they drew or uploaded. See Appraisals::Release and
+  # Appraisals::SignLetter.
+  has_one_attached :letter_pdf
+  has_one_attached :signed_letter_pdf
+  has_one_attached :employee_signature
+
   delegate :appraisal_template, to: :appraisal_cycle
 
   private
@@ -111,6 +120,11 @@ class Appraisal < ApplicationRecord
   def self_appraisal_revision = revision_for(:self_appraisal)
 
   def released? = released_at.present?
+
+  # Signing the letter is the acknowledgement now; signed_at is set alongside
+  # acknowledged_at. An appraisal acknowledged before the letter existed has
+  # the one without the other.
+  def letter_signed? = signed_at.present?
 
   def employee_locked? = LOCKED_FOR_EMPLOYEE.include?(status)
 

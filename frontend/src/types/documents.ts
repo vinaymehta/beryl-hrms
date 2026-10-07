@@ -29,6 +29,7 @@ export const DOCUMENT_CATEGORIES: { value: string; label: string }[] = [
   { value: "education_certificate", label: "Education Certificate" },
   { value: "experience_certificate", label: "Experience Certificate" },
   { value: "bank_document", label: "Bank Document" },
+  { value: "appraisal_letter", label: "Appraisal letter" },
   { value: "other", label: "Other" },
 ]
 

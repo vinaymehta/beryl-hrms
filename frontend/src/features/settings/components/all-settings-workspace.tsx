@@ -24,6 +24,7 @@ import { CalendlySettings } from "./calendly-settings"
 import { MailSettings } from "./mail-settings"
 import { InitialIdSettings } from "./initial-id-settings"
 import { CompanySettings } from "./company-settings"
+import { SalaryLetterSettings } from "./salary-letter-settings"
 import {
   AddDepartmentButton,
   AddEmploymentTypeButton,
@@ -43,6 +44,7 @@ const SECTION_CONTENT: Record<SettingsSectionId, React.ComponentType> = {
   mail: MailSettings,
   initial_id: InitialIdSettings,
   company: CompanySettings,
+  salary_letter: SalaryLetterSettings,
 }
 
 /**

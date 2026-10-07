@@ -1,10 +1,16 @@
 "use client"
 
-import { createContext, useContext } from "react"
+import { createContext, useContext, useRef, useState, type KeyboardEvent } from "react"
 import { StarIcon } from "lucide-react"
 import { cn } from "cn"
 
-import { RATING_SCALE, type RatingScaleOption } from "@/features/appraisals/constants"
+import {
+  formatRating,
+  RATING_SCALE,
+  RATING_STEP,
+  ratingLevel,
+  type RatingScaleOption,
+} from "@/features/appraisals/constants"
 import type { TemplateImportRatingGuideRow } from "@/types/appraisals"
 
 /**
@@ -20,7 +26,8 @@ export function useRatingScale() {
 }
 
 /**
- * The scale as stars, one per level the template defines.
+ * The scale as stars, one per level the template defines — each one selectable
+ * as a half or a whole (AppraisalAnswer takes 1 to 5 in steps of 0.5).
  *
  * Replaces a row of five full-width labelled buttons, which took the whole
  * width of a card for one value and pushed the evidence box — the part that
@@ -28,8 +35,17 @@ export function useRatingScale() {
  * carried isn't lost: it moves to the rating guide beside the field, where it
  * is readable once for all seven areas instead of repeated seven times.
  *
- * Still a real radiogroup: same roles, same keyboard behaviour, same
- * `N — Label` accessible names the old control exposed.
+ * Every star after the first is two radios laid over its two halves: the left
+ * half is the half step below the level (3.5 on the fourth star), the right
+ * half the level itself (4). That is what makes a tap on a phone pick a half
+ * as reliably as a mouse, with no reading of pointer coordinates. The first
+ * star has only the whole: the scale starts at a full 1, so its left half
+ * selects 1 too.
+ *
+ * Still a real radiogroup — one radio per half step, `N — Label` accessible
+ * names, a single Tab stop on the checked radio, and the arrow keys moving by
+ * half a star (Home / End jump to the ends), the way a native radio group
+ * moves and selects together.
  */
 export function RatingSelect({
   value,
@@ -46,45 +62,125 @@ export function RatingSelect({
 }) {
   const contextScale = useRatingScale()
   const scale = scaleProp ?? contextScale
-  const selected = scale.find((option) => option.value === value)
+  // Previewed under the pointer before it is chosen; never what is stored.
+  const [hovered, setHovered] = useState<number | null>(null)
+  const radios = useRef(new Map<number, HTMLButtonElement>())
+
+  // Every value the control can take, low to high: the first level whole,
+  // then the half step before each level after it — 1, 1.5, 2 … 4.5, 5.
+  const steps = scale.flatMap((option, index) =>
+    index === 0 ? [option.value] : [option.value - RATING_STEP, option.value]
+  )
+  const max = scale.at(-1)?.value ?? 5
+  const shown = hovered ?? value
+  const level = ratingLevel(scale, shown)
+  // Roving tabindex: Tab lands on the checked radio, or the first one.
+  const tabStop = value != null && steps.includes(value) ? value : steps[0]
+
+  function describe(step: number) {
+    const own = ratingLevel(scale, step)?.label
+    if (Number.isInteger(step)) return `${formatRating(step)} — ${own ?? ""}`
+    const next = scale.find((option) => option.value === step + RATING_STEP)?.label
+    return `${formatRating(step)} — between ${own ?? ""} and ${next ?? ""}`
+  }
+
+  function select(step: number) {
+    onChange(step)
+    radios.current.get(step)?.focus()
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const index = value == null ? -1 : steps.indexOf(value)
+    let next: number | undefined
+    switch (event.key) {
+      case "ArrowRight":
+      case "ArrowUp":
+        next = steps[Math.min(index + 1, steps.length - 1)]
+        break
+      case "ArrowLeft":
+      case "ArrowDown":
+        next = steps[Math.max(index - 1, 0)]
+        break
+      case "Home":
+        next = steps[0]
+        break
+      case "End":
+        next = steps.at(-1)
+        break
+      default:
+        return
+    }
+    event.preventDefault()
+    if (next != null) select(next)
+  }
 
   return (
     <div className="grid gap-1">
-      <div className="flex items-center gap-0.5" role="radiogroup" aria-labelledby={labelledBy}>
-        {scale.map((option) => {
-          const active = value != null && option.value <= value
+      <div
+        className="flex items-center gap-4 sm:gap-7"
+        role="radiogroup"
+        aria-labelledby={labelledBy}
+        aria-disabled={disabled || undefined}
+        onKeyDown={handleKeyDown}
+        onPointerLeave={() => setHovered(null)}
+      >
+        {scale.map((option, index) => {
+          const half = option.value - RATING_STEP
+          const fill =
+            shown == null ? 0 : shown >= option.value ? 1 : index > 0 && shown >= half ? 0.5 : 0
           return (
-            <button
+            <span
               key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={value === option.value}
-              aria-label={`${option.value} — ${option.label}`}
-              disabled={disabled}
-              title={option.label}
-              onClick={() => onChange(option.value)}
               className={cn(
-                "rounded-md p-1 transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                "relative rounded-md p-1 transition-colors has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
                 disabled ? "cursor-not-allowed opacity-60" : "hover:bg-muted"
               )}
             >
-              <StarIcon
-                className={cn(
-                  "size-6 transition-colors",
-                  active ? "fill-role-hr text-role-hr" : "text-muted-foreground/40"
-                )}
-              />
-            </button>
+              <StarIcon aria-hidden className="size-10 text-muted-foreground/40 transition-colors" />
+              {/* The filled star over the outline one, clipped to its left
+                  half for a half rating. */}
+              {fill > 0 && (
+                <StarIcon
+                  aria-hidden
+                  className={cn(
+                    "absolute top-1 left-1 size-10 fill-role-hr text-role-hr transition-colors",
+                    fill === 0.5 && "[clip-path:inset(0_50%_0_0)]"
+                  )}
+                />
+              )}
+              <span className="absolute inset-0 flex">
+                {(index === 0 ? [option.value] : [half, option.value]).map((step) => (
+                  <button
+                    key={step}
+                    ref={(node) => {
+                      if (node) radios.current.set(step, node)
+                      else radios.current.delete(step)
+                    }}
+                    type="button"
+                    role="radio"
+                    aria-checked={value === step}
+                    aria-label={describe(step)}
+                    title={describe(step)}
+                    tabIndex={step === tabStop ? 0 : -1}
+                    disabled={disabled}
+                    onClick={() => select(step)}
+                    onPointerEnter={() => !disabled && setHovered(step)}
+                    className="h-full flex-1 focus-visible:outline-none disabled:cursor-not-allowed"
+                  />
+                ))}
+              </span>
+            </span>
           )
         })}
       </div>
       <p className="text-xs text-muted-foreground">
-        {selected ? (
+        {shown != null ? (
           <span className="font-medium text-foreground">
-            {selected.value} · {selected.label}
+            {formatRating(shown)} / {max}
+            {level && ` · ${level.label}`}
           </span>
         ) : (
-          `Select a rating (${scale[0]?.value ?? 1}–${scale.at(-1)?.value ?? 5})`
+          `Select a rating (${scale[0]?.value ?? 1}–${max}, half stars allowed)`
         )}
       </p>
     </div>
@@ -162,6 +258,9 @@ export function RatingGuide({ guide }: { guide?: TemplateImportRatingGuideRow[] 
           </li>
         ))}
       </ul>
+      <p className="text-center text-[11px] text-muted-foreground">
+        Half stars sit between two levels — the left half of the fourth star is 3.5.
+      </p>
     </div>
   )
 }

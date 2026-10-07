@@ -6,7 +6,12 @@ import { cn } from "cn"
 
 import { Badge } from "@/components/ui/badge"
 import { RevisionBadge } from "@/features/appraisals/components/appraisal-badges"
-import { appraisalStageMeta, APPRAISAL_STATUS_LABELS } from "@/features/appraisals/constants"
+import {
+  appraisalStageMeta,
+  APPRAISAL_STATUS_LABELS,
+  formatRating,
+  ratingLevel,
+} from "@/features/appraisals/constants"
 import { useRatingScale } from "@/features/appraisals/components/rating-select"
 import type { AppraisalDetail, AppraisalRevision } from "@/types/appraisals"
 
@@ -18,8 +23,9 @@ function questionPrompt(appraisal: AppraisalDetail, questionId: string) {
   return { prompt: "Question", category: "" }
 }
 
+/** A half rating (3.5) reads as the level below it, like the rating control. */
 function ratingLabel(scale: { value: number; label: string }[], rating: number | null) {
-  return scale.find((option) => option.value === rating)?.label ?? null
+  return ratingLevel(scale, rating)?.label ?? null
 }
 
 const NARRATIVE_ROWS: { key: keyof AppraisalRevision; label: string }[] = [
@@ -68,7 +74,7 @@ function DeltaChip({ delta }: { delta: ReturnType<typeof ratingDelta> }) {
     >
       {up ? <ArrowUpIcon className="size-2.5" /> : <ArrowDownIcon className="size-2.5" />}
       {up ? "+" : ""}
-      {delta.delta} from {delta.from}
+      {formatRating(delta.delta)} from {formatRating(delta.from)}
     </span>
   )
 }
@@ -105,7 +111,8 @@ export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
     )
   }
 
-  const hidden = appraisal.viewer.isSubject && !appraisal.viewer.isAdministrator && !appraisal.releasedAt
+  // The employee is sent their own self-appraisal alone, and never a score.
+  const subjectOnly = appraisal.viewer.isSubject && !appraisal.viewer.isAdministrator
   const latestId = chronological.at(-1)?.id
 
   return (
@@ -155,7 +162,7 @@ export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
                   </Badge>
                 )}
                 {revision.id === latestId && <Badge className="bg-role-hr/15 text-role-hr">Current</Badge>}
-                {revision.calculatedScore != null && (
+                {!subjectOnly && revision.calculatedScore != null && (
                   <Badge variant="outline" className="tabular-nums">
                     {Number(revision.calculatedScore).toFixed(2)}
                   </Badge>
@@ -197,7 +204,7 @@ export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
                             <div className="flex shrink-0 items-center gap-1.5">
                               <DeltaChip delta={delta} />
                               <Badge variant="outline" className="tabular-nums">
-                                {answer.rating ?? "—"}
+                                {formatRating(answer.rating)}
                               </Badge>
                             </div>
                           </div>
@@ -248,12 +255,14 @@ export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
         )
       })}
 
-      {hidden && (
+      {subjectOnly && (
         <p className="flex items-start gap-1.5 rounded-lg bg-muted/50 px-2.5 py-2 text-xs text-muted-foreground">
           <LockIcon className="mt-px size-3.5 shrink-0" />
           <span>
-            Manager reviews stay private until your appraisal is released. You&apos;ll see the final version here
-            once HR releases it.
+            Your managers&apos; and HR&apos;s reviews stay private.{" "}
+            {appraisal.releasedAt
+              ? "The outcome is in your appraisal letter, on the Letter tab."
+              : "Once HR releases your appraisal, you'll receive your appraisal letter."}
           </span>
         </p>
       )}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
@@ -10,6 +10,8 @@ import {
   CalendarDaysIcon,
   CheckIcon,
   CloudIcon,
+  DownloadIcon,
+  FileTextIcon,
   GaugeIcon,
   HistoryIcon,
   MessageSquareIcon,
@@ -17,18 +19,30 @@ import {
   PencilLineIcon,
   TargetIcon,
   TriangleAlertIcon,
+  UploadIcon,
   UsersRoundIcon,
+  MenuIcon,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "cn"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { PanelBody, PanelHeader } from "@/components/ui/panel"
 import { AppraisalStatusBadge } from "@/features/appraisals/components/appraisal-badges"
 import { AppraisalWorkflowTimeline } from "@/features/appraisals/components/appraisal-workflow-timeline"
 import { PerformanceAreaList } from "@/features/appraisals/components/performance-area-list"
 import { DiscussionPanel } from "@/features/appraisals/components/discussion-panel"
+import { LetterTab } from "@/features/appraisals/components/appraisal-letter"
+import { appraisalsApi } from "@/features/appraisals/api"
 import {
   RatingGuide,
   RatingScaleContext,
@@ -38,7 +52,10 @@ import {
 import { RevisionHistory } from "@/features/appraisals/components/revision-history"
 import { AppraisalComments } from "@/features/appraisals/components/appraisal-comments"
 import { FeedbackRequestsPanel } from "@/features/appraisals/components/feedback-requests-panel"
-import { SelfAppraisalImport } from "@/features/appraisals/components/self-appraisal-import"
+import {
+  SelfAppraisalImport,
+  type SelfAppraisalImportHandle,
+} from "@/features/appraisals/components/self-appraisal-import"
 import {
   EMPTY_ANSWER,
   needsEvidence,
@@ -48,8 +65,7 @@ import {
   NARRATIVE_FIELDS,
   ratingScaleFrom,
   templateFieldAudience,
-  type NarrativeKey,
-} from "@/features/appraisals/constants"
+  type NarrativeKey, formatRating } from "@/features/appraisals/constants"
 import {
   useSaveReviewDraft,
   useSaveSelfAppraisalDraft,
@@ -478,6 +494,9 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
     else submitSelf.mutate(payload)
   }
 
+  // The Tools menu's side panel, and the workbook importer it drives.
+  const [toolPanel, setToolPanel] = useState<"progress" | "guide" | null>(null)
+  const importRef = useRef<SelfAppraisalImportHandle>(null)
   const isPending = submitSelf.isPending || submitReview.isPending
   // The server refuses a self-appraisal while Aadhaar or PAN is missing from the
   // employee's profile; say so here instead of letting Submit fail.
@@ -563,7 +582,7 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
         Step {stepIndex + 1} of {steps.length} · {current.title}
       </p>
 
-      <div className="grid items-start gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="grid items-start gap-4">
         <div className="grid min-w-0 gap-4">
           {/* At the top, so it's read before the form is filled in rather
               than discovered at the Submit button. */}
@@ -580,6 +599,8 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
             </div>
           )}
 
+          {current.key !== "areas" && <div className="flex justify-end">{toolsMenu}</div>}
+
           {current.key === "areas" && (
             <PerformanceAreaList
               categories={categories}
@@ -595,13 +616,18 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
               // panel of its own above it — it is another way to fill THIS
               // section in, not a thing in its own right.
               action={
-                viewer.canSubmitSelf ? (
-                  <SelfAppraisalImport
-                    appraisalId={appraisal.id}
-                    onConfirm={applyImported}
-                    compact
-                  />
-                ) : undefined
+                <>
+                  {viewer.canSubmitSelf && (
+                    <SelfAppraisalImport
+                      appraisalId={appraisal.id}
+                      onConfirm={applyImported}
+                      compact
+                      hideButtons
+                      controlRef={importRef}
+                    />
+                  )}
+                  {toolsMenu}
+                </>
               }
             />
           )}
@@ -629,7 +655,8 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
               answers={answers}
               sections={[sections.story, sections.ahead].filter(Boolean) as TemplateWizardSection[]}
               valueOf={valueOf}
-              weightedScore={estimatedScore}
+              // Withheld from the employee, who is never shown a score.
+              weightedScore={subjectOnlyView ? undefined : estimatedScore}
               outstanding={outstanding}
               documentsMissing={missingDocuments.length > 0}
               onGoToStep={(key: string) => goTo(steps.findIndex((entry) => entry.key === key))}
@@ -657,98 +684,107 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
           </div>
         </div>
 
-        {/* The standing summary, folded into icons so the form keeps the full
-              width: progress (with the running percentage under its icon) and
-              the rating guide, each opened on a click. */}
-        <aside className="flex gap-2 sm:sticky sm:top-4 sm:flex-col" aria-label="Appraisal helpers">
-          <Popover>
-            <PopoverTrigger
-              aria-label="Your progress"
-              className="flex w-14 flex-col items-center gap-0.5 rounded-xl border bg-background p-2 text-role-hr transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-popup-open:bg-muted"
-            >
-              <TargetIcon className="size-4.5" />
-              <span className="text-[10px] font-semibold tabular-nums text-foreground">{percentComplete}%</span>
-            </PopoverTrigger>
-            <PopoverContent side="left" align="start" className="grid w-80 gap-2.5 p-3">
-                <section className="grid gap-2 rounded-xl border p-3">
-                  <h3 className="flex items-center gap-2 text-sm font-semibold">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-role-hr/12 text-role-hr">
-                      <TargetIcon className="size-3.5" />
-                    </span>
-                    Your progress
-                  </h3>
-                  <div className="flex items-center gap-3">
-                    <div className="relative flex shrink-0 items-center justify-center">
-                      <ProgressRing percent={percentComplete} />
-                      <span className="absolute text-xs font-semibold tabular-nums">
-                        {percentComplete}%
-                      </span>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-lg leading-tight font-semibold tabular-nums">
-                        {completedAreas} of {categories.length}
-                      </p>
-                      <p className="text-xs text-muted-foreground">areas completed</p>
-                    </div>
+        {/* The Tools menu's side panel (progress & score, or the rating guide). */}
+
+          <Sheet open={toolPanel !== null} onOpenChange={(open) => !open && setToolPanel(null)}>
+            <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+              <PanelHeader
+                icon={toolPanel === "guide" ? BookOpenIcon : TargetIcon}
+                title={toolPanel === "guide" ? "Rating guide" : "Your progress"}
+                description={
+                  toolPanel === "guide"
+                    ? "What each rating means."
+                    : "Worked out from what has been filled in so far."
+                }
+              />
+              <PanelBody>
+                {toolPanel === "guide" ? (
+                  <RatingGuide guide={appraisal.template.structure?.ratingGuide} />
+                ) : (
+                  <div className="grid gap-2.5">
+                        <section className="grid gap-2 rounded-xl border p-3">
+                          <h3 className="flex items-center gap-2 text-sm font-semibold">
+                            <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-role-hr/12 text-role-hr">
+                              <TargetIcon className="size-3.5" />
+                            </span>
+                            Your progress
+                          </h3>
+                          <div className="flex items-center gap-3">
+                            <div className="relative flex shrink-0 items-center justify-center">
+                              <ProgressRing percent={percentComplete} />
+                              <span className="absolute text-xs font-semibold tabular-nums">
+                                {percentComplete}%
+                              </span>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-lg leading-tight font-semibold tabular-nums">
+                                {completedAreas} of {categories.length}
+                              </p>
+                              <p className="text-xs text-muted-foreground">areas completed</p>
+                            </div>
+                          </div>
+                        </section>
+
+                        <section className="grid gap-2 rounded-xl border p-3">
+                          <h3 className="text-sm font-semibold">Selected ratings</h3>
+                          <ul className="grid gap-1.5">
+                            {areaProgress.map(({ category, average }) => (
+                              <li key={category.id} className="flex items-center gap-2 text-xs">
+                                <span className="min-w-0 flex-1 truncate">{category.name}</span>
+                                {average == null ? (
+                                  <span className="shrink-0 text-muted-foreground">Not rated</span>
+                                ) : (
+                                  <span className="shrink-0 font-semibold tabular-nums">
+                                    {Number.isInteger(average) ? average : average.toFixed(1)}{" "}
+                                    <span className="font-normal text-muted-foreground">/ {ratingMax}</span>
+                                  </span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+
+                          {/* Scores are never shown to the employee — not even an estimate of their own. */}
+                          {!subjectOnlyView && (
+                            <div className="mt-1 grid gap-1.5 border-t pt-3">
+                              <p className="text-xs font-medium text-muted-foreground">Estimated overall score</p>
+                              <p className="text-2xl leading-none font-bold tabular-nums">
+                                {estimatedScore == null ? "—" : estimatedScore.toFixed(1)}
+                                <span className="text-base font-normal text-muted-foreground"> / {ratingMax}</span>
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                Based on completed ratings (weighted)
+                              </p>
+                              <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                                <div
+                                  className="h-full rounded-full bg-role-hr transition-[width] duration-500"
+                                  style={{ width: `${estimatedScore == null ? 0 : (estimatedScore / ratingMax) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </section>
+            
                   </div>
-                </section>
-
-                <section className="grid gap-2 rounded-xl border p-3">
-                  <h3 className="text-sm font-semibold">Selected ratings</h3>
-                  <ul className="grid gap-1.5">
-                    {areaProgress.map(({ category, average }) => (
-                      <li key={category.id} className="flex items-center gap-2 text-xs">
-                        <span className="min-w-0 flex-1 truncate">{category.name}</span>
-                        {average == null ? (
-                          <span className="shrink-0 text-muted-foreground">Not rated</span>
-                        ) : (
-                          <span className="shrink-0 font-semibold tabular-nums">
-                            {Number.isInteger(average) ? average : average.toFixed(1)}{" "}
-                            <span className="font-normal text-muted-foreground">/ {ratingMax}</span>
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-
-                  <div className="mt-1 grid gap-1.5 border-t pt-3">
-                    <p className="text-xs font-medium text-muted-foreground">Estimated overall score</p>
-                    <p className="text-2xl leading-none font-bold tabular-nums">
-                      {estimatedScore == null ? "—" : estimatedScore.toFixed(1)}
-                      <span className="text-base font-normal text-muted-foreground"> / {ratingMax}</span>
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      Based on completed ratings (weighted)
-                    </p>
-                    <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-role-hr transition-[width] duration-500"
-                        style={{ width: `${estimatedScore == null ? 0 : (estimatedScore / ratingMax) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                </section>
-            </PopoverContent>
-          </Popover>
-
-          <Popover>
-            <PopoverTrigger
-              aria-label="Rating guide"
-              className="flex w-14 flex-col items-center gap-0.5 rounded-xl border bg-background p-2 text-role-hr transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-popup-open:bg-muted"
-            >
-              <BookOpenIcon className="size-4.5" />
-              <span className="text-[10px] font-medium text-foreground">Guide</span>
-            </PopoverTrigger>
-            <PopoverContent side="left" align="start" className="max-h-(--available-height) w-80 overflow-y-auto p-0">
-              <RatingGuide guide={appraisal.template.structure?.ratingGuide} />
-            </PopoverContent>
-          </Popover>
-        </aside>
+                )}
+              </PanelBody>
+            </SheetContent>
+          </Sheet>
       </div>
     </div>
   )
 
   const tabs: DetailTab[] = [
+    // Once released, the employee came for their letter: it leads.
+    ...(subjectOnlyView && appraisal.letter?.available
+      ? [
+          {
+            id: "letter",
+            label: "Letter",
+            icon: FileTextIcon,
+            render: () => <LetterTab appraisal={appraisal} />,
+          },
+        ]
+      : []),
     // The form first: it is what the person came to do. Everything after it is
     // the record around it, in the order it accumulates — what was written,
     // what was said, then the process, then the money.
@@ -865,6 +901,41 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
     params.set("tab", id)
     router.push(`?${params.toString()}`, { scroll: false })
   }
+
+  // Everything that helps rather than IS the form — progress and score, the
+  // rating guide, the workbook route — behind one Tools button in the step's
+  // heading (beside "Total weight" on Performance areas).
+  const toolsMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button variant="outline" size="icon-sm" aria-label="Tools" title="Tools">
+            <MenuIcon className="size-4" />
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuItem onClick={() => setToolPanel("progress")}>
+          <TargetIcon className="size-4" /> Your progress &amp; score
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setToolPanel("guide")}>
+          <BookOpenIcon className="size-4" /> Rating guide
+        </DropdownMenuItem>
+        {viewer.canSubmitSelf && (
+          <>
+            <DropdownMenuSeparator />
+            {/* A real link: the workbook is a streamed download. */}
+            <DropdownMenuItem render={<a href={appraisalsApi.exportUrl(appraisal.id)} />}>
+              <DownloadIcon className="size-4" /> Download workbook
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => importRef.current?.openFilePicker()}>
+              <UploadIcon className="size-4" /> Upload filled file
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 
   const primaryAction = isLast ? (
     <Button
@@ -1125,7 +1196,7 @@ function PerspectivesPanel({
                 )}
 
                 {canAssess && (
-                  <div className="mt-1 grid gap-3 border-t pt-3 sm:grid-cols-[13rem_minmax(0,1fr)]">
+                  <div className="mt-1 grid gap-3 border-t pt-3 md:grid-cols-[minmax(0,45fr)_minmax(0,50fr)] md:gap-x-[5%]">
                     <div className="grid gap-1">
                       <p className="text-xs font-semibold">Manager rating</p>
                       <RatingSelect
@@ -1218,7 +1289,8 @@ function FinalReviewPanel({
   answers: AnswerState
   sections: TemplateWizardSection[]
   valueOf: (key: string) => string
-  weightedScore: number | null
+  /** Undefined hides the stat — for the employee, who is never shown a score. */
+  weightedScore?: number | null
   outstanding: { id: string; where: string; reason: string }[]
   /** Aadhaar/PAN still missing — the warning at the top of the form says so. */
   documentsMissing: boolean
@@ -1276,11 +1348,13 @@ function FinalReviewPanel({
         </div>
       )}
 
-      <div className="grid gap-2 sm:grid-cols-3">
-        <Stat
-          label="Weighted score"
-          value={weightedScore != null ? weightedScore.toFixed(2) : "—"}
-        />
+      <div className={cn("grid gap-2", weightedScore === undefined ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
+        {weightedScore !== undefined && (
+          <Stat
+            label="Weighted score"
+            value={weightedScore != null ? weightedScore.toFixed(2) : "—"}
+          />
+        )}
         <Stat
           label="Questions rated"
           value={`${totalQuestions - outstanding.filter((i) => i.reason === "not rated").length} of ${totalQuestions}`}
@@ -1311,7 +1385,7 @@ function FinalReviewPanel({
                     {Number(category.weight)}%
                   </Badge>
                   <span className={cn("tabular-nums", average == null && "text-warning")}>
-                    {average != null ? `${average} / ${ratingMax}` : "Not rated"}
+                    {average != null ? `${formatRating(average)} / ${ratingMax}` : "Not rated"}
                   </span>
                 </span>
               </li>

@@ -34,8 +34,34 @@ class ZohoAutoScanJob < ApplicationJob
   # is a deadlock guard: if a worker dies mid-scan the lock still frees.
   LOCK_TTL = 30.minutes
 
+  # The sidekiq-cron entry in config/sidekiq_cron_schedule.yml.
+  CRON_NAME = "zoho_auto_scan".freeze
+
+  # Runs only while there is something to scan: the 2-minute schedule is
+  # switched ON while at least one Zoho mailbox is connected (active) and OFF
+  # when none is — so with Zoho disconnected the job doesn't run at all.
+  # Called whenever a connection is added, removed or changes status
+  # (ZohoConnection callback) and when Sidekiq boots (config/initializers/sidekiq.rb).
+  def self.sync_schedule!
+    job = Sidekiq::Cron::Job.find(CRON_NAME)
+    return if job.nil?
+
+    connected = ActsAsTenant.without_tenant { ZohoConnection.active.exists? }
+    if connected
+      job.enable! unless job.enabled?
+    elsif job.enabled?
+      job.disable!
+    end
+  rescue StandardError => e
+    # Scheduling is housekeeping; it must never break connecting a mailbox.
+    Rails.logger.warn("[ZohoAutoScanJob] couldn't sync the schedule: #{e.class}: #{e.message}")
+  end
+
   def perform
     ActsAsTenant.without_tenant do
+      # A tick already queued when the last mailbox was disconnected.
+      return unless ZohoConnection.active.exists?
+
       ZohoConnection.active.find_each { |connection| with_lock(connection) { scan_one(connection) } }
     end
   end

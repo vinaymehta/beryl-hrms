@@ -42,6 +42,20 @@ class Company < ApplicationRecord
     work_email_domain.presence if work_email_domain_enforced?
   end
 
+  # The name the appraisal letter is written on behalf of ("For Beryl Systems
+  # Private Limited"). The trading name stands in until one is set, so a
+  # letter is never signed off for nobody.
+  def letter_legal_name
+    legal_name.presence || name
+  end
+
+  # The salary rules that pre-fill the letter's compensation table, every gap
+  # filled from the defaults (see Appraisals::SalaryStructure). The stored
+  # column holds only what Settings changed.
+  def salary_rules
+    ::Appraisals::SalaryStructure.normalize_rules(salary_structure_rules)
+  end
+
   private
     def generate_slug
       return if slug.present?

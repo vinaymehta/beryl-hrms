@@ -26,6 +26,7 @@ class Document < ApplicationRecord
     education_certificate
     experience_certificate
     bank_document
+    appraisal_letter
     other
   ].freeze
 

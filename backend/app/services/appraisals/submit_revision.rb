@@ -82,7 +82,24 @@ module Appraisals
         keys = template_field_keys
         return {} if keys.empty?
 
-        @responses.to_h { |key, value| [ key.to_s, value ] }.slice(*keys)
+        @responses.to_h { |key, value| [ key.to_s, value ] }.slice(*keys).to_h do |key, value|
+          key.end_with?(MANAGER_RATING_SUFFIX) ? [ key, perspective_rating(key, value) ] : [ key, value ]
+        end
+      end
+
+      # A perspective's manager rating lives in `responses` as text, so it
+      # gets none of AppraisalAnswer's validation for free. Held to the same
+      # half-star scale here, and stored in one canonical form ("3.5", "4")
+      # however it was posted — 4, 4.0, "4.0".
+      def perspective_rating(key, value)
+        return value if value.blank?
+
+        unless AppraisalAnswer.valid_rating?(value)
+          perspective = key.delete_suffix(MANAGER_RATING_SUFFIX).humanize
+          raise Error, "The manager rating for #{perspective} #{AppraisalAnswer::RATING_ERROR}"
+        end
+
+        AppraisalAnswer.format_rating(value)
       end
 
       def template_field_keys

@@ -9,6 +9,7 @@ import type {
   EmploymentType,
 } from "@/types/employees"
 import type { Role } from "@/types/auth"
+import type { SalaryStructureRules } from "@/types/appraisals"
 import type {
   EmployeePayload,
   PersonalDetailsPayload,
@@ -101,6 +102,8 @@ export const companySettingsApi = {
     name?: string
     workEmailDomain?: string
     workEmailDomainEnforced?: boolean
+    legalName?: string
+    salaryStructureRules?: SalaryStructureRules
   }) => apiClient.patch<CompanySettings>("/company_settings", values),
 }
 

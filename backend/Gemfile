@@ -81,6 +81,10 @@ gem "csv", "~> 3.3"
 # spreadsheets; it cannot create them.
 gem "caxlsx", "~> 4.1"
 gem "rubyzip", "~> 3.4"
+# The appraisal letter (Appraisals::LetterPdf). Pure Ruby, so nothing has to be
+# installed on the server — no headless browser, no wkhtmltopdf.
+gem "prawn", "~> 2.5"
+gem "prawn-table", "~> 0.2"
 
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem

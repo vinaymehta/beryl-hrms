@@ -1,15 +1,16 @@
 "use client"
 
-import { useState } from "react"
-import { ChevronDownIcon, InfoIcon, TriangleAlertIcon } from "lucide-react"
+import { InfoIcon, TriangleAlertIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Badge } from "@/components/ui/badge"
 import { RatingSelect } from "@/features/appraisals/components/rating-select"
 import {
-  EMPTY_ANSWER, needsEvidence, type AnswerValue,
+  EMPTY_ANSWER,
+  needsEvidence,
+  type AnswerValue,
 } from "@/features/appraisals/components/question-answer"
-import { SIGNIFICANT_RATING_GAP } from "@/features/appraisals/constants"
+import { SIGNIFICANT_RATING_GAP, formatRating } from "@/features/appraisals/constants"
 import type { AppraisalTemplateCategory } from "@/types/appraisals"
 
 /** The length the evidence box is sized for. A guide, not a cap. */
@@ -18,13 +19,9 @@ const EVIDENCE_GUIDE_LENGTH = 1000
 type ReferenceAnswer = { rating: number | null; comment: string | null }
 
 /**
- * The performance areas, as an accordion.
- *
- * Seven areas each carrying a brief, a rating and an evidence box do not fit
- * on one screen expanded — so one opens at a time and the rest collapse to a
- * single line showing number, name and weight. That is what makes the whole
- * set reviewable at a glance before you start, and it is why the weights are
- * visible on the collapsed rows rather than only inside.
+ * The performance areas, every one laid out in full — number, name and weight
+ * on its heading row, then its brief, rating and evidence. Nothing to open or
+ * close: the form reads straight down.
  *
  * Shared by the employee and every reviewer. A reviewer additionally gets the
  * employee's own answer shown read-only beside their own inputs, which is the
@@ -48,7 +45,6 @@ export function PerformanceAreaList({
   /** The workbook download/upload controls, on the heading row. */
   action?: React.ReactNode
 }) {
-  const [open, setOpen] = useState<string | null>(categories[0]?.id ?? null)
   const totalWeight = categories.reduce((sum, category) => sum + Number(category.weight), 0)
 
   return (
@@ -61,22 +57,23 @@ export function PerformanceAreaList({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {action}
           <Badge
             variant="outline"
             className={cn(
               "shrink-0 tabular-nums",
-              Math.abs(totalWeight - 100) < 0.01 ? "text-foreground" : "border-warning/50 text-warning"
+              Math.abs(totalWeight - 100) < 0.01
+                ? "text-foreground"
+                : "border-warning/50 text-warning"
             )}
           >
             Total weight {totalWeight}%
           </Badge>
+          {action}
         </div>
       </div>
 
       <ul className="grid gap-2">
         {categories.map((category, index) => {
-          const isOpen = open === category.id
           // One question per area is the common shape; a multi-question area
           // still works because every question inside renders in turn.
           const rated = category.questions.filter(
@@ -85,12 +82,7 @@ export function PerformanceAreaList({
 
           return (
             <li key={category.id} className="overflow-hidden rounded-xl border bg-card">
-              <button
-                type="button"
-                aria-expanded={isOpen}
-                onClick={() => setOpen(isOpen ? null : category.id)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40"
-              >
+              <div className="flex w-full items-center gap-3 px-4 py-3">
                 <span
                   className={cn(
                     "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums",
@@ -101,12 +93,11 @@ export function PerformanceAreaList({
                 >
                   {index + 1}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold">{category.name}</span>
-                {/* How much of THIS area is done, on the collapsed row.
-                    An area can hold more than one question, and only the open
-                    one is in the DOM — so without this the second question of
-                    a collapsed area is invisible, and the first hint that it
-                    was missed comes at the very end. */}
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                  {category.name}
+                </span>
+                {/* How much of THIS area is done — an area can hold more
+                    than one question. */}
                 {category.questions.length > 0 && (
                   <span
                     className={cn(
@@ -120,41 +111,33 @@ export function PerformanceAreaList({
                 <Badge variant="outline" className="shrink-0 tabular-nums">
                   {Number(category.weight)}% weight
                 </Badge>
-                <ChevronDownIcon
-                  className={cn(
-                    "size-4 shrink-0 text-muted-foreground transition-transform",
-                    isOpen && "rotate-180"
+              </div>
+
+              <div className="border-t p-4">
+                <div className="grid min-w-0 gap-4">
+                  {category.description && (
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">What is evaluated</p>
+                      <p className="mt-0.5 text-sm text-muted-foreground">{category.description}</p>
+                    </div>
                   )}
-                />
-              </button>
 
-              {isOpen && (
-                <div className="border-t p-4">
-                  <div className="grid min-w-0 gap-4">
-                    {category.description && (
-                      <div>
-                        <p className="text-xs font-semibold text-foreground">What is evaluated</p>
-                        <p className="mt-0.5 text-sm text-muted-foreground">{category.description}</p>
-                      </div>
-                    )}
-
-                    {category.questions.map((question) => (
-                      <AreaQuestion
-                        key={question.id}
-                        prompt={question.prompt === category.name ? null : question.prompt}
-                        description={question.description}
-                        required={question.required}
-                        requiresComment={question.requiresComment}
-                        value={answers[question.id] ?? EMPTY_ANSWER}
-                        onChange={(patch) => onChange(question.id, patch)}
-                        readOnly={readOnly}
-                        reference={reference?.[String(question.id)]}
-                        referenceLabel={referenceLabel}
-                      />
-                    ))}
-                  </div>
+                  {category.questions.map((question) => (
+                    <AreaQuestion
+                      key={question.id}
+                      prompt={question.prompt === category.name ? null : question.prompt}
+                      description={question.description}
+                      required={question.required}
+                      requiresComment={question.requiresComment}
+                      value={answers[question.id] ?? EMPTY_ANSWER}
+                      onChange={(patch) => onChange(question.id, patch)}
+                      readOnly={readOnly}
+                      reference={reference?.[String(question.id)]}
+                      referenceLabel={referenceLabel}
+                    />
+                  ))}
                 </div>
-              )}
+              </div>
             </li>
           )
         })}
@@ -188,7 +171,8 @@ function AreaQuestion({
   // Scope §12: a significant gap between the employee's own rating and the
   // reviewer's is flagged, so calibration has something to look at rather than
   // two numbers sitting silently side by side.
-  const gap = reference?.rating != null && value.rating != null ? value.rating - reference.rating : null
+  const gap =
+    reference?.rating != null && value.rating != null ? value.rating - reference.rating : null
   const significantGap = gap != null && Math.abs(gap) >= SIGNIFICANT_RATING_GAP
 
   return (
@@ -212,20 +196,26 @@ function AreaQuestion({
         >
           <p className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
             <InfoIcon className="size-3" />
-            {referenceLabel} rated {reference.rating ?? "—"}
+            {referenceLabel} rated {formatRating(reference.rating)}
             {significantGap && (
               <span className="flex items-center gap-1 rounded-full bg-warning/15 px-1.5 py-0.5 text-warning">
                 <TriangleAlertIcon className="size-3" />
-                {gap > 0 ? `You rated ${gap} higher` : `You rated ${Math.abs(gap)} lower`}
+                {gap > 0
+                  ? `You rated ${formatRating(gap)} higher`
+                  : `You rated ${formatRating(Math.abs(gap))} lower`}
               </span>
             )}
           </p>
-          {reference.comment && <p className="text-xs text-muted-foreground">{reference.comment}</p>}
+          {reference.comment && (
+            <p className="text-xs text-muted-foreground">{reference.comment}</p>
+          )}
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-[13rem_minmax(0,1fr)]">
-        <div className="grid gap-1">
+      {/* Stars take 45% from the left, evidence 50% from the right, 5% between
+          them (column gap 5%, then 45fr / 50fr of the rest). */}
+      <div className="grid gap-4 md:grid-cols-[minmax(0,45fr)_minmax(0,50fr)] md:gap-x-[5%]">
+        <div className="grid content-start gap-1.5 rounded-lg bg-muted/30 p-3">
           <p className="text-xs font-semibold text-foreground">
             Your rating
             {required && <span className="ml-1 text-destructive">*</span>}
@@ -258,7 +248,9 @@ function AreaQuestion({
             <span
               className={cn(
                 "pointer-events-none absolute right-2.5 bottom-2 text-[11px] tabular-nums",
-                value.comment.length > EVIDENCE_GUIDE_LENGTH ? "text-warning" : "text-muted-foreground"
+                value.comment.length > EVIDENCE_GUIDE_LENGTH
+                  ? "text-warning"
+                  : "text-muted-foreground"
               )}
             >
               {value.comment.length}/{EVIDENCE_GUIDE_LENGTH}
@@ -266,7 +258,8 @@ function AreaQuestion({
           </div>
           {missing && (
             <p className="flex items-center gap-1.5 text-xs text-warning">
-              <TriangleAlertIcon className="size-3.5" />A rating of {value.rating} needs evidence.
+              <TriangleAlertIcon className="size-3.5" />A rating of {formatRating(value.rating)}{" "}
+              needs evidence.
             </p>
           )}
         </div>

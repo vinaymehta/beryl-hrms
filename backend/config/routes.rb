@@ -124,7 +124,12 @@ Rails.application.routes.draw do
           patch :return_for_correction
           patch :override_score
           patch :release
+          # The employee signing their appraisal letter. `acknowledge` is the
+          # old name, kept as an alias (AppraisalsController#acknowledge).
+          patch :sign
           patch :acknowledge
+          # The letter PDF; `?draft=1` is Admin/HR's preview before release.
+          get :letter
           post :add_comment
           # Parse-and-preview only; nothing is saved until the employee submits.
           post :import_preview

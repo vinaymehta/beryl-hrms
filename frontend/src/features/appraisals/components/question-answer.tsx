@@ -3,8 +3,12 @@
 import { cn } from "cn"
 import { InfoIcon, TriangleAlertIcon } from "lucide-react"
 
-import { RATINGS_REQUIRING_COMMENT, SIGNIFICANT_RATING_GAP } from "@/features/appraisals/constants"
-import { useRatingScale } from "@/features/appraisals/components/rating-select"
+import {
+  formatRating,
+  ratingRequiresComment,
+  SIGNIFICANT_RATING_GAP,
+} from "@/features/appraisals/constants"
+import { RatingSelect, useRatingScale } from "@/features/appraisals/components/rating-select"
 import type { AppraisalTemplateQuestion } from "@/types/appraisals"
 
 export interface AnswerValue {
@@ -14,7 +18,12 @@ export interface AnswerValue {
 
 export const EMPTY_ANSWER: AnswerValue = { rating: null, comment: "" }
 
-/** The scope's 1–5 scale (§6), with each point's wording on the control itself. */
+/**
+ * The scope's 1–5 scale (§6), with each point's wording on the control itself.
+ *
+ * Whole levels only — it has no way to pick a half star. Answers that may be
+ * halves (every question in the form) use RatingSelect instead.
+ */
 export function RatingScaleInput({
   value,
   onChange,
@@ -82,13 +91,13 @@ export function RatingScaleInput({
   )
 }
 
-/** Mirrors the backend rule (AppraisalAnswer): every rating needs justifying. */
+/** Mirrors the backend rule (AppraisalAnswer): every rating, whole or half, needs justifying. */
 export function needsEvidence(answer: AnswerValue) {
-  return answer.rating != null && RATINGS_REQUIRING_COMMENT.includes(answer.rating) && !answer.comment.trim()
+  return ratingRequiresComment(answer.rating) && !answer.comment.trim()
 }
 
 /**
- * One question: the prompt, the 1–5 rating, the evidence box, and — for a
+ * One question: the prompt, the 1–5 (half-star) rating, the evidence box, and — for a
  * reviewer — the employee's own answer sitting READ-ONLY beside it.
  *
  * Shared by the employee's step-by-step self-appraisal and by every reviewer's
@@ -144,11 +153,11 @@ export function QuestionAnswer({
         >
           <p className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
             <InfoIcon className="size-3" />
-            {referenceLabel} rated {reference.rating ?? "—"}
+            {referenceLabel} rated {formatRating(reference.rating)}
             {significantGap && (
               <span className="flex items-center gap-1 rounded-full bg-warning/15 px-1.5 py-0.5 text-warning">
                 <TriangleAlertIcon className="size-3" />
-                {gap > 0 ? `You rated ${gap} higher` : `You rated ${Math.abs(gap)} lower`}
+                {gap > 0 ? `You rated ${formatRating(gap)} higher` : `You rated ${formatRating(Math.abs(gap))} lower`}
               </span>
             )}
           </p>
@@ -156,7 +165,7 @@ export function QuestionAnswer({
         </div>
       )}
 
-      <RatingScaleInput
+      <RatingSelect
         value={value.rating}
         labelledBy={`question-${question.id}`}
         onChange={(rating) => onChange({ rating })}
@@ -192,7 +201,7 @@ export function QuestionAnswer({
       </div>
       {missing && (
         <p className="flex items-center gap-1.5 text-xs text-warning">
-          <TriangleAlertIcon className="size-3.5" />A rating of {value.rating} needs evidence.
+          <TriangleAlertIcon className="size-3.5" />A rating of {formatRating(value.rating)} needs evidence.
         </p>
       )}
     </div>

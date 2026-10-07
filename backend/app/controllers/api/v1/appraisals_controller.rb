@@ -10,6 +10,8 @@ module Api
       rescue_from ::Appraisals::Release::Error, with: :render_unprocessable
       rescue_from ::Appraisals::OverrideScore::Error, with: :render_unprocessable
       rescue_from ::Appraisals::SelfAppraisalImport::Error, with: :render_unprocessable
+      rescue_from ::Appraisals::SignLetter::Error, with: :render_unprocessable
+      rescue_from ::Appraisals::LetterPdf::Error, with: :render_unprocessable
 
       # Ten is what fits on a screen without scrolling past the controls. The
       # cap exists so `?perPage=100000` can't be used to pull the whole table
@@ -48,7 +50,8 @@ module Api
         records = scope.order(created_at: :desc).limit(per_page).offset((page - 1) * per_page)
 
         render json: {
-          data: Api::V1::AppraisalSummarySerializer.new(records).as_json,
+          # The viewer's own row carries no scores (AppraisalPolicy#hide_scores?).
+          data: Api::V1::AppraisalSummarySerializer.new(records, params: list_serializer_params).as_json,
           meta: {
             page: page,
             perPage: per_page,
@@ -149,6 +152,11 @@ module Api
       # Discussion: Admin/HR record the increment and whether to promote, having
       # read every level's recommendation. Stored on the appraisal's
       # compensation decision; the workflow does not move — Release does that.
+      #
+      # The decision is the appraisal letter's content: the current and new
+      # MONTHLY gross, the monthly breakdown printed in the letter's table
+      # (which the model checks adds up to the new gross), and the effective
+      # and next-appraisal dates the letter states.
       def discussion
         appraisal = find_appraisal
         authorize appraisal, :save_discussion?
@@ -157,14 +165,15 @@ module Api
         promote = ActiveModel::Type::Boolean.new.cast(params[:promote])
         decision.assign_attributes(
           actor_user: Current.user,
-          # Previous income → new income, and the incentive before → after.
-          # New income arrives as the form computed it (or as HR overrode it);
-          # it is not re-derived from the increment here.
+          # Current monthly gross → new monthly gross. The new one arrives as
+          # the form computed it (or as HR overrode it); it is not re-derived
+          # from the increment here.
           current_compensation: params[:current_compensation].presence,
           approved_increment_percentage: params[:increment_percentage].presence,
           approved_compensation: params[:approved_compensation].presence,
-          current_incentive: params[:current_incentive].presence,
-          approved_incentive: params[:approved_incentive].presence,
+          compensation_breakdown: ::Appraisals::SalaryStructure.normalize_breakdown(breakdown_params) || {},
+          effective_date: params[:effective_date].presence,
+          next_appraisal_on: params[:next_appraisal_on].presence,
           promotion_recommendation: if promote.nil? then :none elsif promote then :recommended else :not_recommended end,
           proposed_designation_id: promote ? params[:proposed_designation_id].presence : nil,
           promotion_reason: params[:promotion_reason].presence
@@ -259,8 +268,35 @@ module Api
         render_detail(appraisal)
       end
 
+      # The employee signs their appraisal letter: multipart, with the
+      # signature image (drawn on the pad or uploaded — a PNG or JPG either
+      # way), `accept` and `signatureMethod`. Signing is the acknowledgement;
+      # see Appraisals::SignLetter for everything it records.
+      def sign
+        appraisal = find_appraisal
+        authorize appraisal, :sign?
+        ::Appraisals::SignLetter.call(
+          appraisal: appraisal, actor: Current.user,
+          signature: params[:signature], accept: params[:accept],
+          # Multipart bodies don't pass through the JSON key transform
+          # (config/initializers/json_key_transform.rb), so the field may
+          # arrive either way round.
+          signature_method: params[:signature_method].presence || params[:signatureMethod],
+          ip: request.remote_ip, user_agent: request.user_agent
+        )
+        ::Audit::Record.call(action: "appraisal.letter_signed", auditable: appraisal, request: request)
+        render_detail(appraisal)
+      end
+
+      # The old acknowledge route, kept so nothing calling it breaks. An
+      # appraisal with a letter must be SIGNED — a click is no longer an
+      # acknowledgement of it — so that is handed to #sign, signature and all.
+      # Only one released before letters existed, with nothing to sign, is
+      # still acknowledged the old way.
       def acknowledge
         appraisal = find_appraisal
+        return sign if appraisal.letter_pdf.attached?
+
         authorize appraisal, :acknowledge?
         ActiveRecord::Base.transaction do
           appraisal.update!(acknowledged_at: Time.current, acknowledgement_note: params[:note])
@@ -270,6 +306,41 @@ module Api
         end
         ::Audit::Record.call(action: "appraisal.acknowledged", auditable: appraisal, request: request)
         render_detail(appraisal)
+      end
+
+      # GET /appraisals/:id/letter — the letter PDF: the signed copy once there
+      # is one, otherwise the letter as issued. Inline by default so it can be
+      # shown in the sign panel's <iframe>; `?download=1` saves it instead.
+      #
+      # `?draft=1` is Admin/HR's preview at the Discussion step, rendered from
+      # the SAVED decision and stored nowhere — what the employee would be sent
+      # if it were released now.
+      #
+      # Streamed through here rather than redirected to a storage URL, for the
+      # reason DocumentsController#download gives.
+      def letter
+        appraisal = find_appraisal
+        draft = ActiveModel::Type::Boolean.new.cast(params[:draft])
+        authorize appraisal, draft ? :preview_letter? : :view_letter?
+
+        if draft
+          bytes = ::Appraisals::LetterPdf.call(appraisal)
+          filename = ::Appraisals::Release.letter_filename(appraisal, suffix: "draft")
+        else
+          file = appraisal.signed_letter_pdf.attached? ? appraisal.signed_letter_pdf : appraisal.letter_pdf
+          unless file.attached?
+            return render json: { errors: [ { code: "not_found", message: "This appraisal has no letter yet." } ] },
+                          status: :not_found
+          end
+
+          bytes = file.download
+          filename = file.filename.to_s
+          ::Audit::Record.call(action: "appraisal.letter_downloaded", auditable: appraisal, request: request)
+        end
+
+        download = ActiveModel::Type::Boolean.new.cast(params[:download])
+        allow_app_framing! unless download
+        send_data bytes, filename: filename, type: "application/pdf", disposition: download ? "attachment" : "inline"
       end
 
       # §17/§18. Increment and promotion are independent, and what was
@@ -366,6 +437,29 @@ module Api
         end
 
         def own_employee_id = Current.user.employee_record&.id
+
+        # Admin/HR see every row's scores, their own included; anyone else's
+        # own row is blanked (AppraisalPolicy#hide_scores?).
+        def list_serializer_params
+          return {} if Current.user.permission?("appraisals.view_all")
+
+          { hide_scores_for_employee_id: own_employee_id }
+        end
+
+        # Free-form keys under one known parent; SalaryStructure keeps only the
+        # letter's rows. Nested keys arrive underscored, like the top level.
+        def breakdown_params
+          value = params[:breakdown]
+          value.respond_to?(:to_unsafe_h) ? value.to_unsafe_h : nil
+        end
+
+        # The letter preview sits in an <iframe> on the app's own pages, which
+        # the global X-Frame-Options: DENY would refuse. Same opt-out, for the
+        # same origins, as DocumentsController#allow_app_framing!.
+        def allow_app_framing!
+          response.headers.delete("X-Frame-Options")
+          response.headers["Content-Security-Policy"] = "frame-ancestors 'self' #{FrontendOrigins.all.join(' ')}".strip
+        end
 
         # "Waiting on me" means the appraisal is at the step I own right now:
         # my manager level's turn, or — for Admin/HR — the Final review and

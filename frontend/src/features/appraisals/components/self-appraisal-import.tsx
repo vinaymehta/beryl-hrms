@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useImperativeHandle, useRef, useState, type Ref } from "react"
 import { UploadIcon, DownloadIcon, CheckCircle2Icon, TriangleAlertIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
@@ -8,6 +8,7 @@ import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { appraisalsApi } from "@/features/appraisals/api"
+import { formatRating } from "@/features/appraisals/constants"
 import { ApiError } from "@/types/api"
 import type { ImportPreview, ImportPreviewResponse, ImportPreviewRow } from "@/types/appraisals"
 
@@ -27,6 +28,11 @@ import type { ImportPreview, ImportPreviewResponse, ImportPreviewRow } from "@/t
  * a workbook that has drifted from the template says so here rather than
  * losing the difference silently.
  */
+/** Lets a caller (the form's Tools menu) open the file picker itself. */
+export interface SelfAppraisalImportHandle {
+  openFilePicker: () => void
+}
+
 export function SelfAppraisalImport({
   appraisalId,
   onConfirm,
@@ -36,12 +42,18 @@ export function SelfAppraisalImport({
    * The upload flow is unchanged — only the surrounding blurb goes.
    */
   compact,
+  /** Render no buttons of its own — the caller triggers download/upload. */
+  hideButtons,
+  controlRef,
 }: {
   appraisalId: string
   onConfirm: (rows: ImportPreviewRow[], responses: ImportPreviewResponse[]) => void
   compact?: boolean
+  hideButtons?: boolean
+  controlRef?: Ref<SelfAppraisalImportHandle>
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  useImperativeHandle(controlRef, () => ({ openFilePicker: () => inputRef.current?.click() }), [])
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [isUploading, setIsUploading] = useState(false)
 
@@ -65,7 +77,8 @@ export function SelfAppraisalImport({
           <div>
             <p className="text-sm font-medium">Prefer a spreadsheet?</p>
             <p className="text-xs text-muted-foreground">
-              Download the workbook, fill in Rating and Comments, upload it back. Nothing is saved until you submit.
+              Download the workbook, fill in Rating (1–5, halves like 3.5 allowed) and Comments, upload it back.
+              Nothing is saved until you submit.
             </p>
           </div>
         )}
@@ -79,7 +92,7 @@ export function SelfAppraisalImport({
             if (file) handleFile(file)
           }}
         />
-        <div className="flex gap-2">
+        {!hideButtons && <div className="flex gap-2">
           {/* A plain link, not the JSON client: the workbook is streamed. It
               carries hidden metadata binding it to THIS appraisal, which the
               importer checks. */}
@@ -99,7 +112,7 @@ export function SelfAppraisalImport({
             <UploadIcon className="size-3.5" />
             {isUploading ? "Reading…" : "Upload filled file"}
           </Button>
-        </div>
+        </div>}
       </div>
 
       {preview && (
@@ -164,7 +177,7 @@ export function SelfAppraisalImport({
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-medium">{row.prompt}</p>
                   <Badge variant="outline" className="shrink-0 tabular-nums">
-                    {row.rating ?? "—"}
+                    {formatRating(row.rating)}
                   </Badge>
                 </div>
                 {row.comment && <p className="text-xs text-muted-foreground">{row.comment}</p>}

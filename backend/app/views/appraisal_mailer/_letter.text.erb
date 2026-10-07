@@ -1,0 +1,20 @@
+Hi <%= @user.first_name %>,
+
+<%= @notification.title %>
+
+<% if @notification.body.present? -%>
+<%= @notification.body %>
+
+<% end -%>
+<%= note %>
+
+<% @context.each do |label, value| -%>
+<%= label %>: <%= value %>
+<% end -%>
+
+<%= @button %>:
+<%= @url %>
+
+--
+You're receiving this because you have an account with <%= @user.company&.name.presence || "this workspace" %>.
+The letter is confidential — please don't forward it.

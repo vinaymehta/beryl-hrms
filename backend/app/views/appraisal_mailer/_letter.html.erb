@@ -1,0 +1,28 @@
+  <p style="margin:0 0 16px">Hi <%= @user.first_name %>,</p>
+
+  <h2 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111827"><%= @notification.title %></h2>
+
+  <% if @notification.body.present? %>
+    <p style="margin:0 0 16px;color:#374151"><%= @notification.body %></p>
+  <% end %>
+
+  <p style="margin:0 0 16px;color:#374151"><%= note %></p>
+
+  <% if @context.any? %>
+    <table style="margin:0 0 20px;border-collapse:collapse;font-size:14px">
+      <% @context.each do |label, value| %>
+        <tr>
+          <td style="padding:3px 16px 3px 0;color:#6b7280;vertical-align:top"><%= label %></td>
+          <td style="padding:3px 0;color:#111827;font-weight:500"><%= value %></td>
+        </tr>
+      <% end %>
+    </table>
+  <% end %>
+
+  <%= mail_button @button, @url %>
+  <%= mail_fallback_link @url %>
+
+  <p style="margin:0;padding-top:16px;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280">
+    You're receiving this because you have an account with <%= @user.company&.name.presence || "this workspace" %>.
+    The letter is confidential — please don't forward it.
+  </p>

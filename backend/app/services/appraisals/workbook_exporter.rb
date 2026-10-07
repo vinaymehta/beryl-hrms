@@ -16,7 +16,7 @@ module Appraisals
   class WorkbookExporter
     META_SHEET = "_meta".freeze
     SHEET = "Self Appraisal".freeze
-    HEADERS = [ "Question ID", "Category", "Question", "Guidance", "Rating (1-5)", "Comments / Evidence" ].freeze
+    HEADERS = [ "Question ID", "Category", "Question", "Guidance", "Rating (1-5, halves allowed e.g. 3.5)", "Comments / Evidence" ].freeze
 
     def self.call(...) = new(...).call
 
@@ -48,7 +48,7 @@ module Appraisals
           end
         end
 
-        sheet.column_widths 12, 24, 40, 32, 12, 44
+        sheet.column_widths 12, 24, 40, 32, 16, 44
         # Question ID, category and prompt are generated, not answered: locking
         # them keeps a well-meaning edit from detaching a row from its question.
         sheet.sheet_protection do |protection|

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_07_042543) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_07_100201) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -69,7 +69,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_042543) do
     t.text "comment"
     t.bigint "company_id", null: false
     t.datetime "created_at", null: false
-    t.integer "rating"
+    t.decimal "rating", precision: 3, scale: 1
     t.datetime "updated_at", null: false
     t.index ["appraisal_revision_id", "appraisal_template_question_id"], name: "index_appraisal_answers_uniqueness", unique: true
     t.index ["appraisal_revision_id"], name: "index_appraisal_answers_on_revision"
@@ -100,6 +100,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_042543) do
     t.decimal "approved_incentive", precision: 12, scale: 2
     t.decimal "approved_increment_percentage", precision: 5, scale: 2
     t.bigint "company_id", null: false
+    t.jsonb "compensation_breakdown", default: {}, null: false
     t.datetime "created_at", null: false
     t.decimal "current_compensation", precision: 12, scale: 2
     t.bigint "current_designation_id"
@@ -109,6 +110,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_042543) do
     t.decimal "last_increment_percentage", precision: 5, scale: 2
     t.text "management_comments"
     t.text "new_responsibilities"
+    t.date "next_appraisal_on"
     t.date "promotion_effective_date"
     t.text "promotion_reason"
     t.integer "promotion_recommendation", default: 0, null: false
@@ -296,6 +298,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_042543) do
     t.bigint "employee_id", null: false
     t.bigint "final_manager_id"
     t.decimal "final_score", precision: 6, scale: 2
+    t.string "letter_sha256"
     t.bigint "primary_manager_id"
     t.datetime "released_at"
     t.bigint "released_by_id"
@@ -305,6 +308,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_042543) do
     t.bigint "secondary_manager_id"
     t.jsonb "self_appraisal_draft", default: {}, null: false
     t.datetime "self_appraisal_draft_saved_at"
+    t.string "signature_method"
+    t.datetime "signed_at"
+    t.string "signed_ip"
+    t.string "signed_name"
+    t.string "signed_user_agent"
     t.integer "status", default: 0, null: false
     t.datetime "updated_at", null: false
     t.index ["appraisal_cycle_id", "employee_id"], name: "index_appraisals_uniqueness", unique: true
@@ -557,7 +565,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_042543) do
   create_table "companies", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "employee_code_initial"
+    t.string "legal_name"
     t.string "name", null: false
+    t.jsonb "salary_structure_rules", default: {}, null: false
     t.string "slug", null: false
     t.integer "status", default: 0, null: false
     t.string "timezone", default: "UTC", null: false

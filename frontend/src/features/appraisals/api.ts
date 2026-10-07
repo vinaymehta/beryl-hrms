@@ -1,4 +1,5 @@
 import { apiClient, API_BASE } from "@/lib/api-client"
+import { ApiError, type ApiErrorBody } from "@/types/api"
 import type {
   AppraisalTemplate,
   AppraisalCycle,
@@ -7,6 +8,7 @@ import type {
   AppraisalDetail,
   AppraisalListParams,
   AppNotification,
+  CompensationBreakdown,
   ImportPreview,
   TemplateImportPreview,
   Calibration,
@@ -78,15 +80,17 @@ export const appraisalsApi = {
    * and unversioned, unlike `submitSelf` which mints the immutable V1.
    */
   saveDraft: (id: string, values: unknown) => apiClient.patch<AppraisalDetail>(`/appraisals/${id}/save_draft`, values),
-  // Admin/HR's income, incentive, increment and promotion choice at the Discussion step.
+  // Admin/HR's decision at the Discussion step: the monthly gross, its
+  // breakdown into the letter's table, the dates, and any promotion.
   saveDiscussion: (
     id: string,
     values: {
       currentCompensation: string
       incrementPercentage: string
       approvedCompensation: string
-      currentIncentive: string
-      approvedIncentive: string
+      breakdown: Record<keyof CompensationBreakdown, number>
+      effectiveDate: string
+      nextAppraisalOn: string
       promote: boolean | null
       proposedDesignationId: string
       promotionReason: string
@@ -104,8 +108,41 @@ export const appraisalsApi = {
   overrideScore: (id: string, score: number, reason: string) =>
     apiClient.patch<AppraisalDetail>(`/appraisals/${id}/override_score`, { score, reason }),
   release: (id: string, notes?: string) => apiClient.patch<AppraisalDetail>(`/appraisals/${id}/release`, { notes }),
-  acknowledge: (id: string, note?: string) =>
-    apiClient.patch<AppraisalDetail>(`/appraisals/${id}/acknowledge`, { note }),
+  /**
+   * The employee signs their letter: multipart, with the signature image,
+   * `accept` and how the signature was made (drawn / uploaded).
+   */
+  sign: (id: string, form: FormData) => apiClient.patchForm<AppraisalDetail>(`/appraisals/${id}/sign`, form),
+  /**
+   * The letter PDF — the signed copy once there is one. `draft` is Admin/HR's
+   * preview of the saved decision before release; `download` asks for an
+   * attachment rather than inline.
+   */
+  letterUrl: (id: string, options: { draft?: boolean; download?: boolean } = {}) =>
+    `${API_BASE}/appraisals/${id}/letter${toQuery({
+      draft: options.draft ? "1" : undefined,
+      download: options.download ? "1" : undefined,
+    })}`,
+  /**
+   * The same PDF as a Blob, for the in-page preview. Fetched rather than
+   * pointed at by the iframe so the frame is same-origin with the app (the
+   * API's own frame headers never come into it) and a refusal arrives as the
+   * API's message instead of a JSON page inside the frame.
+   */
+  letterBlob: async (id: string, options: { draft?: boolean } = {}) => {
+    const response = await fetch(appraisalsApi.letterUrl(id, { draft: options.draft }), {
+      credentials: "include",
+      headers: { Accept: "application/pdf, application/json" },
+    })
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as ApiErrorBody | null
+      throw new ApiError(
+        response.status,
+        body?.errors ?? [{ code: "unknown_error", message: response.statusText || "Request failed" }]
+      )
+    }
+    return response.blob()
+  },
   addComment: (id: string, values: unknown) => apiClient.post<AppraisalDetail>(`/appraisals/${id}/add_comment`, values),
   /** The offline workbook (§10.1). Streamed, so it bypasses the JSON client. */
   exportUrl: (id: string) => `${API_BASE}/appraisals/${id}/export`,

@@ -98,10 +98,12 @@ module Appraisals
         # two steps, so they are announced to whoever holds the permission —
         # otherwise the appraisal finishes its reviews and then waits in silence.
         when "appraisal_discussion" then Notifier.ready_for_release(@appraisal, except_user: @actor)
-        when "released"
-          Notifier.released(@appraisal)
-          Notifier.acknowledgement_required(@appraisal)
-        when "employee_acknowledged" then Notifier.acknowledged(@appraisal)
+        # The appraisal letter, to sign — see Appraisals::Release.
+        when "released" then Notifier.letter_issued(@appraisal)
+        # Signing the letter is how an appraisal is acknowledged now; the plain
+        # acknowledgement stays for one that reached this step without a letter.
+        when "employee_acknowledged"
+          @appraisal.letter_signed? ? Notifier.letter_signed(@appraisal) : Notifier.acknowledged(@appraisal)
         when "self_appraisal_open"
           Notifier.returned_for_correction(@appraisal, @notes) unless from == "draft"
         end

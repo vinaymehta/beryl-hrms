@@ -1,4 +1,5 @@
 import type { Role } from "@/types/auth"
+import type { SalaryStructureRules } from "@/types/appraisals"
 
 export type EmployeeStatus = "active" | "inactive" | "offboarded"
 
@@ -202,4 +203,7 @@ export interface CompanySettings {
   companyName: string
   workEmailDomainSetting: string | null
   workEmailDomainEnforced: boolean
+  /** The name appraisal letters are signed off for. Falls back to companyName. */
+  legalName: string
+  salaryStructureRules: SalaryStructureRules
 }

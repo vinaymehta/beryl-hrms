@@ -21,6 +21,7 @@ export default async function AllSettingsPage({
     "mail",
     "initial_id",
     "company",
+    "salary_letter",
   ] as const
   const initial = known.find((id) => id === section)
 

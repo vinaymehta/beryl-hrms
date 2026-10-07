@@ -99,6 +99,9 @@ export const apiClient = {
   /** For file uploads — pass a FormData body, e.g. for document upload. */
   postForm: <T>(path: string, body: FormData, options?: RequestOptions) =>
     request<T>(path, { ...options, method: "POST", body }),
+  /** PATCH with a FormData body — a file sent to an existing record, e.g. a signature. */
+  patchForm: <T>(path: string, body: FormData, options?: RequestOptions) =>
+    request<T>(path, { ...options, method: "PATCH", body }),
   patch: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>(path, { ...options, method: "PATCH", body }),
   put: <T>(path: string, body?: unknown, options?: RequestOptions) =>

@@ -27,10 +27,10 @@ function useAppraisalAction<TArgs>(
       // the same payload either way, so this only changes WHEN it lands — and
       // for a comment that matters: the author should see their own comment
       // appear as they post it, not a moment later.
-      if (data) queryClient.setQueryData(["appraisals", id], data)
+      if (data) queryClient.setQueryData(["appraisals", String(id)], data)
 
       queryClient.invalidateQueries({ queryKey: ["appraisals"] })
-      queryClient.invalidateQueries({ queryKey: ["appraisals", id] })
+      queryClient.invalidateQueries({ queryKey: ["appraisals", String(id)] })
       queryClient.invalidateQueries({ queryKey: ["notifications"] })
       toast.success(successMessage)
     },
@@ -57,7 +57,7 @@ export function useSaveSelfAppraisalDraft(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (values: unknown) => appraisalsApi.saveDraft(id, values),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["appraisals", id] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["appraisals", String(id)] }),
     onError: (error) => toast.error(errorMessage(error, "Couldn't save your draft.")),
   })
 }
@@ -67,7 +67,7 @@ export function useSaveDiscussion(id: string) {
   return useMutation({
     mutationFn: (values: Parameters<typeof appraisalsApi.saveDiscussion>[1]) => appraisalsApi.saveDiscussion(id, values),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["appraisals", id] })
+      queryClient.invalidateQueries({ queryKey: ["appraisals", String(id)] })
       toast.success("Discussion saved.")
     },
     onError: (error) => toast.error(errorMessage(error, "Couldn't save the discussion.")),
@@ -78,7 +78,7 @@ export function useSaveReviewDraft(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (values: unknown) => appraisalsApi.saveReviewDraft(id, values),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["appraisals", id] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["appraisals", String(id)] }),
     onError: (error) => toast.error(errorMessage(error, "Couldn't save your review draft.")),
   })
 }
@@ -123,18 +123,29 @@ export function useReleaseAppraisal(id: string) {
   return useAppraisalAction(
     id,
     (notes: string | undefined) => appraisalsApi.release(id, notes),
-    "Appraisal released to the employee.",
+    "Released. The employee has been sent their letter to sign.",
     "Couldn't release that appraisal."
   )
 }
 
-export function useAcknowledgeAppraisal(id: string) {
-  return useAppraisalAction(
-    id,
-    (note: string | undefined) => appraisalsApi.acknowledge(id, note),
-    "Appraisal acknowledged.",
-    "Couldn't record that acknowledgement."
-  )
+/**
+ * The employee signs their appraisal letter. The signed copy is also filed as
+ * one of their Documents, so that list is refreshed along with the appraisal.
+ */
+export function useSignLetter(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (form: FormData) => appraisalsApi.sign(id, form),
+    onSuccess: (data) => {
+      if (data) queryClient.setQueryData(["appraisals", String(id)], data)
+      queryClient.invalidateQueries({ queryKey: ["appraisals"] })
+      queryClient.invalidateQueries({ queryKey: ["appraisal-letter", String(id)] })
+      queryClient.invalidateQueries({ queryKey: ["documents"] })
+      queryClient.invalidateQueries({ queryKey: ["notifications"] })
+      toast.success("Letter signed and sent to HR.")
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't sign the letter.")),
+  })
 }
 
 export function useAddAppraisalComment(id: string) {

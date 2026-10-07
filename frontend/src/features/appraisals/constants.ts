@@ -82,9 +82,12 @@ export const CYCLE_STATUSES: { value: CycleStatus; label: string; className: str
 ]
 
 /**
- * The scope's rating scale (§6), wording and descriptions verbatim. Ratings 1,
- * 2, 4 and 5 require evidence — enforced by the backend (AppraisalAnswer) and
+ * The scope's rating scale (§6), wording and descriptions verbatim. Every
+ * rating requires evidence — enforced by the backend (AppraisalAnswer) and
  * mirrored here so the requirement shows before submitting rather than after.
+ *
+ * These are the scale's LEVELS, whole numbers 1–5. An answer can also sit
+ * halfway between two of them (3.5) — see RATING_STEP.
  *
  * The scope also asks for configurable scales; this is the current fixed model,
  * and the shape below is what a configurable one would replace.
@@ -106,7 +109,7 @@ export const RATING_SCALE = [
     value: 3,
     label: "Meets Expectations",
     description: "Reliable performance appropriate for role and agreed responsibilities.",
-    requiresComment: false,
+    requiresComment: true,
   },
   {
     value: 4,
@@ -134,9 +137,10 @@ export interface RatingScaleOption {
  * The rating scale an appraisal actually uses: its TEMPLATE's rating guide
  * when the template has one, the built-in scale otherwise.
  *
- * Ratings are stored as whole numbers 1–5 (AppraisalAnswer), so guide rows
- * outside that range are left out rather than offered and then refused. The
- * evidence rule stays the server's: every rating needs a comment.
+ * The guide's levels are whole numbers 1–5 (answers may fall halfway between
+ * two of them, never outside), so guide rows outside that range are left out
+ * rather than offered and then refused. The evidence rule stays the server's:
+ * every rating needs a comment.
  */
 export function ratingScaleFrom(guide?: { rating: number | null; level: string | null; definition: string | null }[] | null): RatingScaleOption[] {
   const rows = (guide ?? [])
@@ -145,7 +149,7 @@ export function ratingScaleFrom(guide?: { rating: number | null; level: string |
       value: row.rating!,
       label: row.level?.trim() || `Rating ${row.rating}`,
       description: row.definition ?? "",
-      requiresComment: RATINGS_REQUIRING_COMMENT.includes(row.rating!),
+      requiresComment: ratingRequiresComment(row.rating),
     }))
   const unique = [...new Map(rows.map((row) => [row.value, row])).values()]
   return unique.length ? unique.sort((a, b) => a.value - b.value) : RATING_SCALE
@@ -159,7 +163,35 @@ export function ratingScaleFrom(guide?: { rating: number | null; level: string |
  */
 export const SIGNIFICANT_RATING_GAP = 2
 
-export const RATINGS_REQUIRING_COMMENT = [1, 2, 3, 4, 5]
+/**
+ * Half-star ratings: an answer runs 1 to 5 in steps of 0.5 (AppraisalAnswer),
+ * so 3.5 is three full stars and a half. The minimum is a whole 1 — there is
+ * no half-star-only rating.
+ */
+export const RATING_STEP = 0.5
+
+/** Mirrors the backend rule (AppraisalAnswer): every rating, whole or half, needs evidence. */
+export function ratingRequiresComment(rating: number | null | undefined) {
+  return rating != null
+}
+
+/**
+ * A rating or an average of ratings for display: at most one decimal, and no
+ * trailing ".0" — `4`, `3.5`, and an average of 3.25 as `3.3`.
+ */
+export function formatRating(rating: number | null | undefined, empty = "—") {
+  if (rating == null || !Number.isFinite(rating)) return empty
+  return String(Math.round(rating * 10) / 10)
+}
+
+/**
+ * The scale level a rating falls on: its own for a whole rating, the level
+ * BELOW it for a half (3.5 reads as "Meets Expectations", half a star on).
+ */
+export function ratingLevel<T extends { value: number }>(scale: T[], rating: number | null | undefined): T | null {
+  if (rating == null) return null
+  return scale.filter((option) => option.value <= rating).at(-1) ?? null
+}
 
 /** The free-text blocks a revision carries, in the order the form shows them. */
 export const NARRATIVE_FIELDS: { key: NarrativeKey; label: string; placeholder: string }[] = [

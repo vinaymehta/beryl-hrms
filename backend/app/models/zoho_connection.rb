@@ -1,4 +1,8 @@
 class ZohoConnection < ApplicationRecord
+  # Auto-scan only runs while some mailbox is connected — see
+  # ZohoAutoScanJob.sync_schedule!.
+  after_commit :sync_auto_scan_schedule, if: -> { destroyed? || previously_new_record? || saved_change_to_status? }
+
   acts_as_tenant(:company)
 
   # Schema shell only — Phase 4 builds the OAuth flow/controllers that
@@ -26,4 +30,10 @@ class ZohoConnection < ApplicationRecord
   encrypts :refresh_token
 
   validates :email_address, presence: true
+
+  private
+
+    def sync_auto_scan_schedule
+      ZohoAutoScanJob.sync_schedule!
+    end
 end

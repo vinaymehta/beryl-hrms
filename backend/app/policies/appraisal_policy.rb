@@ -4,9 +4,10 @@
 # NOT interchangeable:
 #
 #   subject   — it is about them. Sees their own self-appraisal and the status
-#               at all times; sees the final version and employee-visible
-#               comments only AFTER release; never sees a manager's ratings
-#               before then, and never sees management-only comments at all.
+#               at all times, and their appraisal letter and employee-visible
+#               comments only AFTER release. Never sees a manager's review or
+#               the final review, never sees a score (see #hide_scores?), and
+#               never sees management-only comments at all.
 #   reviewer  — a manager at some level of the appraisal's reviewer chain
 #               (Appraisal#reviewer_ids). Sees the self-appraisal and the
 #               reviews up to their own level.
@@ -61,18 +62,45 @@ class AppraisalPolicy < ApplicationPolicy
     subject? && record.released? && record.acknowledged_at.nil?
   end
 
+  # Signing the appraisal letter, which is how the subject acknowledges now:
+  # the same person at the same moment as #acknowledge?, and only while the
+  # appraisal is still sitting at Released with a letter to sign. Signed once —
+  # acknowledged_at is set by the signing, so a second attempt is refused here.
+  def sign?
+    # The status, not Appraisal#released? — that one reads released_at, which
+    # stays set once the appraisal has moved on to Closed.
+    acknowledge? && record.status == "released" && record.letter_pdf.attached?
+  end
+
+  # --- The appraisal letter ---------------------------------------------------
+  # Who may see the letter block and open the letter: the subject once it has
+  # been released to them, Admin/HR always, and a reviewer once it is signed
+  # (the outcome of the appraisal they reviewed, not before the employee has
+  # accepted it).
+  def view_letter?
+    (subject? && record.released?) || administrator? || (reviewer? && record.letter_signed?)
+  end
+
+  # A preview of the letter from the saved decision, before it is issued.
+  def preview_letter? = administrator? && record.appraisal_discussion?
+
+  # Scores are management's working, not the employee's outcome — the letter
+  # is that. Hidden from the subject at every stage, unless they are Admin/HR
+  # themselves.
+  def hide_scores? = subject? && !administrator?
+
   def manage_compensation? = permission?("appraisals.manage_compensation")
 
   # Whether this viewer may see the restricted compensation block at all.
   def view_compensation? = manage_compensation?
 
   # --- Version visibility ---------------------------------------------------
-  # Which revisions this viewer may read. The employee's pre-release view is the
-  # strict case: their OWN self-appraisal and nothing else.
+  # Which revisions this viewer may read. The employee's view is the strict
+  # case: their OWN self-appraisal and nothing else, before release and after
+  # it — what release gives them is the appraisal letter, not the final review.
   def visible_revision_stages
     return AppraisalRevision.stages.keys if administrator?
     return %w[self_appraisal manager_review primary_review secondary_review] if reviewer?
-    return %w[self_appraisal final_review] if subject? && record.released?
 
     subject? ? %w[self_appraisal] : []
   end

@@ -346,7 +346,7 @@ module Appraisals
         values = {}
 
         Array(parsed[:perspectives]).each do |perspective|
-          rating = perspective[:manager_rating].to_s.strip.presence
+          rating = perspective_rating(perspective[:manager_rating])
           summary = perspective[:manager_summary].to_s.strip.presence
           values[perspective[:key].to_s] = {
             label: perspective[:name], section: "Performance perspectives",
@@ -368,6 +368,15 @@ module Appraisals
         end
 
         values
+      end
+
+      # A perspective's manager rating is kept as text in `responses`, in the
+      # canonical form SubmitRevision stores ("3.5", "4" — not Excel's 4.0).
+      # One that isn't on the half-star scale is not carried over: it is the
+      # reviewer's field, and SubmitRevision would refuse it — failing the
+      # employee's own submission over a cell they don't own.
+      def perspective_rating(raw)
+        AppraisalAnswer.format_rating(raw) if AppraisalAnswer.valid_rating?(raw)
       end
 
       def wizard_sections
@@ -398,14 +407,17 @@ module Appraisals
         }.merge(extra)
       end
 
-      # Excel hands back a rating as a Float (4.0), Roo sometimes as a String.
-      # Blank stays blank: an unfilled cell is "not answered", never a zero.
+      # Excel hands back a rating as a Float (4.0 / 3.5), Roo sometimes as a
+      # String ("3.5"). Blank stays blank: an unfilled cell is "not answered",
+      # never a zero. NOT rounded — a 3.5 is a half-star answer and a 3.3 is
+      # an error to show, not a 3 to adopt silently. Whole ratings come back
+      # as Integers and halves as Floats, so the preview's JSON carries plain
+      # numbers either way rather than BigDecimal strings.
       def normalise_rating(raw)
-        text = raw.to_s.strip
-        return nil if text.blank?
-        return nil unless text.match?(/\A-?\d+(\.\d+)?\z/)
+        rating = AppraisalAnswer.parse_rating(raw)
+        return nil if rating.nil?
 
-        text.to_d.round.to_i
+        rating.frac.zero? ? rating.to_i : rating.to_f
       end
 
       # The same rules the model enforces, applied at preview time so the
@@ -417,11 +429,11 @@ module Appraisals
       def row_errors(question, rating, comment)
         errors = []
         errors << "That question isn't part of this appraisal's template" if question.nil?
-        if rating.present? && !AppraisalAnswer::RATING_RANGE.cover?(rating)
-          errors << "Rating must be between 1 and 5"
+        if rating.present? && !AppraisalAnswer.valid_rating?(rating)
+          errors << "Rating must be between 1 and 5, in steps of 0.5 (e.g. 3 or 3.5)"
         end
-        if rating.present? && AppraisalAnswer::RATINGS_REQUIRING_COMMENT.include?(rating) && comment.blank?
-          errors << "A rating of #{rating} needs evidence"
+        if rating.present? && AppraisalAnswer::RATINGS_REQUIRING_COMMENT.include?(rating.to_d) && comment.blank?
+          errors << "A rating of #{AppraisalAnswer.format_rating(rating)} needs evidence"
         end
         errors << "This question requires a comment" if question&.requires_comment? && rating.present? && comment.blank?
         errors

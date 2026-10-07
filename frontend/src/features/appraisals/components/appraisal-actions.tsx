@@ -1,23 +1,36 @@
 "use client"
 
 import { useState } from "react"
-import { CheckCircle2Icon, SendIcon, UndoIcon, SlidersHorizontalIcon } from "lucide-react"
+import {
+  SendIcon,
+  SignatureIcon,
+  TriangleAlertIcon,
+  UndoIcon,
+  SlidersHorizontalIcon,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Sheet, SheetClose, SheetContent } from "@/components/ui/sheet"
-import { PanelBody, PanelFooter, PanelHeader, PanelSection } from "@/components/ui/panel"
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
 } from "@/components/ui/dialog"
 import {
   useAdvanceAppraisal,
   useReturnForCorrection,
   useOverrideScore,
   useReleaseAppraisal,
-  useAcknowledgeAppraisal,
 } from "@/features/appraisals/hooks/use-appraisal-mutations"
+import {
+  LetterStatusLine,
+  SignLetterPanel,
+} from "@/features/appraisals/components/appraisal-letter"
 import type { AppraisalDetail } from "@/types/appraisals"
 
 /**
@@ -35,14 +48,13 @@ export function AppraisalActions({ appraisal }: { appraisal: AppraisalDetail }) 
   const [overrideOpen, setOverrideOpen] = useState(false)
   const [overrideScore, setOverrideScoreValue] = useState("")
   const [overrideReason, setOverrideReason] = useState("")
-  const [ackOpen, setAckOpen] = useState(false)
-  const [ackNote, setAckNote] = useState("")
+  const [releaseOpen, setReleaseOpen] = useState(false)
+  const [signOpen, setSignOpen] = useState(false)
 
   const advance = useAdvanceAppraisal(appraisal.id)
   const returnForCorrection = useReturnForCorrection(appraisal.id)
   const override = useOverrideScore(appraisal.id)
   const release = useReleaseAppraisal(appraisal.id)
-  const acknowledge = useAcknowledgeAppraisal(appraisal.id)
 
   const canClose = viewer.isAdministrator && status === "employee_acknowledged"
   // Returning and calibrating are discussion-phase decisions — offered only
@@ -51,190 +63,205 @@ export function AppraisalActions({ appraisal }: { appraisal: AppraisalDetail }) 
   const canReturn = viewer.canReturnForCorrection && inDiscussion
   const canCalibrate = viewer.canOverrideScore && inDiscussion
   const canReleaseNow = viewer.canRelease && inDiscussion
+  // The employee signs from their Letter tab. Only an administrator signing
+  // their own letter — who gets no Letter tab — signs from here.
+  const canSignHere = viewer.canSign && viewer.isAdministrator
   // Exactly the buttons rendered below — otherwise the bar shows up empty for
   // someone who MAY release but has nothing releasable yet.
-  const anyAction =
-    canReturn ||
-    canCalibrate ||
-    canReleaseNow ||
-    viewer.canAcknowledge ||
-    canClose
-
-  if (!anyAction) return null
+  const anyAction = canReturn || canCalibrate || canReleaseNow || canSignHere || canClose
+  // Admin/HR (and reviewers, once signed) see where the letter stands beside
+  // the actions — the employee has their own Letter tab for that.
+  const showLetterStatus = !viewer.isSubject && Boolean(appraisal.letter?.available)
+  // Release refuses without a saved effective date; say so before the click.
+  const missingEffectiveDate = Boolean(appraisal.discussion && !appraisal.discussion.effectiveDate)
 
   return (
-    <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-2 rounded-xl border bg-background p-3 shadow-[0_-1px_8px_rgba(0,0,0,0.06)]">
-      {canReturn && (
-        <Button variant="outline" className="gap-1.5" onClick={() => setReturnOpen(true)}>
-          <UndoIcon className="size-4" /> Return for correction
-        </Button>
-      )}
+    <>
+      {(anyAction || showLetterStatus) && (
+        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-2 rounded-xl border bg-background p-3 shadow-[0_-1px_8px_rgba(0,0,0,0.06)]">
+          {showLetterStatus && <LetterStatusLine appraisal={appraisal} />}
 
-      {canCalibrate && (
-        <Button variant="outline" className="gap-1.5" onClick={() => setOverrideOpen(true)}>
-          <SlidersHorizontalIcon className="size-4" /> Calibrate score
-        </Button>
-      )}
-
-
-      {/* compensation_approval stays accepted although nothing enters it any
-          more: an appraisal already parked there must still be releasable. */}
-      {canReleaseNow && (
-        <Button
-          className="gap-1.5 bg-role-hr text-role-hr-foreground shadow-2xs hover:bg-role-hr/90"
-          disabled={release.isPending}
-          onClick={() => release.mutate(undefined)}
-        >
-          <SendIcon className="size-4" /> {release.isPending ? "Releasing…" : "Release to employee"}
-        </Button>
-      )}
-
-      {viewer.canAcknowledge && (
-        <Button
-          className="gap-1.5 bg-success text-success-foreground shadow-2xs hover:bg-success/90"
-          onClick={() => setAckOpen(true)}
-        >
-          <CheckCircle2Icon className="size-4" /> Acknowledge
-        </Button>
-      )}
-
-      {canClose && (
-        <Button variant="outline" disabled={advance.isPending} onClick={() => advance.mutate({ to: "closed" })}>
-          Close appraisal
-        </Button>
-      )}
-
-      <Dialog open={returnOpen} onOpenChange={setReturnOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Return for correction</DialogTitle>
-            <DialogDescription>
-              This reopens the self-appraisal. Nothing already submitted is deleted — the next submission becomes
-              a new version alongside the existing ones.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-1.5">
-            <Label htmlFor="return-note">What needs changing?</Label>
-            <textarea
-              id="return-note"
-              rows={3}
-              value={returnNote}
-              onChange={(event) => setReturnNote(event.target.value)}
-              className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-            />
-          </div>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline">Cancel</Button>} />
-            <Button
-              disabled={returnForCorrection.isPending}
-              onClick={() =>
-                returnForCorrection.mutate(returnNote, {
-                  onSuccess: () => {
-                    setReturnOpen(false)
-                    setReturnNote("")
-                  },
-                })
-              }
-            >
-              Return
+          {canReturn && (
+            <Button variant="outline" className="gap-1.5" onClick={() => setReturnOpen(true)}>
+              <UndoIcon className="size-4" /> Return for correction
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          )}
 
-      <Dialog open={overrideOpen} onOpenChange={setOverrideOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Calibrate the score</DialogTitle>
-            <DialogDescription>
-              The calculated score of{" "}
-              <strong>{appraisal.calculatedScore ? Number(appraisal.calculatedScore).toFixed(2) : "—"}</strong> is
-              kept on the record, along with every override and its reason.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="override-score">Final score (0–5)</Label>
-              <Input
-                id="override-score"
-                type="number"
-                step="0.01"
-                min="0"
-                max="5"
-                value={overrideScore}
-                onChange={(event) => setOverrideScoreValue(event.target.value)}
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="override-reason">Reason (required)</Label>
-              <textarea
-                id="override-reason"
-                rows={3}
-                value={overrideReason}
-                onChange={(event) => setOverrideReason(event.target.value)}
-                className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline">Cancel</Button>} />
-            <Button
-              disabled={override.isPending || !overrideReason.trim() || !overrideScore}
-              onClick={() =>
-                override.mutate(
-                  { score: Number(overrideScore), reason: overrideReason },
-                  {
-                    onSuccess: () => {
-                      setOverrideOpen(false)
-                      setOverrideReason("")
-                      setOverrideScoreValue("")
-                    },
-                  }
-                )
-              }
-            >
-              Save calibration
+          {canCalibrate && (
+            <Button variant="outline" className="gap-1.5" onClick={() => setOverrideOpen(true)}>
+              <SlidersHorizontalIcon className="size-4" /> Calibrate score
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          )}
 
-      <Sheet open={ackOpen} onOpenChange={setAckOpen}>
-        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
-          <PanelHeader
-            icon={CheckCircle2Icon}
-            title="Acknowledge your appraisal"
-            description="Records that you have read it, with the date and your name."
-          />
-          <PanelBody>
-            <PanelSection title="Acknowledgement">
-              <p className="text-sm text-muted-foreground">
-                This records that you have read it, with the date and your name. It is not an agreement or a
-                rating of its own.
-              </p>
+          {/* compensation_approval stays accepted although nothing enters it any
+              more: an appraisal already parked there must still be releasable.
+              Release asks first: it emails the employee their letter. */}
+          {canReleaseNow && (
+            <Button
+              className="gap-1.5 bg-role-hr text-role-hr-foreground shadow-2xs hover:bg-role-hr/90"
+              disabled={release.isPending}
+              onClick={() => setReleaseOpen(true)}
+            >
+              <SendIcon className="size-4" />{" "}
+              {release.isPending ? "Sending…" : "Send"}
+            </Button>
+          )}
+
+          {canSignHere && (
+            <Button
+              className="gap-1.5 bg-success text-success-foreground shadow-2xs hover:bg-success/90"
+              onClick={() => setSignOpen(true)}
+            >
+              <SignatureIcon className="size-4" /> Review &amp; sign letter
+            </Button>
+          )}
+
+          {canClose && (
+            <Button
+              variant="outline"
+              disabled={advance.isPending}
+              onClick={() => advance.mutate({ to: "closed" })}
+            >
+              Close appraisal
+            </Button>
+          )}
+
+          <Dialog open={returnOpen} onOpenChange={setReturnOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Return for correction</DialogTitle>
+                <DialogDescription>
+                  This reopens the self-appraisal. Nothing already submitted is deleted — the next
+                  submission becomes a new version alongside the existing ones.
+                </DialogDescription>
+              </DialogHeader>
               <div className="grid gap-1.5">
-                <Label htmlFor="ack-note">Anything to add? (optional)</Label>
+                <Label htmlFor="return-note">What needs changing?</Label>
                 <textarea
-                  id="ack-note"
-                  rows={4}
-                  value={ackNote}
-                  onChange={(event) => setAckNote(event.target.value)}
+                  id="return-note"
+                  rows={3}
+                  value={returnNote}
+                  onChange={(event) => setReturnNote(event.target.value)}
                   className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
                 />
               </div>
-            </PanelSection>
-          </PanelBody>
-          <PanelFooter>
-            <SheetClose render={<Button variant="outline">Cancel</Button>} />
-            <Button
-              disabled={acknowledge.isPending}
-              onClick={() => acknowledge.mutate(ackNote, { onSuccess: () => setAckOpen(false) })}
-            >
-              {acknowledge.isPending ? "Acknowledging…" : "Acknowledge"}
-            </Button>
-          </PanelFooter>
-        </SheetContent>
-      </Sheet>
-    </div>
+              <DialogFooter>
+                <DialogClose render={<Button variant="outline">Cancel</Button>} />
+                <Button
+                  disabled={returnForCorrection.isPending}
+                  onClick={() =>
+                    returnForCorrection.mutate(returnNote, {
+                      onSuccess: () => {
+                        setReturnOpen(false)
+                        setReturnNote("")
+                      },
+                    })
+                  }
+                >
+                  Return
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={overrideOpen} onOpenChange={setOverrideOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Calibrate the score</DialogTitle>
+                <DialogDescription>
+                  The calculated score of{" "}
+                  <strong>
+                    {appraisal.calculatedScore ? Number(appraisal.calculatedScore).toFixed(2) : "—"}
+                  </strong>{" "}
+                  is kept on the record, along with every override and its reason.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-3">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="override-score">Final score (0–5)</Label>
+                  <Input
+                    id="override-score"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="5"
+                    value={overrideScore}
+                    onChange={(event) => setOverrideScoreValue(event.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="override-reason">Reason (required)</Label>
+                  <textarea
+                    id="override-reason"
+                    rows={3}
+                    value={overrideReason}
+                    onChange={(event) => setOverrideReason(event.target.value)}
+                    className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <DialogClose render={<Button variant="outline">Cancel</Button>} />
+                <Button
+                  disabled={override.isPending || !overrideReason.trim() || !overrideScore}
+                  onClick={() =>
+                    override.mutate(
+                      { score: Number(overrideScore), reason: overrideReason },
+                      {
+                        onSuccess: () => {
+                          setOverrideOpen(false)
+                          setOverrideReason("")
+                          setOverrideScoreValue("")
+                        },
+                      }
+                    )
+                  }
+                >
+                  Save calibration
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={releaseOpen} onOpenChange={setReleaseOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Release &amp; send the letter?</DialogTitle>
+                <DialogDescription>
+                  {appraisal.employeeName ?? "The employee"} will be emailed their appraisal letter
+                  to review and sign, and will see it in the app. The decision can&apos;t be changed
+                  after release.
+                </DialogDescription>
+              </DialogHeader>
+              {missingEffectiveDate && (
+                <p className="flex items-start gap-1.5 rounded-lg bg-warning/10 px-2.5 py-2 text-xs text-warning">
+                  <TriangleAlertIcon className="mt-px size-3.5 shrink-0" />
+                  Save the decision with an effective date before releasing.
+                </p>
+              )}
+              <DialogFooter>
+                <DialogClose render={<Button variant="outline">Cancel</Button>} />
+                <Button
+                  className="gap-1.5 bg-role-hr text-role-hr-foreground shadow-2xs hover:bg-role-hr/90"
+                  disabled={release.isPending || missingEffectiveDate}
+                  onClick={() =>
+                    release.mutate(undefined, { onSuccess: () => setReleaseOpen(false) })
+                  }
+                >
+                  <SendIcon className="size-4" />{" "}
+                  {release.isPending ? "Releasing…" : "Release & send"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      )}
+
+      {/* Outside the bar: signing removes the Sign action, and with it
+          possibly the whole bar — the panel must stay to show it is signed. */}
+      {viewer.isSubject && (
+        <SignLetterPanel appraisal={appraisal} open={signOpen} onOpenChange={setSignOpen} />
+      )}
+    </>
   )
 }

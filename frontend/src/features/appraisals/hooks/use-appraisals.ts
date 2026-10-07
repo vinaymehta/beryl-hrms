@@ -65,9 +65,35 @@ export function useAppraisals(params: AppraisalListParams = {}, enabled = true) 
  */
 export function useAppraisal(id: string | null) {
   return useQuery({
-    queryKey: ["appraisals", id],
+    queryKey: ["appraisals", String(id)],
     queryFn: () => appraisalsApi.get(id as string),
     enabled: Boolean(id),
+  })
+}
+
+/**
+ * The letter PDF as an object URL for the in-page preview. Keyed on what makes
+ * it a different file — signing swaps the issued letter for the signed copy —
+ * and never stale otherwise: a PDF that has been issued does not change.
+ *
+ * The object URLs are not revoked. Each is a small PDF held until the page is
+ * left, and revoking from an effect would break the frame under Strict Mode's
+ * double-run on mount.
+ */
+export function useAppraisalLetter(
+  id: string,
+  version: string,
+  enabled = true,
+  { draft = false }: { draft?: boolean } = {}
+) {
+  return useQuery({
+    queryKey: ["appraisal-letter", String(id), draft ? "draft" : version],
+    queryFn: async () => URL.createObjectURL(await appraisalsApi.letterBlob(id, { draft })),
+    enabled,
+    // A draft follows the saved decision, so it is read afresh on every open.
+    staleTime: draft ? 0 : Infinity,
+    gcTime: draft ? 0 : undefined,
+    retry: false,
   })
 }
 
@@ -84,13 +110,22 @@ export function useCalibration(cycleId: string | null) {
  * polling: the server pushes "changed" the moment a notification is raised or
  * read, and the list is re-read then. It is also re-read on every (re)connect,
  * to pick up anything raised while the socket was down.
+ *
+ * Every workflow step — submitted, reviewed, released, the letter signed —
+ * raises a notification to the people it concerns, so the same push also
+ * re-reads the appraisals on screen. Without it an admin looking at an
+ * appraisal only saw the employee's signature after a refresh.
  */
 export function useNotifications(enabled = true) {
   const queryClient = useQueryClient()
 
   useEffect(() => {
     if (!enabled) return
-    const refresh = () => queryClient.invalidateQueries({ queryKey: ["notifications"] })
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] })
+      // Only what is mounted is fetched again; the rest is marked stale.
+      queryClient.invalidateQueries({ queryKey: ["appraisals"] })
+    }
     return subscribe("NotificationsChannel", { received: refresh, connected: refresh })
   }, [enabled, queryClient])
 

@@ -102,24 +102,62 @@ module Appraisals
       )
     end
 
-    def self.released(appraisal)
-      deliver_to_employee(
+    # Released: the employee's appraisal letter is out. One notification, not
+    # the old "released" + "acknowledgement required" pair — there is one thing
+    # for them to do, which is read the letter and sign it.
+    #
+    # In-app through Deliver with its generic email switched off, because this
+    # email is not the generic one: it carries the letter itself as a PDF
+    # (AppraisalMailer#letter_issued). The letter is the employee's own, and
+    # sending it to them is the point; nothing about the review travels.
+    def self.letter_issued(appraisal)
+      notification = deliver_to_employee(
         appraisal,
-        category: "appraisal.released",
-        title: "Your appraisal has been released",
-        body: "#{appraisal.appraisal_cycle.name} — your final appraisal is now available to read and acknowledge.",
-        email_context: context_for(appraisal, action: "Read and acknowledge your appraisal", stage: "Released")
+        category: "appraisal.letter_issued",
+        title: "Your appraisal letter is ready to sign",
+        body: "#{appraisal.appraisal_cycle.name} — please read your appraisal letter and sign it to accept.",
+        email_context: context_for(appraisal, action: "Review and sign your appraisal letter", stage: "Released"),
+        email: false
       )
+      deliver_letter_mail(:letter_issued, notification)
     end
 
-    def self.acknowledgement_required(appraisal)
-      deliver_to_employee(
-        appraisal,
-        category: "appraisal.acknowledgement_required",
-        title: "Acknowledgement required",
-        body: "Please read and acknowledge your released appraisal for #{appraisal.appraisal_cycle.name}.",
-        email_context: context_for(appraisal, action: "Acknowledge your appraisal", stage: "Released")
-      )
+    # Signed: the letter goes back to Admin/HR — whoever holds
+    # appraisals.view_all — with the signed PDF attached, and the reviewers
+    # hear that it is done. A reviewer who is also Admin/HR is told once, as
+    # Admin/HR. The employee who signed is not told about their own signature.
+    def self.letter_signed(appraisal)
+      signer = appraisal.employee&.user
+      admins = User.where(company_id: appraisal.company_id).with_permission(FINAL_REVIEW_PERMISSION)
+      admins = admins.where.not(id: signer.id) if signer
+      admins = admins.to_a
+
+      shared = {
+        category: "appraisal.letter_signed",
+        title: "Appraisal letter signed",
+        body: "#{appraisal.employee.full_name} has signed their appraisal letter for #{appraisal.appraisal_cycle.name}."
+      }
+
+      admins.each do |user|
+        notification = ::Notifications::Deliver.call(
+          user: user, action_url: "/appraisals/#{appraisal.id}", notifiable: appraisal, email: false,
+          email_context: context_for(appraisal, action: "No action needed — the signed letter is attached",
+                                                stage: "Letter signed"),
+          **shared
+        )
+        deliver_letter_mail(:letter_signed, notification)
+      end
+
+      told = admins.map(&:id) + [ signer&.id ]
+      appraisal.reviewers.each do |reviewer|
+        next if told.include?(reviewer.user_id)
+
+        deliver_to_employee_record(
+          appraisal, reviewer,
+          email_context: context_for(appraisal, action: "No action needed — for your information", stage: "Letter signed"),
+          **shared
+        )
+      end
     end
 
     # Every manager level that reviewed it — each authored a version of it.
@@ -207,7 +245,21 @@ module Appraisals
       end
     end
 
+    # The letter emails, queued after the in-app notification exists. Same
+    # rule as Deliver#send_email: a mail queue being down must never fail the
+    # release or the signing that raised it.
+    def self.deliver_letter_mail(method, notification)
+      return notification if notification.nil? || notification.user.email_address.blank?
+
+      AppraisalMailer.public_send(method, notification).deliver_later
+      notification
+    rescue StandardError => e
+      Rails.logger.error("[appraisal] #{method} email for notification ##{notification&.id} could not be queued: " \
+                         "#{e.class}: #{e.message}")
+      notification
+    end
+
     private_class_method :deliver_to_employee, :deliver_to_employee_record,
-                         :deliver_to_permission_holders
+                         :deliver_to_permission_holders, :deliver_letter_mail
   end
 end

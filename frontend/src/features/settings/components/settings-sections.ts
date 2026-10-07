@@ -5,6 +5,7 @@ import {
   BriefcaseIcon,
   HashIcon,
   LockIcon,
+  ReceiptIndianRupeeIcon,
   MailIcon,
   MonitorIcon,
   PlugIcon,
@@ -22,6 +23,7 @@ export type SettingsSectionId =
   | "mail"
   | "initial_id"
   | "company"
+  | "salary_letter"
 export type SettingsGroupId = "department" | "integration" | "other"
 
 /**
@@ -119,6 +121,17 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     // The same key CompanySettingPolicy#update? checks.
     permission: PERMISSIONS.employeesManageRoles,
   },
+  {
+    id: "salary_letter",
+    group: "other",
+    label: "Salary structure & letter",
+    description:
+      "The legal name appraisal letters are issued for, and the rules that split a monthly gross into the letter's compensation table.",
+    href: "/all-settings?section=salary_letter",
+    icon: ReceiptIndianRupeeIcon,
+    // Saved through the same company settings endpoint as Company.
+    permission: PERMISSIONS.employeesManageRoles,
+  },
 ]
 
 /**
@@ -152,7 +165,7 @@ export const SETTINGS_GROUPS: {
   {
     id: "other",
     label: "Other",
-    description: "How this workspace numbers its people, and the company itself.",
+    description: "How this workspace numbers its people, the company itself, and its appraisal letters.",
     icon: SlidersHorizontalIcon,
     tint: { header: "bg-amber-500/8", icon: "bg-amber-500/15 text-amber-600" },
   },

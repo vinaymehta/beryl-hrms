@@ -235,7 +235,10 @@ export interface AppraisalViewer {
   canAdvance: boolean
   canOverrideScore: boolean
   canRelease: boolean
+  /** Same value as canSign — kept for older callers. */
   canAcknowledge: boolean
+  /** The subject, after release, before they have signed the letter. */
+  canSign: boolean
   canManageCompensation: boolean
   canSetManagementOnlyComment: boolean
   visibleRevisionStages: AppraisalStage[]
@@ -279,6 +282,21 @@ export interface AppraisalDetail extends AppraisalSummary {
   reviewDraft: SelfAppraisalDraft | null
   /** Admin/HR's Discussion decision; null for everyone else. */
   discussion: AppraisalDiscussion | null
+  /**
+   * The appraisal letter. Null until there is one this viewer may read: the
+   * subject after release, Admin/HR, and reviewers once it has been signed.
+   */
+  letter?: AppraisalLetter | null
+}
+
+export interface AppraisalLetter {
+  available: boolean
+  signed: boolean
+  signedAt: string | null
+  signedName: string | null
+  signatureMethod: "drawn" | "uploaded" | null
+  /** SHA-256 of the unsigned letter the signature was given against. */
+  sha256: string | null
 }
 
 export interface AppraisalListParams {
@@ -523,26 +541,60 @@ export interface Calibration {
   }
 }
 
+/**
+ * The letter's compensation table, one MONTHLY rupee amount per row. The
+ * monthly gross is the earnings rows only — the two E.P.F. rows sit outside it.
+ */
+export interface CompensationBreakdown {
+  basic: string | number | null
+  hra: string | number | null
+  epfEmployee: string | number | null
+  conveyance: string | number | null
+  specialAllowance: string | number | null
+  incentive: string | number | null
+  others: string | number | null
+  epfEmployer: string | number | null
+}
+
+export type BreakdownKey = keyof CompensationBreakdown
+
+/**
+ * The company's rules for splitting a monthly gross into the table, set in
+ * All Settings → Salary structure & letter. Special allowance has no rule: it
+ * is whatever the gross has left over.
+ */
+export interface SalaryStructureRules {
+  basicPercentOfGross: string | number
+  hraPercentOfBasic: string | number
+  conveyanceAmount: string | number
+  epfEmployeePercentOfBasic: string | number
+  epfEmployerPercentOfBasic: string | number
+  incentiveAmount: string | number
+  othersAmount: string | number
+}
+
 /** The Discussion step's choice, made by Admin/HR before release. */
 export interface AppraisalDiscussion {
   /**
-   * Previous income — as saved, or, until it is, the employee's latest pay
-   * record (only for a viewer who may read pay records).
+   * Current MONTHLY gross — as saved, or, until it is, the employee's latest
+   * pay record ÷ 12 (only for a viewer who may read pay records).
    */
   currentCompensation: string | null
   /** True when `currentCompensation` came from the pay record, not a save. */
   currentCompensationPrefilled: boolean
   incrementPercentage: string | null
-  /** New income. */
+  /** New MONTHLY gross. */
   approvedCompensation: string | null
-  /** Incentive before the decision; pay records hold none, so never pre-filled. */
-  currentIncentive: string | null
-  /** New incentive. */
-  approvedIncentive: string | null
+  /** As saved; null until a decision has been saved. */
+  breakdown: CompensationBreakdown | null
+  effectiveDate: string | null
+  nextAppraisalOn: string | null
   /** true = promote, false = not promoting, null = not decided yet. */
   promote: boolean | null
   proposedDesignationId: string | null
   proposedDesignationTitle: string | null
   promotionReason: string | null
   canEdit: boolean
+  /** The company's rules, so the table can be re-filled as the gross changes. */
+  salaryRules: SalaryStructureRules
 }
