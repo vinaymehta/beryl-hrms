@@ -3,6 +3,20 @@ class User < ApplicationRecord
 
   has_secure_password
 
+  # A readable copy of the CURRENT password, so an administrator can see it on
+  # the employee's page (the business asked for this explicitly). Encrypted at
+  # rest with Active Record Encryption; only ever served by
+  # EmployeesController#current_password, behind manage_account_access?.
+  encrypts :current_password_copy
+
+  # Every path that sets a password — registration, an administrator issuing
+  # one, a self-service change or reset, seeds — goes through this setter, so
+  # the copy can't fall out of step with the real one.
+  def password=(new_password)
+    super
+    self.current_password_copy = new_password if new_password.present?
+  end
+
   belongs_to :company
   has_many :sessions, dependent: :destroy
   has_many :user_roles, dependent: :destroy

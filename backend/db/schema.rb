@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_28_140000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_07_042543) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -97,11 +97,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_28_140000) do
     t.bigint "actor_user_id"
     t.bigint "appraisal_id", null: false
     t.decimal "approved_compensation", precision: 12, scale: 2
+    t.decimal "approved_incentive", precision: 12, scale: 2
     t.decimal "approved_increment_percentage", precision: 5, scale: 2
     t.bigint "company_id", null: false
     t.datetime "created_at", null: false
     t.decimal "current_compensation", precision: 12, scale: 2
     t.bigint "current_designation_id"
+    t.decimal "current_incentive", precision: 12, scale: 2
     t.date "effective_date"
     t.date "last_increment_on"
     t.decimal "last_increment_percentage", precision: 5, scale: 2
@@ -916,6 +918,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_28_140000) do
     t.bigint "company_id", null: false
     t.datetime "created_at", null: false
     t.datetime "credentials_sent_at"
+    t.text "current_password_copy"
     t.string "email_address", null: false
     t.datetime "email_verified_at"
     t.string "first_name", null: false

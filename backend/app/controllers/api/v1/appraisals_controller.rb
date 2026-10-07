@@ -76,6 +76,14 @@ module Api
         appraisal = find_appraisal
         authorize appraisal, :submit_self?
 
+        missing = appraisal.employee.missing_identity_documents
+        if missing.any?
+          return render json: { errors: [ {
+            code: "identity_documents_missing",
+            message: "Upload your #{missing.to_sentence} on your profile (Documents) before submitting your self-appraisal."
+          } ] }, status: :unprocessable_content
+        end
+
         ActiveRecord::Base.transaction do
           ::Appraisals::SubmitRevision.call(
             appraisal: appraisal, stage: :self_appraisal, author_user: Current.user,
@@ -149,7 +157,14 @@ module Api
         promote = ActiveModel::Type::Boolean.new.cast(params[:promote])
         decision.assign_attributes(
           actor_user: Current.user,
+          # Previous income → new income, and the incentive before → after.
+          # New income arrives as the form computed it (or as HR overrode it);
+          # it is not re-derived from the increment here.
+          current_compensation: params[:current_compensation].presence,
           approved_increment_percentage: params[:increment_percentage].presence,
+          approved_compensation: params[:approved_compensation].presence,
+          current_incentive: params[:current_incentive].presence,
+          approved_incentive: params[:approved_incentive].presence,
           promotion_recommendation: if promote.nil? then :none elsif promote then :recommended else :not_recommended end,
           proposed_designation_id: promote ? params[:proposed_designation_id].presence : nil,
           promotion_reason: params[:promotion_reason].presence
@@ -173,6 +188,24 @@ module Api
           # Submitted, so the draft for this level has served its purpose.
           appraisal.update!(review_drafts: appraisal.review_drafts.except(draft_key))
           to, level = next_step_after_review(appraisal)
+
+          # The last manager is also an Admin/HR final reviewer: they would be
+          # asked to review the same appraisal twice in a row. Their manager
+          # review is recorded as the Final review as well, and the appraisal
+          # moves straight on to the discussion step.
+          if to == :final_review && Current.user.permission?("appraisals.view_all")
+            ::Appraisals::Workflow.new(
+              appraisal: appraisal, to: :final_review, actor: Current.user, announce: false,
+              notes: "Final review by the same person as the last manager review"
+            ).call
+            ::Appraisals::SubmitRevision.call(
+              appraisal: appraisal, stage: appraisal.status, author_user: Current.user,
+              answers: answer_params, narrative: narrative_params, responses: response_params
+            )
+            appraisal.update!(review_drafts: appraisal.review_drafts.except(appraisal.review_draft_key))
+            to, level = :appraisal_discussion, nil
+          end
+
           ::Appraisals::Workflow.new(
             appraisal: appraisal, to: to, level: level, actor: Current.user, notes: params[:notes]
           ).call

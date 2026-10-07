@@ -7,6 +7,7 @@ import { employeesApi, departmentsApi, designationsApi, employmentTypesApi } fro
 import { ApiError } from "@/types/api"
 import type {
   EmployeePayload,
+  PersonalDetailsPayload,
   DepartmentFormValues,
   DesignationFormValues,
   EmploymentTypeFormValues,
@@ -38,6 +39,19 @@ export function useUpdateEmployee(id: string) {
       toast.success("Employee updated.")
     },
     onError: (error) => toast.error(errorMessage(error, "Couldn't update that employee.")),
+  })
+}
+
+/** The employee's own Edit my details — saved straight away, no approval. */
+export function useUpdatePersonalDetails(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (values: PersonalDetailsPayload) => employeesApi.updatePersonal(id, values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["employees"] })
+      toast.success("Your details were updated.")
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't save your details.")),
   })
 }
 

@@ -136,7 +136,7 @@ export interface RatingScaleOption {
  *
  * Ratings are stored as whole numbers 1–5 (AppraisalAnswer), so guide rows
  * outside that range are left out rather than offered and then refused. The
- * evidence rule stays the server's: 1, 2, 4 and 5 need a comment.
+ * evidence rule stays the server's: every rating needs a comment.
  */
 export function ratingScaleFrom(guide?: { rating: number | null; level: string | null; definition: string | null }[] | null): RatingScaleOption[] {
   const rows = (guide ?? [])
@@ -159,7 +159,7 @@ export function ratingScaleFrom(guide?: { rating: number | null; level: string |
  */
 export const SIGNIFICANT_RATING_GAP = 2
 
-export const RATINGS_REQUIRING_COMMENT = [1, 2, 4, 5]
+export const RATINGS_REQUIRING_COMMENT = [1, 2, 3, 4, 5]
 
 /** The free-text blocks a revision carries, in the order the form shows them. */
 export const NARRATIVE_FIELDS: { key: NarrativeKey; label: string; placeholder: string }[] = [

@@ -218,6 +218,49 @@ const baseEmployeeFields = z.object({
 export const employeeFormSchema = buildEmployeeFormSchema({ isNew: true })
 export type EmployeeFormValues = z.infer<typeof baseEmployeeFields>
 
+/**
+ * What an employee may change about themselves from Profile → Edit my details
+ * (PATCH /employees/:id/personal). Picked from the employee form's own fields
+ * rather than restated, so a phone number, postal code or email is judged by
+ * exactly the same rule — and the same sentence — on both screens.
+ *
+ * Unlike an HR edit, the 22-year floor is checked on every save here, not
+ * only for a new hire: the panel's calendar stops at it too, and every record
+ * added through the employee form already meets it. The server checks it
+ * whenever the date actually changes.
+ */
+export const personalDetailsSchema = baseEmployeeFields
+  .pick({
+    dateOfBirth: true,
+    gender: true,
+    phone: true,
+    personalEmail: true,
+    addressLine1: true,
+    addressLine2: true,
+    city: true,
+    cityOther: true,
+    state: true,
+    postalCode: true,
+    country: true,
+    emergencyContactName: true,
+    emergencyContactPhone: true,
+  })
+  .superRefine((values, ctx) => {
+    if (values.dateOfBirth && values.dateOfBirth > maxBirthDateIso()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["dateOfBirth"],
+        message: `Employees must be at least ${MINIMUM_AGE_YEARS} years old`,
+      })
+    }
+  })
+export type PersonalDetailsValues = z.infer<typeof personalDetailsSchema>
+
+/** As sent: "Other" resolved to the typed-in city, and null for a cleared one. */
+export interface PersonalDetailsPayload extends Omit<PersonalDetailsValues, "city" | "cityOther"> {
+  city?: string | null
+}
+
 export const departmentFormSchema = z.object({
   name: z.string().trim().min(1, "Department name is required"),
   description: z.string().optional(),

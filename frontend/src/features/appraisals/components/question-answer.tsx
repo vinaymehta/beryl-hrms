@@ -82,7 +82,7 @@ export function RatingScaleInput({
   )
 }
 
-/** Mirrors the backend rule (AppraisalAnswer): 1, 2, 4 and 5 need justifying. */
+/** Mirrors the backend rule (AppraisalAnswer): every rating needs justifying. */
 export function needsEvidence(answer: AnswerValue) {
   return answer.rating != null && RATINGS_REQUIRING_COMMENT.includes(answer.rating) && !answer.comment.trim()
 }

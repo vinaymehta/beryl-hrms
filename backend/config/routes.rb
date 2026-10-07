@@ -55,11 +55,15 @@ Rails.application.routes.draw do
         end
         member do
           patch :deactivate
+          # The employee's own edit of their personal details, from Profile.
+          # Separate from `update` so it can only ever touch those columns.
+          patch :personal, action: :update_personal
           # Account access, kept apart from the profile edit above. Neither
           # sets a password: both send the employee a link and return only
           # the address it went to.
           post :invite
           post :reset_password
+          get :current_password
         end
 
         # Phase 1 profile history + Phase 5 continuous performance. All nested
@@ -99,6 +103,7 @@ Rails.application.routes.draw do
         member do
           post :start
           patch :close
+          patch :reopen
           get :calibration
         end
       end

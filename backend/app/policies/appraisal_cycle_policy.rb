@@ -6,6 +6,7 @@ class AppraisalCyclePolicy < ApplicationPolicy
   def destroy? = create?
   def start? = create?
   def close? = create?
+  def reopen? = create?
 
   class Scope < ApplicationPolicy::Scope
     def resolve

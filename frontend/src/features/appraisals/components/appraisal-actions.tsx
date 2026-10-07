@@ -45,10 +45,18 @@ export function AppraisalActions({ appraisal }: { appraisal: AppraisalDetail }) 
   const acknowledge = useAcknowledgeAppraisal(appraisal.id)
 
   const canClose = viewer.isAdministrator && status === "employee_acknowledged"
+  // Returning and calibrating are discussion-phase decisions — offered only
+  // there, not while the self-appraisal or the reviews are still in progress.
+  const inDiscussion = status === "appraisal_discussion" || status === "compensation_approval"
+  const canReturn = viewer.canReturnForCorrection && inDiscussion
+  const canCalibrate = viewer.canOverrideScore && inDiscussion
+  const canReleaseNow = viewer.canRelease && inDiscussion
+  // Exactly the buttons rendered below — otherwise the bar shows up empty for
+  // someone who MAY release but has nothing releasable yet.
   const anyAction =
-    viewer.canReturnForCorrection ||
-    viewer.canOverrideScore ||
-    viewer.canRelease ||
+    canReturn ||
+    canCalibrate ||
+    canReleaseNow ||
     viewer.canAcknowledge ||
     canClose
 
@@ -56,13 +64,13 @@ export function AppraisalActions({ appraisal }: { appraisal: AppraisalDetail }) 
 
   return (
     <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-2 rounded-xl border bg-background p-3 shadow-[0_-1px_8px_rgba(0,0,0,0.06)]">
-      {viewer.canReturnForCorrection && status !== "self_appraisal_open" && (
+      {canReturn && (
         <Button variant="outline" className="gap-1.5" onClick={() => setReturnOpen(true)}>
           <UndoIcon className="size-4" /> Return for correction
         </Button>
       )}
 
-      {viewer.canOverrideScore && (
+      {canCalibrate && (
         <Button variant="outline" className="gap-1.5" onClick={() => setOverrideOpen(true)}>
           <SlidersHorizontalIcon className="size-4" /> Calibrate score
         </Button>
@@ -71,7 +79,7 @@ export function AppraisalActions({ appraisal }: { appraisal: AppraisalDetail }) 
 
       {/* compensation_approval stays accepted although nothing enters it any
           more: an appraisal already parked there must still be releasable. */}
-      {viewer.canRelease && (status === "appraisal_discussion" || status === "compensation_approval") && (
+      {canReleaseNow && (
         <Button
           className="gap-1.5 bg-role-hr text-role-hr-foreground shadow-2xs hover:bg-role-hr/90"
           disabled={release.isPending}

@@ -32,6 +32,9 @@ export function useUploadDocument() {
       // Both the per-employee list and any unfiltered one showing this row.
       queryClient.invalidateQueries({ queryKey: documentsKey(input.employeeId) })
       queryClient.invalidateQueries({ queryKey: ["documents"] })
+      // An appraisal can't be submitted until Aadhaar/PAN are on file, so the
+      // appraisal's "documents missing" state has to be re-read too.
+      queryClient.invalidateQueries({ queryKey: ["appraisals"] })
       toast.success("Document uploaded.")
     },
     onError: (error) => toast.error(errorMessage(error, "Couldn't upload that document.")),
@@ -44,6 +47,7 @@ export function useDeleteDocument() {
     mutationFn: (id: string) => documentsApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents"] })
+      queryClient.invalidateQueries({ queryKey: ["appraisals"] })
       toast.success("Document deleted.")
     },
     onError: (error) => toast.error(errorMessage(error, "Couldn't delete that document.")),

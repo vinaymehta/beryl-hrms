@@ -42,12 +42,16 @@ module Appraisals
     def self.call(...) = new(...).call
 
     # @param level [Integer, nil] the manager level, when moving to manager_review.
-    def initialize(appraisal:, to:, actor: Current.user, notes: nil, level: nil)
+    # @param announce [Boolean] false for a step that is passed straight
+    #   through in the same request (see AppraisalsController#submit_review),
+    #   so nobody is told an appraisal is waiting at a stage it has already left.
+    def initialize(appraisal:, to:, actor: Current.user, notes: nil, level: nil, announce: true)
       @appraisal = appraisal
       @to = to.to_s
       @actor = actor
       @notes = notes
       @level = level
+      @announce = announce
     end
 
     def call
@@ -66,7 +70,7 @@ module Appraisals
         self.class.record_transition(@appraisal, from: from, to: @to, actor: @actor, notes: notes)
       end
 
-      announce(from)
+      announce(from) if @announce
       @appraisal
     end
 

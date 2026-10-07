@@ -7,6 +7,7 @@ module Api
                  :current_compensation, :last_increment_percentage, :last_increment_on,
                  :recommended_increment_percentage, :recommended_compensation,
                  :approved_increment_percentage, :approved_compensation,
+                 :current_incentive, :approved_incentive,
                  :effective_date, :management_comments,
                  :promotion_recommendation, :current_designation_id, :proposed_designation_id,
                  :promotion_reason, :promotion_effective_date, :new_responsibilities,

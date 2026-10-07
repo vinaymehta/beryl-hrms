@@ -104,14 +104,37 @@ module Appraisals
         when "recommended" then true
         when "not_recommended" then false
         end
+        pay_record = latest_pay_record
         {
+          # Previous income: what was saved, or — until something is — the
+          # employee's latest pay record, so Admin/HR start from the real figure.
+          "currentCompensation" => (decision&.current_compensation || pay_record&.annual_compensation)&.to_s,
+          "currentCompensationPrefilled" => decision&.current_compensation.nil? && pay_record&.annual_compensation.present?,
           "incrementPercentage" => decision&.approved_increment_percentage&.to_s,
+          "approvedCompensation" => decision&.approved_compensation&.to_s,
+          # Pay records carry no incentive column, so there is nothing to
+          # pre-fill the current incentive from.
+          "currentIncentive" => decision&.current_incentive&.to_s,
+          "approvedIncentive" => decision&.approved_incentive&.to_s,
           "promote" => promote,
           "proposedDesignationId" => decision&.proposed_designation_id&.to_s,
           "proposedDesignationTitle" => decision&.proposed_designation&.title,
           "promotionReason" => decision&.promotion_reason,
           "canEdit" => @policy.save_discussion?
         }
+      end
+
+      # The employee's most recent compensation record that states an amount,
+      # for the pre-fill. Only while the decision can still be edited — once
+      # released, an unsaved figure stays unsaved rather than looking decided —
+      # and only for a viewer who may read pay records at all
+      # (compensation.manage). HR holds appraisals.view_all without it, and the
+      # Discussion step must not become a side door onto anyone's pay history.
+      def latest_pay_record
+        return nil unless @policy.save_discussion? && @appraisal.employee
+
+        record = @appraisal.employee.compensation_records.where.not(annual_compensation: nil).first
+        record if record && EmployeeCompensationRecordPolicy.new(@user, record).show?
       end
 
       def camelize_keys(hash)
@@ -201,6 +224,8 @@ module Appraisals
           "canSaveSelfDraft" => @policy.save_self_draft?,
           "canSaveReviewDraft" => @policy.save_review_draft?,
           "canSubmitSelf" => @policy.submit_self?,
+          # Only computed for the person who would submit — nobody else is blocked by it.
+          "missingIdentityDocuments" => @policy.submit_self? ? @appraisal.employee.missing_identity_documents : [],
           "canSubmitReview" => @policy.submit_review?,
           "canReturnForCorrection" => @policy.return_for_correction?,
           "canAdvance" => @policy.advance?,

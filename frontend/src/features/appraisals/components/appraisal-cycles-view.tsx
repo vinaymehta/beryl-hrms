@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { PlusIcon, PlayIcon, PencilIcon, Trash2Icon, CalendarClockIcon, UsersIcon } from "lucide-react"
+import { PlusIcon, PlayIcon, PencilIcon, Trash2Icon, CalendarClockIcon, UsersIcon, RotateCcwIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -24,6 +24,7 @@ import {
   useStartAppraisalCycle,
   useCloseAppraisalCycle,
   useDeleteAppraisalCycle,
+  useReopenAppraisalCycle,
 } from "@/features/appraisals/hooks/use-appraisal-mutations"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
@@ -63,7 +64,7 @@ function ProgressBar({ cycle }: { cycle: AppraisalCycle }) {
  * are working to its deadlines; removing it underneath them would throw that
  * work away mid-flight. Close it first.
  *
- * A closed cycle can be edited and deleted again. Editing it is limited by the
+ * A closed cycle can be edited, deleted, or reopened (made active again). Editing it is limited by the
  * form itself — once a cycle has started, its template and employee list are
  * fixed (CycleForm's `locked`), so only the name, description, dates and review
  * options change. Deleting it removes its appraisals too, which the
@@ -95,6 +96,7 @@ export function AppraisalCyclesView({ onOpenCycle }: { onOpenCycle: (cycleId: st
   const deleteCycle = useDeleteAppraisalCycle()
   const [deleting, setDeleting] = useState<AppraisalCycle | null>(null)
   const closeCycle = useCloseAppraisalCycle()
+  const reopenCycle = useReopenAppraisalCycle()
 
   function openNew() {
     // Still loading counts as "has one": the form's own picker fills in as the
@@ -239,6 +241,17 @@ export function AppraisalCyclesView({ onOpenCycle }: { onOpenCycle: (cycleId: st
                         onClick={() => closeCycle.mutate(cycle.id)}
                       >
                         Close cycle
+                      </Button>
+                    )}
+                    {cycle.status === "closed" && (
+                      <Button
+                        size="sm"
+                        className="gap-1.5 bg-role-hr text-role-hr-foreground hover:bg-role-hr/90"
+                        disabled={reopenCycle.isPending}
+                        title={`Make ${cycle.name} active again`}
+                        onClick={() => reopenCycle.mutate(cycle.id)}
+                      >
+                        <RotateCcwIcon className="size-3.5" /> Reopen cycle
                       </Button>
                     )}
                   </div>

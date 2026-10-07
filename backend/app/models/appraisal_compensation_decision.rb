@@ -24,15 +24,19 @@ class AppraisalCompensationDecision < ApplicationRecord
   before_validation :default_current_designation, on: :create
 
   PERCENTAGE = { greater_than_or_equal_to: -100, less_than_or_equal_to: 500 }.freeze
+  # Rupee amounts — income and incentive, before and after. Never negative.
+  MONEY = { greater_than_or_equal_to: 0 }.freeze
 
   validates :recommended_increment_percentage, numericality: PERCENTAGE, allow_nil: true
   validates :approved_increment_percentage, numericality: PERCENTAGE, allow_nil: true
+  validates :current_compensation, :approved_compensation, :current_incentive, :approved_incentive,
+            numericality: MONEY, allow_nil: true
   validate :promotion_carries_a_proposed_designation
 
   # Whether anything has actually been decided, for the UI's empty state.
   def any_decision?
     [ recommended_increment_percentage, approved_increment_percentage,
-      approved_compensation, promotion_reason ].any?(&:present?) || !promotion_none?
+      approved_compensation, approved_incentive, promotion_reason ].any?(&:present?) || !promotion_none?
   end
 
   private

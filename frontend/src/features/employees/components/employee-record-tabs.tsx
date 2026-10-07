@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { UserIcon, FileTextIcon } from "lucide-react"
 import { cn } from "cn"
 
@@ -27,7 +28,10 @@ export function EmployeeRecordTabs({
   documents: React.ReactNode
 }) {
   const canSeeCompensation = usePermission(PERMISSIONS.compensationManage)
-  const [active, setActive] = useState<string>("overview")
+  // ?tab=documents (and the like) opens straight on that tab — the self-appraisal
+  // links here when Aadhaar/PAN still have to be uploaded.
+  const requestedTab = useSearchParams().get("tab")
+  const [active, setActive] = useState<string>(requestedTab ?? "overview")
 
   const panels = RECORD_PANELS.filter((panel) => !panel.restricted || canSeeCompensation)
 

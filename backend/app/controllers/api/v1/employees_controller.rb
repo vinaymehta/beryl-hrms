@@ -32,6 +32,14 @@ module Api
         "additional" => :additional_manager_ids
       }.freeze
 
+      # What an employee may change about themselves (#update_personal) — a
+      # subset of employee_params, and the whole of what that path permits.
+      PERSONAL_PARAMS = %i[
+        date_of_birth gender phone personal_email
+        address_line1 address_line2 city state postal_code country
+        emergency_contact_name emergency_contact_phone
+      ].freeze
+
       def index
         authorize Employee
         scope = policy_scope(Employee).includes(
@@ -135,6 +143,31 @@ module Api
         render_data(Api::V1::EmployeeSerializer.new(employee.reload).as_json)
       end
 
+      # PATCH /api/v1/employees/:id/personal — an employee correcting their own
+      # personal details from Profile. Saved straight away, no approval: these
+      # are facts about the person that they know better than HR does.
+      #
+      # Only PERSONAL_PARAMS are read, so anything else in the body (a
+      # department, a name, roles) is dropped rather than applied — and no
+      # manager / account block runs on this path at all. The same model
+      # validations as HR's edit apply.
+      def update_personal
+        employee = policy_scope(Employee).find(params[:id])
+        authorize employee, :update_personal?
+        attributes = params.permit(*PERSONAL_PARAMS)
+        before = employee.attributes.slice(*attributes.keys)
+
+        ActiveRecord::Base.transaction do
+          employee.update!(attributes)
+          ::Audit::Record.call(
+            action: "employee.personal_updated", auditable: employee, request: request,
+            before_changes: before, after_changes: employee.attributes.slice(*attributes.keys)
+          )
+        end
+
+        render_data(Api::V1::EmployeeSerializer.new(employee.reload).as_json)
+      end
+
       # PATCH /api/v1/employees/:id/deactivate — the "delete" action, per the
       # spec's "prefer deactivation over destroying historical records."
       # Also doubles as the reactivate action (status: "active") — same
@@ -161,14 +194,21 @@ module Api
         issue_credentials(resend: false)
       end
 
-      # POST /api/v1/employees/:id/reset_password — email them a NEW one.
-      #
-      # The same operation as #invite now that there is no link. Both generate
-      # a password, send it, and invalidate whatever came before; they differ
-      # only in what the response says, because "here are your details" and
-      # "your password has been reset" are different things to read.
+      # POST /api/v1/employees/:id/reset_password — email their sign-in
+      # details again. The same operation as #invite: both send the CURRENT
+      # password (set from Edit) and change nothing about it; they differ only
+      # in what the response says.
       def reset_password
         issue_credentials(resend: true)
+      end
+
+      # GET /api/v1/employees/:id/current_password — the password this
+      # employee signs in with now, for an administrator to read. Same gate as
+      # sending one. nil when none has been recorded (set before this existed).
+      def current_password
+        employee = policy_scope(Employee).find(params[:id])
+        authorize employee, :manage_account_access?
+        render_data({ password: employee.user&.current_password_copy })
       end
 
       private
@@ -210,20 +250,19 @@ module Api
           employee = policy_scope(Employee).find(params[:id])
           authorize employee, :manage_account_access?
 
+          # Sends the password the account has NOW (set from Edit, or chosen by
+          # the employee since) — never a new one. See IssueCredentials.
           result = ::Employees::IssueCredentials.call(
             employee: employee, actor: Current.user, request: request,
-            # Optional. The admin may type one, or leave it for the server to
-            # generate — which is what the Generate button does, and what the
-            # field is prefilled with.
-            password: params[:password],
             force_password_change: params.key?(:force_password_change) ? params[:force_password_change] : nil
           )
 
           render_data({
             message: credentials_message(result, resend: resend),
-            # Shown to the administrator once, on screen, so they can read it
-            # out to somebody whose mail has not arrived. It is not stored
-            # anywhere readable and is not part of the employee payload below.
+            # Shown to the administrator on screen, so they can read it out to
+            # somebody whose mail has not arrived. Also kept as the user's
+            # current_password_copy (see User#password=), never in the employee
+            # payload below.
             password: result.password,
             employee: Api::V1::EmployeeSerializer.new(employee.reload).as_json
           })
@@ -232,7 +271,7 @@ module Api
         def credentials_message(result, resend:)
           lead =
             if resend
-              "A new password has been emailed to #{result.user.email_address}. Their previous one no longer works."
+              "Sign-in details have been emailed again to #{result.user.email_address}."
             else
               "Sign-in details have been emailed to #{result.user.email_address}."
             end
@@ -281,19 +320,15 @@ module Api
             role_ids: params.key?(:role_ids) ? Array(params.permit(role_ids: [])[:role_ids]) : nil
           )
 
-          # A password on the form goes through the same service as the Send
-          # button, rather than being written straight onto the user. Setting
-          # one and telling its owner are not two decisions: a password nobody
-          # was sent is a password nobody can use, and doing it here by hand
-          # would skip the email, the session purge and the audit entry that
-          # IssueCredentials exists to guarantee.
+          # A password on the form is SET here and nothing more — no email, no
+          # forced change. Sending it is the separate Send button on the
+          # employee's page (IssueCredentials), where the administrator also
+          # chooses whether it must be changed at first sign-in.
           return if params[:password].blank?
           return if employee.reload.user.nil?
 
-          ::Employees::IssueCredentials.call(
-            employee: employee, actor: Current.user, request: request,
-            password: params[:password],
-            force_password_change: params.key?(:require_password_change) ? params[:require_password_change] : true
+          ::Employees::SetPassword.call(
+            employee: employee, password: params[:password], actor: Current.user, request: request
           )
         end
     end

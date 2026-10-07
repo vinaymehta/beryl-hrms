@@ -204,6 +204,10 @@ export function useCloseAppraisalCycle() {
   return useCycleAction((id: string) => appraisalCyclesApi.close(id), "Cycle closed.", "Couldn't close that cycle.")
 }
 
+export function useReopenAppraisalCycle() {
+  return useCycleAction((id: string) => appraisalCyclesApi.reopen(id), "Cycle reopened.", "Couldn't reopen that cycle.")
+}
+
 export function useDeleteAppraisalCycle() {
   return useCycleAction(
     (id: string) => appraisalCyclesApi.remove(id),

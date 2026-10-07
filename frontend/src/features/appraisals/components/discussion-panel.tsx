@@ -25,8 +25,8 @@ import type { AppraisalDetail, AppraisalRevision } from "@/types/appraisals"
  *     promotion recommendation;
  *   • Admin/HR's own Final review score.
  *
- * Chosen here by Admin/HR: the increment, and whether to promote (and to
- * which job title).
+ * Chosen here by Admin/HR: previous and new income, the increment, current
+ * and new incentive, and whether to promote (and to which job title).
  */
 export function DiscussionPanel({ appraisal }: { appraisal: AppraisalDetail }) {
   const ratingMax = useRatingScale().at(-1)?.value ?? 5
@@ -66,8 +66,8 @@ export function DiscussionPanel({ appraisal }: { appraisal: AppraisalDetail }) {
       <div>
         <h2 className="text-base font-semibold text-foreground">Discussion</h2>
         <p className="text-sm text-muted-foreground">
-          Admin/HR only. Review what the employee and each manager said, choose the increment and
-          promotion, then release the appraisal to the employee.
+          Admin/HR only. Review what the employee and each manager said, record the salary, increment,
+          incentive and promotion, then release the appraisal to the employee.
         </p>
       </div>
 
@@ -130,20 +130,39 @@ export function DiscussionPanel({ appraisal }: { appraisal: AppraisalDetail }) {
   )
 }
 
-/** Increment % and promotion — the part Admin/HR choose. */
+/** Income, increment, incentive and promotion — the part Admin/HR choose. */
 function DecisionForm({ appraisal }: { appraisal: AppraisalDetail }) {
   const saved = appraisal.discussion!
   const save = useSaveDiscussion(appraisal.id)
   const { data: designations } = useDesignations()
 
+  // Previous income arrives pre-filled from the latest pay record until a
+  // decision is saved; the current incentive has no pay-record source.
+  const [previousIncome, setPreviousIncome] = useState(fromServer(saved.currentCompensation))
   const [increment, setIncrement] = useState(saved.incrementPercentage ?? "")
+  // A saved new income as it was saved; otherwise worked out from the start.
+  const [newIncome, setNewIncome] = useState(
+    () => fromServer(saved.approvedCompensation) || (incomeAfterIncrement(previousIncome, increment) ?? "")
+  )
+  const [incentive, setIncentive] = useState(fromServer(saved.currentIncentive))
+  const [newIncentive, setNewIncentive] = useState(fromServer(saved.approvedIncentive))
   const [promote, setPromote] = useState<boolean | null>(saved.promote)
   const [designationId, setDesignationId] = useState(saved.proposedDesignationId ?? "")
   const [reason, setReason] = useState(saved.promotionReason ?? "")
 
   const readOnly = !saved.canEdit
   const incrementOk = increment === "" || (Number(increment) >= -100 && Number(increment) <= 500)
+  const moneyOk = [previousIncome, newIncome, incentive, newIncentive].every(isMoney)
   const promotionOk = promote !== true || designationId !== ""
+  const busy = readOnly || save.isPending
+
+  // New income follows previous income × (1 + increment / 100) whenever either
+  // of those changes. Typing over it is allowed, and sticks until one of the
+  // two inputs is changed again.
+  const recalculate = (income: string, percent: string) => {
+    const next = incomeAfterIncrement(income, percent)
+    if (next != null) setNewIncome(next)
+  }
 
   return (
     <section className="grid gap-4 rounded-xl border p-4">
@@ -154,19 +173,72 @@ function DecisionForm({ appraisal }: { appraisal: AppraisalDetail }) {
         </p>
       </div>
 
-      <div className="grid gap-1.5 sm:max-w-xs">
-        <Label htmlFor="discussion-increment">Increment (%)</Label>
-        <Input
-          id="discussion-increment"
-          type="number"
-          step="0.01"
-          min="-100"
-          max="500"
-          placeholder="e.g. 8"
-          value={increment}
-          disabled={readOnly || save.isPending}
-          onChange={(event) => setIncrement(event.target.value)}
-          aria-invalid={!incrementOk}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <MoneyField
+          id="discussion-previous-income"
+          label="Salary (current)"
+          value={previousIncome}
+          readOnly={readOnly}
+          disabled={busy}
+          hint={
+            saved.currentCompensationPrefilled && previousIncome === fromServer(saved.currentCompensation)
+              ? "From the latest pay record"
+              : undefined
+          }
+          onChange={(value) => {
+            setPreviousIncome(value)
+            recalculate(value, increment)
+          }}
+        />
+        <div className="grid content-start gap-1.5">
+          <Label htmlFor="discussion-increment">Increment (%)</Label>
+          {readOnly ? (
+            <p className="text-sm tabular-nums">{increment === "" ? "—" : `${Number(increment)}%`}</p>
+          ) : (
+            <Input
+              id="discussion-increment"
+              type="number"
+              step="0.01"
+              min="-100"
+              max="500"
+              placeholder="e.g. 8"
+              value={increment}
+              disabled={busy}
+              onChange={(event) => {
+                setIncrement(event.target.value)
+                recalculate(previousIncome, event.target.value)
+              }}
+              aria-invalid={!incrementOk}
+            />
+          )}
+        </div>
+        <MoneyField
+          id="discussion-new-income"
+          label="New salary"
+          value={newIncome}
+          readOnly={readOnly}
+          disabled={busy}
+          hint="Calculated from the increment; editable"
+          onChange={setNewIncome}
+        />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <MoneyField
+          id="discussion-incentive"
+          label="Incentive (current)"
+          value={incentive}
+          readOnly={readOnly}
+          disabled={busy}
+          onChange={setIncentive}
+        />
+        <MoneyField
+          id="discussion-new-incentive"
+          label="New incentive"
+          value={newIncentive}
+          readOnly={readOnly}
+          disabled={busy}
+          onChange={setNewIncentive}
         />
       </div>
 
@@ -236,10 +308,14 @@ function DecisionForm({ appraisal }: { appraisal: AppraisalDetail }) {
       {!readOnly && (
         <Button
           className="w-fit"
-          disabled={!incrementOk || !promotionOk || save.isPending}
+          disabled={!incrementOk || !moneyOk || !promotionOk || save.isPending}
           onClick={() =>
             save.mutate({
+              currentCompensation: previousIncome,
               incrementPercentage: increment,
+              approvedCompensation: newIncome,
+              currentIncentive: incentive,
+              approvedIncentive: newIncentive,
               promote,
               proposedDesignationId: promote ? designationId : "",
               promotionReason: promote ? reason : "",
@@ -251,6 +327,75 @@ function DecisionForm({ appraisal }: { appraisal: AppraisalDetail }) {
       )}
     </section>
   )
+}
+
+/**
+ * A rupee amount: a plain numeric input while editable, and the formatted
+ * figure (₹, Indian digit grouping) once the decision is read-only.
+ */
+function MoneyField({
+  id,
+  label,
+  value,
+  readOnly,
+  disabled,
+  hint,
+  onChange,
+}: {
+  id: string
+  label: string
+  value: string
+  readOnly: boolean
+  disabled: boolean
+  hint?: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <div className="grid content-start gap-1.5">
+      <Label htmlFor={readOnly ? undefined : id}>{label}</Label>
+      {readOnly ? (
+        <p className="text-sm tabular-nums">{value === "" ? "—" : rupees.format(Number(value))}</p>
+      ) : (
+        <>
+          <Input
+            id={id}
+            inputMode="decimal"
+            placeholder="0"
+            value={value}
+            disabled={disabled}
+            // Digits and a decimal point only — which also keeps it non-negative
+            // and lets a pasted "12,00,000" through as 1200000.
+            onChange={(event) => onChange(event.target.value.replace(/[^\d.]/g, ""))}
+            aria-invalid={!isMoney(value)}
+          />
+          {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+        </>
+      )}
+    </div>
+  )
+}
+
+const rupees = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+})
+
+/** Blank, or a non-negative number. */
+function isMoney(value: string) {
+  return value === "" || (Number.isFinite(Number(value)) && Number(value) >= 0)
+}
+
+/** Decimals arrive as "1200000.0"; the input shows them as typed numbers do. */
+function fromServer(value: string | null) {
+  return value == null ? "" : String(Number(value))
+}
+
+/** previous × (1 + increment / 100), to the paisa — or null if either is missing. */
+function incomeAfterIncrement(income: string, percent: string) {
+  if (income === "" || percent === "" || !isMoney(income) || !Number.isFinite(Number(percent))) return null
+  return (Math.round(Number(income) * (100 + Number(percent))) / 100).toFixed(2)
 }
 
 function Score({ value, max, caption }: { value?: string | number | null; max: number; caption: string }) {

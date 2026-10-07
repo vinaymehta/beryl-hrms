@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { CalendarClockIcon } from "lucide-react"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { PanelBody, PanelFooter, PanelHeader, PanelSection } from "@/components/ui/panel"
@@ -15,6 +16,7 @@ import {
 import { REVIEW_TYPES } from "@/features/appraisals/constants"
 import { useAppraisalTemplates } from "@/features/appraisals/hooks/use-appraisals"
 import { useCreateAppraisalCycle, useUpdateAppraisalCycle } from "@/features/appraisals/hooks/use-appraisal-mutations"
+import { employeesApi } from "@/features/employees/api"
 import { useAssignableManagers } from "@/features/employees/hooks/use-employees"
 import type { AppraisalCycleDetail } from "@/types/appraisals"
 
@@ -73,6 +75,7 @@ function CycleForm({
     () => (cycle?.eligibleEmployees ?? []).map((employee) => String(employee.id))
   )
   const [employeeSearch, setEmployeeSearch] = useState("")
+  const [selectingAll, setSelectingAll] = useState(false)
   const open = true
 
   const { data: templates } = useAppraisalTemplates("active", open)
@@ -81,12 +84,44 @@ function CycleForm({
   const updateCycle = useUpdateAppraisalCycle(cycle?.id ?? "")
   const isEdit = Boolean(cycle)
   const locked = Boolean(cycle?.started)
+  // Once a cycle has started, everyone already in it has an appraisal, so they
+  // stay — but more people can still be ADDED (each gets an appraisal of their
+  // own straight away). Template and review type remain fixed (`locked`).
+  const [existingIds] = useState<string[]>(() =>
+    cycle?.started ? (cycle.eligibleEmployees ?? []).map((employee) => String(employee.id)) : []
+  )
+  const withExisting = (ids: string[]) => Array.from(new Set([...existingIds, ...ids]))
+  const addedCount = eligibleIds.filter((id) => !existingIds.includes(id)).length
 
   const employeeOptions = (employees?.data ?? []).map((employee) => ({
     value: String(employee.id),
     label: `${employee.firstName} ${employee.lastName}`.trim(),
     description: [employee.employeeCode, employee.designation?.title].filter(Boolean).join(" · "),
+    locked: existingIds.includes(String(employee.id)),
+    lockedHint: "Already in this cycle",
   }))
+
+  /**
+   * Every active employee, not just the ones the picker happens to be showing:
+   * the picker's options are a search result capped at one page, so "all" has
+   * to be read page by page from the directory itself.
+   */
+  async function selectAllEmployees() {
+    setSelectingAll(true)
+    try {
+      const ids: string[] = []
+      for (let page = 1; ; page++) {
+        const result = await employeesApi.list({ status: "active", perPage: 100, page })
+        ids.push(...result.data.map((employee) => String(employee.id)))
+        if (page >= result.meta.totalPages) break
+      }
+      setEligibleIds(withExisting(ids))
+    } catch {
+      toast.error("Couldn't load the employee list. Try again.")
+    } finally {
+      setSelectingAll(false)
+    }
+  }
 
   function field(key: keyof typeof EMPTY, label: string, type = "text") {
     return (
@@ -106,7 +141,7 @@ function CycleForm({
     const payload = {
       ...values,
       reviewType,
-      ...(locked ? {} : { eligibleEmployeeIds: eligibleIds }),
+      eligibleEmployeeIds: withExisting(eligibleIds),
     }
     const mutation = isEdit ? updateCycle : createCycle
     mutation.mutate(payload, { onSuccess: () => onOpenChange(false) })
@@ -194,22 +229,44 @@ function CycleForm({
             </p>
           </PanelSection>
 
-          <PanelSection title="Eligible employees">
+          <PanelSection
+            title="Eligible employees"
+            action={
+              <div className="flex items-center gap-1">
+                <Button type="button" size="sm" variant="ghost" disabled={selectingAll} onClick={selectAllEmployees}>
+                  {selectingAll ? "Selecting…" : "Select all"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground"
+                  disabled={selectingAll || eligibleIds.length === existingIds.length}
+                  onClick={() => setEligibleIds(existingIds)}
+                >
+                  Clear
+                </Button>
+              </div>
+            }
+          >
             <MultiSelect
               options={employeeOptions}
               value={eligibleIds}
-              onChange={setEligibleIds}
+              onChange={(next) => setEligibleIds(withExisting(next))}
               onSearchChange={setEmployeeSearch}
               isLoading={employeesLoading}
-              disabled={locked}
               placeholder="Select the employees in this cycle"
               searchPlaceholder="Search active employees…"
               emptyMessage="No active employees match that search."
               aria-label="Eligible employees"
             />
+            <p className="text-xs font-medium text-foreground">
+              {eligibleIds.length} {eligibleIds.length === 1 ? "employee" : "employees"} selected
+              {locked && addedCount > 0 && ` · ${addedCount} new`}
+            </p>
             <p className="text-xs text-muted-foreground">
               {locked
-                ? "This cycle has started — eligibility is fixed."
+                ? "This cycle has started — everyone already in it stays. Anyone you add gets an appraisal of their own, and their self-appraisal opens straight away."
                 : "One appraisal is created per employee when the cycle starts. It goes to each of their manager levels in turn, then to Admin/HR for the final review."}
             </p>
           </PanelSection>

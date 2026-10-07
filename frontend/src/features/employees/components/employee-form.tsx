@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useForm, type FieldErrors } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { InfoIcon, LockIcon, PlusIcon, RefreshCwIcon, XIcon } from "lucide-react"
+import { LockIcon, PlusIcon, RefreshCwIcon, XIcon } from "lucide-react"
 import { cn } from "cn"
 import { toast } from "sonner"
 
@@ -14,6 +14,7 @@ import { DatePicker } from "@/components/ui/date-picker"
 import { PanelSection } from "@/components/ui/panel"
 import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
+import { InfoTip } from "@/components/ui/tooltip"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { MultiSelect, type MultiSelectOption } from "@/components/ui/multi-select"
@@ -22,7 +23,6 @@ import {
   Form,
   FormControl,
   FormField,
-  FormDescription,
   FormItem,
   FormLabel,
   FormMessage,
@@ -56,44 +56,16 @@ import {
   ADDITIONAL_MANAGER_RELATIONSHIPS,
   OTHER_CITY,
 } from "@/features/employees/constants"
+import { AddressLocationFields, DEFAULT_COUNTRY } from "@/features/employees/components/address-location-fields"
+import { digitsOnly, mobileDigits } from "@/features/employees/input-format"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { useDebounced } from "@/hooks/use-debounced"
 import { PERMISSIONS, roleBadgeClasses } from "@/constants/permissions"
 import { API_ORIGIN } from "@/lib/api-client"
 import type { Employee, EmployeeSummary, ReviewChainLevel } from "@/types/employees"
-import { Country, State, City } from "country-state-city"
 
 /** Base UI's Select wants {value,label} items; WORK_LOCATIONS is a plain list. */
 const WORK_LOCATION_OPTIONS = WORK_LOCATIONS.map((value) => ({ value, label: value }))
-
-/**
- * Country → State → City, from the `country-state-city` dataset.
- *
- * NAMES are stored, not ISO codes: the three columns are free text and were
- * free text before these dropdowns existed, so every address already on file
- * holds a name. Writing codes would make the new rows unreadable next to the
- * old ones. The codes are looked up on the way in instead.
- */
-const COUNTRIES = Country.getAllCountries()
-
-/** Every employee is in India; the Country field offers nothing else. */
-const DEFAULT_COUNTRY = "India"
-
-function isoForCountry(name: string) {
-  return COUNTRIES.find((c) => c.name === name)?.isoCode ?? null
-}
-
-function statesOf(countryName: string) {
-  const iso = isoForCountry(countryName)
-  return iso ? State.getStatesOfCountry(iso) : []
-}
-
-function citiesOf(countryName: string, stateName: string) {
-  const countryIso = isoForCountry(countryName)
-  if (!countryIso) return []
-  const stateIso = State.getStatesOfCountry(countryIso).find((st) => st.name === stateName)?.isoCode
-  return stateIso ? City.getCitiesOfState(countryIso, stateIso) : []
-}
 
 /** "1st", "2nd", "3rd", "4th"… for the reporting-level labels. */
 function ordinal(n: number) {
@@ -143,7 +115,7 @@ function FormSection({
   children,
 }: {
   title: string
-  subtitle: string
+  subtitle: React.ReactNode
   children: React.ReactNode
 }) {
   // The shared panel card (uppercase label strip) — the same one the filters use.
@@ -205,23 +177,16 @@ function ChainRow({
       {/* Reaches down through the list's own gap to meet the next node. */}
       {!isLast && <span aria-hidden className="absolute top-6 bottom-[-1.125rem] left-3 w-px bg-border" />}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-foreground">{label}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-medium text-foreground">{label}</span>
+          <InfoTip label={label}>{hint}</InfoTip>
+        </div>
         <span className={cn("text-[11px]", required ? "text-muted-foreground" : "text-muted-foreground/70")}>
           {required ? "Required" : "Optional"}
         </span>
       </div>
       {children}
-      <FieldHint>{hint}</FieldHint>
     </li>
-  )
-}
-
-function FieldHint({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-      <InfoIcon className="mt-px size-3.5 shrink-0" />
-      <span>{children}</span>
-    </p>
   )
 }
 
@@ -262,18 +227,6 @@ function ManagerSlotField({
       emptyMessage="No active employees match that search."
     />
   )
-}
-
-/** Phone and postal code are digits only — anything else is dropped as it is typed or pasted. */
-const digitsOnly = (value: string) => value.replace(/\D/g, "")
-/**
- * A mobile number as its ten digits. No maxLength on the input: the browser
- * would cut a pasted "+91 98765 43210" at ten characters, before the
- * punctuation is gone. The +91 / 91 country code is dropped instead.
- */
-const mobileDigits = (value: string) => {
-  const digits = digitsOnly(value)
-  return (digits.length > 10 && digits.startsWith("91") ? digits.slice(2) : digits).slice(0, 10)
 }
 
 export function EmployeeForm({
@@ -557,37 +510,6 @@ export function EmployeeForm({
     setVisibleChainSlots(Math.max(visibleChainSlots - 1, 1))
   }
 
-  // Country → State → City option lists. Each depends on the one above it, so
-  // they are derived from the watched values rather than held in state — there
-  // is no version of these lists that isn't a function of the current choice.
-  const selectedCountry = form.watch("country") ?? ""
-  const selectedState = form.watch("state") ?? ""
-  const selectedCity = form.watch("city") ?? ""
-
-  // India only. An existing record naming another country keeps it as an
-  // option, so opening the form doesn't silently rewrite their address.
-  const savedCountry = employee?.country
-  const countryOptions = useMemo(
-    () => [
-      { value: DEFAULT_COUNTRY, label: DEFAULT_COUNTRY },
-      ...(savedCountry && savedCountry !== DEFAULT_COUNTRY ? [ { value: savedCountry, label: savedCountry } ] : []),
-    ],
-    [savedCountry]
-  )
-  const stateOptions = useMemo(
-    () => statesOf(selectedCountry).map((st) => ({ value: st.name, label: st.name })),
-    [selectedCountry]
-  )
-  const cityOptions = useMemo(
-    () => [
-      ...citiesOf(selectedCountry, selectedState).map((c) => ({ value: c.name, label: c.name })),
-      // Always last, and always offered: the dataset is large but not complete,
-      // and an address nobody can enter is worse than a free-text box.
-      { value: OTHER_CITY, label: "Other (type it in)" },
-    ],
-    [selectedCountry, selectedState]
-  )
-
   /**
    * The people already holding a slot, so the other slots stop offering them.
    *
@@ -772,18 +694,20 @@ export function EmployeeForm({
                 name="employeeCode"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Employee ID</FormLabel>
+                    <div className="flex items-center gap-1.5">
+                      <FormLabel>Employee ID</FormLabel>
+                      {/* Said out loud rather than left as a silently-filled
+                          field: somebody who did not set the pattern should know
+                          where the value came from before they save it. */}
+                      {!employee && suggestedCode?.employeeCode && (
+                        <InfoTip label="Employee ID">
+                          Suggested from your Initial ID setting. Edit it if you need something else.
+                        </InfoTip>
+                      )}
+                    </div>
                     <FormControl>
                       <Input {...field} placeholder={suggestedCode?.employeeCode ?? "e.g. ACM-007"} />
                     </FormControl>
-                    {/* Said out loud rather than left as a silently-filled
-                        field: somebody who did not set the pattern should know
-                        where the value came from before they save it. */}
-                    {!employee && suggestedCode?.employeeCode && (
-                      <FormDescription>
-                        Suggested from your Initial ID setting. Edit it if you need something else.
-                      </FormDescription>
-                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -793,7 +717,10 @@ export function EmployeeForm({
                 name="dateOfBirth"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Date of birth</FormLabel>
+                    <div className="flex items-center gap-1.5">
+                      <FormLabel>Date of birth</FormLabel>
+                      {!employee && <InfoTip label="Date of birth">Employees must be at least 22 years old.</InfoTip>}
+                    </div>
                     <FormControl>
                       {/* The calendar itself stops at the 22nd birthday, so a
                           date that would be refused can't be picked at all.
@@ -804,7 +731,6 @@ export function EmployeeForm({
                       <DatePicker max={employee ? undefined : maxBirthDateIso()} placeholder="dd/mm/yyyy" clearable {...field} />
                     </FormControl>
                     <FormMessage />
-                    {!employee && <FieldHint>Employees must be at least 22 years old.</FieldHint>}
                   </FormItem>
                 )}
               />
@@ -913,7 +839,10 @@ export function EmployeeForm({
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="employee-work-location">Work location</Label>
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="employee-work-location">Work location</Label>
+                  <InfoTip label="Work location">Faridabad is the head office and the default.</InfoTip>
+                </div>
                 <Select
                   items={WORK_LOCATION_OPTIONS}
                   value={form.watch("workLocation")}
@@ -932,14 +861,21 @@ export function EmployeeForm({
                     ))}
                   </SelectContent>
                 </Select>
-                <FieldHint>Faridabad is the head office and the default.</FieldHint>
               </div>
               <FormField
                 control={form.control}
                 name="dateOfJoining"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Date of joining</FormLabel>
+                    <div className="flex items-center gap-1.5">
+                      <FormLabel>Date of joining</FormLabel>
+                      {!employee && (
+                        <InfoTip label="Date of joining">
+                          Any date in the last {MAX_JOINING_YEARS_BACK} years, or up to{" "}
+                          {MAX_JOINING_DAYS_AHEAD} days ahead.
+                        </InfoTip>
+                      )}
+                    </div>
                     <FormControl>
                       <DatePicker
                         min={employee ? undefined : minJoiningIso()}
@@ -949,12 +885,6 @@ export function EmployeeForm({
                       />
                     </FormControl>
                     <FormMessage />
-                    {!employee && (
-                      <FieldHint>
-                        Any date in the last {MAX_JOINING_YEARS_BACK} years, or up to{" "}
-                        {MAX_JOINING_DAYS_AHEAD} days ahead.
-                      </FieldHint>
-                    )}
                   </FormItem>
                 )}
               />
@@ -963,7 +893,21 @@ export function EmployeeForm({
 
           <FormSection
             title="Reporting manager"
-            subtitle="Who this employee reports to, and in what order"
+            subtitle={
+              // The note covers the whole section rather than one field, so
+              // it hangs off the section's own line. Only for someone who can
+              // assign managers — to a read-only viewer it explains a choice
+              // they aren't offered.
+              <span className="inline-flex items-center gap-1.5">
+                Who this employee reports to, and in what order
+                {canManageManagers && (
+                  <InfoTip label="Reporting managers">
+                    Any active employee can be selected. These are reporting assignments, not system
+                    roles — being someone&apos;s manager grants no extra access.
+                  </InfoTip>
+                )}
+              </span>
+            }
           >
             {canManageManagers ? (
               <>
@@ -1064,7 +1008,10 @@ export function EmployeeForm({
 
                   {ADDITIONAL_MANAGER_RELATIONSHIPS.map((relationship) => (
                     <div key={relationship.value} className="grid gap-1.5">
-                      <Label htmlFor={`employee-${relationship.value}`}>{relationship.label}</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label htmlFor={`employee-${relationship.value}`}>{relationship.label}</Label>
+                        <InfoTip label={relationship.label}>{relationship.hint}</InfoTip>
+                      </div>
                       {relationship.multiple ? (
                         <MultiSelect
                           id={`employee-${relationship.value}`}
@@ -1079,15 +1026,9 @@ export function EmployeeForm({
                           emptyMessage="No active employees match that search."
                         />
                       ) : null}
-                      <FieldHint>{relationship.hint}</FieldHint>
                     </div>
                   ))}
                 </div>
-
-                <FieldHint>
-                  Any active employee can be selected. These are reporting assignments, not system
-                  roles — being someone&apos;s manager grants no extra access.
-                </FieldHint>
               </>
             ) : (
               <>
@@ -1213,7 +1154,16 @@ export function EmployeeForm({
                   name="workEmail"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Work email</FormLabel>
+                      <div className="flex items-center gap-1.5">
+                        <FormLabel>Work email</FormLabel>
+                        <InfoTip label="Work email">
+                          {employee?.user
+                            ? `The address this employee signs in with. Changing it renames their account — they'll sign in with the new one, and it will need verifying again.${workEmailDomain ? ` Must end with @${workEmailDomain}.` : ""}`
+                            : workEmailDomain
+                              ? `Must end with @${workEmailDomain}. Leave blank if this employee needs no login — otherwise they get an email to set their own password, and no password is ever set here.`
+                              : "Leave blank if this employee needs no login. Otherwise they get an email to set their own password — no password is ever set here."}
+                        </InfoTip>
+                      </div>
                       <FormControl>
                         {/* Editable at any time, including after an account
                             exists. Changing it renames that same account
@@ -1228,18 +1178,13 @@ export function EmployeeForm({
                         />
                       </FormControl>
                       <FormMessage />
-                      <FieldHint>
-                        {employee?.user
-                          ? `The address this employee signs in with. Changing it renames their account — they'll sign in with the new one, and it will need verifying again.${workEmailDomain ? ` Must end with @${workEmailDomain}.` : ""}`
-                          : workEmailDomain
-                            ? `Must end with @${workEmailDomain}. Leave blank if this employee needs no login — otherwise they get an email to set their own password, and no password is ever set here.`
-                            : "Leave blank if this employee needs no login. Otherwise they get an email to set their own password — no password is ever set here."}
-                      </FieldHint>
                     </FormItem>
                   )}
                 />
 
-                {/* The password this employee will be emailed.
+                {/* The password set on this employee's account when the form is
+                    saved. Saving only sets it — nothing is emailed and no
+                    change is forced; that is the Send button on their page.
                     
                     On a NEW employee it is prefilled with a generated one: a
                     blank field invites somebody to type "Welcome123", and the
@@ -1258,7 +1203,13 @@ export function EmployeeForm({
                     name="password"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{employee ? "New password" : "Password"}</FormLabel>
+                        <div className="flex items-center gap-1.5">
+                          <FormLabel>{employee ? "New password" : "Password"}</FormLabel>
+                          <InfoTip label="Password">
+                            Saved as their password when you click Save. Nothing is emailed — send it
+                            from the employee&apos;s page, where you also choose whether they must change it.
+                          </InfoTip>
+                        </div>
                         {/* Capped rather than stretched. A generated password
                             is 19 characters, so a field the width of the form
                             is mostly empty box — and the Generate button ends
@@ -1290,7 +1241,13 @@ export function EmployeeForm({
                 </div>
 
                 <div className="grid gap-1.5">
-                  <Label htmlFor="employee-roles">Roles</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="employee-roles">Roles</Label>
+                    <InfoTip label="Roles">
+                      Every account gets the Employee role. Add HR or Admin on top to let this person
+                      manage other employees.
+                    </InfoTip>
+                  </div>
                   <MultiSelect
                     id="employee-roles"
                     aria-label="Roles"
@@ -1307,10 +1264,6 @@ export function EmployeeForm({
                     placeholder="Employee (default)"
                     emptyMessage="No roles defined yet."
                   />
-                  <FieldHint>
-                    Every account gets the Employee role. Add HR or Admin on top to let this person
-                    manage other employees.
-                  </FieldHint>
                 </div>
 
                 {employee?.user?.status === "invited" && (
@@ -1346,7 +1299,10 @@ export function EmployeeForm({
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone</FormLabel>
+                    <div className="flex items-center gap-1.5">
+                      <FormLabel>Phone</FormLabel>
+                      <InfoTip label="Phone">Indian mobile number, with or without +91.</InfoTip>
+                    </div>
                     <FormControl>
                       <Input
                         type="tel"
@@ -1357,7 +1313,6 @@ export function EmployeeForm({
                       />
                     </FormControl>
                     <FormMessage />
-                    <FieldHint>Indian mobile number, with or without +91.</FieldHint>
                   </FormItem>
                 )}
               />
@@ -1405,77 +1360,9 @@ export function EmployeeForm({
               )}
             />
             <div className="grid gap-3.5 sm:grid-cols-2">
-              {/* Country first, then State, then City: each list is derived
-                  from the one above it, so choosing out of order would offer
-                  nothing. Changing a level clears the levels below rather than
-                  leaving a city that no longer belongs to its state. */}
-              <div className="grid gap-1.5">
-                <Label htmlFor="employee-country">Country</Label>
-                <SearchSelect
-                  id="employee-country"
-                  aria-label="Country"
-                  options={countryOptions}
-                  value={form.watch("country") || null}
-                  onChange={(next) => {
-                    form.setValue("country", next ?? DEFAULT_COUNTRY)
-                    form.setValue("state", "")
-                    form.setValue("city", "")
-                    form.setValue("cityOther", "")
-                  }}
-                  placeholder="Select a country"
-                  searchPlaceholder="Search countries…"
-                  emptyMessage="No country matches that search."
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="employee-state">State</Label>
-                <SearchSelect
-                  id="employee-state"
-                  aria-label="State"
-                  options={stateOptions}
-                  value={form.watch("state") || null}
-                  onChange={(next) => {
-                    form.setValue("state", next ?? "")
-                    form.setValue("city", "")
-                    form.setValue("cityOther", "")
-                  }}
-                  clearable
-                  placeholder={selectedCountry ? "Select a state" : "Choose a country first"}
-                  searchPlaceholder="Search states…"
-                  emptyMessage="No state matches that search."
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="employee-city">City</Label>
-                <SearchSelect
-                  id="employee-city"
-                  aria-label="City"
-                  options={cityOptions}
-                  value={form.watch("city") || null}
-                  onChange={(next) => {
-                    form.setValue("city", next ?? "")
-                    if (next !== OTHER_CITY) form.setValue("cityOther", "")
-                  }}
-                  clearable
-                  placeholder={selectedState ? "Select a city" : "Choose a state first"}
-                  searchPlaceholder="Search cities…"
-                  emptyMessage="No city matches that search."
-                />
-                {selectedCity === OTHER_CITY && (
-                  <FormField
-                    control={form.control}
-                    name="cityOther"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input {...field} placeholder="Type the city name" aria-label="City name" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-              </div>
+              {/* Country → State → City, shared with the employee's own
+                  Edit my details panel — see AddressLocationFields. */}
+              <AddressLocationFields form={form} savedCountry={employee?.country} idPrefix="employee" />
               <FormField
                 control={form.control}
                 name="postalCode"
@@ -1521,7 +1408,10 @@ export function EmployeeForm({
                 name="emergencyContactPhone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Contact phone</FormLabel>
+                    <div className="flex items-center gap-1.5">
+                      <FormLabel>Contact phone</FormLabel>
+                      <InfoTip label="Contact phone">Indian mobile number, with or without +91.</InfoTip>
+                    </div>
                     <FormControl>
                       <Input
                         type="tel"
@@ -1532,7 +1422,6 @@ export function EmployeeForm({
                       />
                     </FormControl>
                     <FormMessage />
-                    <FieldHint>Indian mobile number, with or without +91.</FieldHint>
                   </FormItem>
                 )}
               />

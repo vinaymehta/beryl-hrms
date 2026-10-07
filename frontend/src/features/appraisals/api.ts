@@ -57,6 +57,7 @@ export const appraisalCyclesApi = {
   /** Instantiates one appraisal per eligible employee and opens self-appraisals. */
   start: (id: string) => apiClient.post<AppraisalCycleDetail>(`/appraisal_cycles/${id}/start`, {}),
   close: (id: string) => apiClient.patch<AppraisalCycle>(`/appraisal_cycles/${id}/close`, {}),
+  reopen: (id: string) => apiClient.patch<AppraisalCycle>(`/appraisal_cycles/${id}/reopen`, {}),
   /** §16 — the organisation-level view a Final Reviewer calibrates from. */
   calibration: (id: string) => apiClient.get<Calibration>(`/appraisal_cycles/${id}/calibration`),
   remove: (id: string) => apiClient.delete<void>(`/appraisal_cycles/${id}`),
@@ -77,10 +78,19 @@ export const appraisalsApi = {
    * and unversioned, unlike `submitSelf` which mints the immutable V1.
    */
   saveDraft: (id: string, values: unknown) => apiClient.patch<AppraisalDetail>(`/appraisals/${id}/save_draft`, values),
-  // Admin/HR's increment and promotion choice at the Discussion step.
+  // Admin/HR's income, incentive, increment and promotion choice at the Discussion step.
   saveDiscussion: (
     id: string,
-    values: { incrementPercentage: string; promote: boolean | null; proposedDesignationId: string; promotionReason: string }
+    values: {
+      currentCompensation: string
+      incrementPercentage: string
+      approvedCompensation: string
+      currentIncentive: string
+      approvedIncentive: string
+      promote: boolean | null
+      proposedDesignationId: string
+      promotionReason: string
+    }
   ) => apiClient.patch<AppraisalDetail>(`/appraisals/${id}/discussion`, values),
   // A reviewer's own draft at their stage — never the employee's.
   saveReviewDraft: (id: string, values: unknown) =>

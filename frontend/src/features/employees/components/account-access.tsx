@@ -1,35 +1,28 @@
 "use client"
 
 import { useState } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   MailIcon,
   SendIcon,
-  KeyRoundIcon,
   CheckCircle2Icon,
   ClockIcon,
+  CopyIcon,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
 import { PasswordInput } from "@/components/ui/password-input"
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { roleBadgeClasses } from "@/constants/permissions"
-import { generatePassword } from "@/features/employees/generate-password"
+import { toast } from "sonner"
+
+import { employeesApi } from "@/features/employees/api"
 import {
   useInviteEmployee,
   useResetEmployeePassword,
 } from "@/features/employees/hooks/use-employee-mutations"
-import type { Employee } from "@/types/employees"
+import type { AccountActionResult, Employee } from "@/types/employees"
 
 /** The three states an account can be in, as one label the admin can act on. */
 function accountState(account: NonNullable<Employee["user"]>) {
@@ -54,15 +47,16 @@ function formatDate(value: string | null) {
 /**
  * The employee's login account, and what an admin can do to it.
  *
- * There is a password field here, and it is visible to administrators only —
- * the whole panel is behind `canManage`, which is
- * EmployeePolicy#manage_account_access?. The employee looking at their own
- * record never reaches this branch.
+ * The flow: an administrator sets the password in Edit and saves (that only
+ * sets it — Employees::SetPassword), then sends it from here, choosing whether
+ * it must be replaced at first sign-in. Send never changes the password; it
+ * emails the CURRENT one. If the employee later picks their own, that is what
+ * Current password shows (and what a resend would send).
  *
- * The password is prefilled with a generated one rather than left blank. That
- * is deliberate: a blank field invites somebody to type "Welcome123", and the
- * generated value is both stronger than what anyone would choose and already
- * correct, so the fast path and the safe path are the same path.
+ * Current password is masked until revealed, and only administrators see this
+ * section — it is behind `canManage`, which is
+ * EmployeePolicy#manage_account_access?. The employee looking at their own
+ * record never reaches it.
  *
  * What it costs, stated plainly because the previous design avoided it: this
  * password goes out in an email and is known to the administrator who sent
@@ -79,15 +73,19 @@ export function AccountAccess({
 }) {
   const invite = useInviteEmployee()
   const resetPassword = useResetEmployeePassword()
-  const [confirmingReset, setConfirmingReset] = useState(false)
   // Ticked by default, unlike the old invitation flow. There, the employee
   // chose their own password from a link and forcing an immediate change was
   // pure friction. Here the administrator knows it, so replacing it is the
   // point rather than an imposition.
   const [forceChange, setForceChange] = useState(true)
-  const [password, setPassword] = useState(() => generatePassword())
-
   const account = employee.user
+  const queryClient = useQueryClient()
+  const currentKey = ["employees", employee.id, "current-password"]
+  const current = useQuery({
+    queryKey: currentKey,
+    queryFn: () => employeesApi.currentPassword(employee.id),
+    enabled: canManage && !!account,
+  })
 
   if (!account) {
     return (
@@ -101,12 +99,20 @@ export function AccountAccess({
   const StateIcon = state.icon
   const sentOn = formatDate(account.credentialsSentAt)
   const busy = invite.isPending || resetPassword.isPending
+  const hasPassword = !!current.data?.password
 
-  // The sent password is not shown back: it is in the employee's inbox, and
-  // the success toast says where it went. A fresh one is readied for the next
-  // press, so the same password is never sent twice.
-  function onSent() {
-    setPassword(generatePassword())
+  // What went out is exactly the current password; refresh the copy shown.
+  function onSent(result: AccountActionResult) {
+    queryClient.setQueryData(currentKey, { password: result.password })
+  }
+
+  async function copyCurrent(value: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      toast.success("Password copied.")
+    } catch {
+      toast.error("Couldn't copy — select it and copy by hand.")
+    }
   }
 
   return (
@@ -153,31 +159,42 @@ export function AccountAccess({
       </div>
 
       {canManage && (
-        <div className="grid gap-3 border-t pt-4">
-          <div className="grid gap-1.5">
-            <Label htmlFor="account-password">Password to send</Label>
-            {/* No Generate button here. Generating one belongs on the Add and
-                Edit forms, where the password is part of what is being
-                written; this panel is for SENDING it. The field still arrives
-                prefilled, so the common case is press-and-go. */}
-            {/* The width goes on a WRAPPER, not on PasswordInput itself: its
-                className lands on the inner <input>, while the reveal button
-                is positioned against the outer relative div — narrowing only
-                the input leaves the eye stranded out to its right. */}
-            <div className="max-w-72">
-              <PasswordInput
-                id="account-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="new-password"
-                disabled={busy}
-              />
+        <div className="grid gap-1.5 border-t pt-4">
+          <p className="text-xs text-muted-foreground">Current password</p>
+          {current.isLoading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : current.data?.password ? (
+            <div className="flex items-start gap-2">
+              {/* Hidden until the eye is pressed, like the New password field
+                  below — read-only, since this is what they sign in with. */}
+              <div className="min-w-0 max-w-72 flex-1">
+                <PasswordInput
+                  aria-label="Current password"
+                  value={current.data.password}
+                  readOnly
+                  autoComplete="off"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Copy current password"
+                onClick={() => copyCurrent(current.data!.password!)}
+              >
+                <CopyIcon className="size-3.5" />
+              </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Goes to {account.email} and replaces whatever password they have now.
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Not recorded yet — it was set before passwords were kept. Send a new one below to record it.
             </p>
-          </div>
+          )}
+        </div>
+      )}
 
+      {canManage && (
+        <div className="grid gap-3 border-t pt-4">
           <label className="flex cursor-pointer items-start gap-2 text-xs text-muted-foreground">
             <Checkbox
               checked={forceChange}
@@ -192,69 +209,30 @@ export function AccountAccess({
             </span>
           </label>
 
-          <div className="flex flex-wrap gap-2">
-            {account.credentialsUnsent ? (
+          <div className="grid gap-1.5">
+            <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
-                disabled={busy || !password || account.status === "disabled"}
-                onClick={() =>
-                  invite.mutate(
-                    { id: employee.id, password, forcePasswordChange: forceChange },
-                    { onSuccess: onSent }
-                  )
-                }
+                disabled={busy || !hasPassword || account.status === "disabled"}
+                onClick={() => {
+                  const send = account.credentialsUnsent ? invite : resetPassword
+                  send.mutate({ id: employee.id, forcePasswordChange: forceChange }, { onSuccess: onSent })
+                }}
               >
                 <SendIcon className="size-3.5" />
-                {invite.isPending ? "Sending…" : "Send sign-in details"}
+                {busy ? "Sending…" : account.credentialsUnsent ? "Send sign-in details" : "Resend sign-in details"}
               </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                disabled={busy || !password}
-                onClick={() => setConfirmingReset(true)}
-              >
-                <KeyRoundIcon className="size-3.5" />
-                {resetPassword.isPending ? "Sending…" : "Send a new password"}
-              </Button>
-            )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {hasPassword
+                ? `Emails ${account.email} their current password. It doesn't change it — to change it, use Edit and save first.`
+                : "No password set yet. Set one from Edit and save, then send it from here."}
+            </p>
           </div>
         </div>
       )}
-
-      <Dialog open={confirmingReset} onOpenChange={setConfirmingReset}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Send a new password?</DialogTitle>
-            <DialogDescription>
-              {account.email} will be emailed a new password, and their current one stops working
-              straight away. Any session they have open will be signed out.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-            <Button
-              disabled={resetPassword.isPending}
-              onClick={() => {
-                resetPassword.mutate(
-                  { id: employee.id, password, forcePasswordChange: forceChange },
-                  {
-                    onSuccess: () => {
-                      onSent()
-                      setConfirmingReset(false)
-                    },
-                  }
-                )
-              }}
-            >
-              {resetPassword.isPending ? "Sending…" : "Send new password"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

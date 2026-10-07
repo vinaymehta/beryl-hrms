@@ -11,6 +11,7 @@ import type {
 import type { Role } from "@/types/auth"
 import type {
   EmployeePayload,
+  PersonalDetailsPayload,
   DepartmentFormValues,
   DesignationFormValues,
   EmploymentTypeFormValues,
@@ -48,6 +49,11 @@ export const employeesApi = {
   get: (id: string) => apiClient.get<Employee>(`/employees/${id}`),
   create: (values: EmployeePayload) => apiClient.post<Employee>("/employees", values),
   update: (id: string, values: Partial<EmployeePayload>) => apiClient.patch<Employee>(`/employees/${id}`, values),
+  // The employee's own edit from Profile. A separate route from `update`
+  // because it is a separate permission: it accepts only the personal
+  // columns, and anything else in the body is ignored by the server.
+  updatePersonal: (id: string, values: PersonalDetailsPayload) =>
+    apiClient.patch<Employee>(`/employees/${id}/personal`, values),
   // Hits the dedicated /deactivate endpoint (not the plain update route) so
   // it goes through its own permission check (employees.delete) and its own
   // audit trail entry, in both directions — status: "active" reactivates.
@@ -55,23 +61,25 @@ export const employeesApi = {
     apiClient.patch<Employee>(`/employees/${id}/deactivate`, { status }),
   reactivate: (id: string) => apiClient.patch<Employee>(`/employees/${id}`, { status: "active" }),
 
-  // Emails the employee their sign-in details for the first time.
+  // Emails the employee their sign-in details — their CURRENT password, as set
+  // from Edit. It never sets or changes the password.
   //
-  // `password` is omitted to let the server generate one, which is the normal
-  // case — the field on screen is prefilled with a generated value, and an
-  // admin who clears it gets a fresh one rather than an empty password.
-  //
-  // `forcePasswordChange` is likewise omitted rather than sent as false when
+  // `forcePasswordChange` is omitted rather than sent as false when
   // the caller doesn't care: the backend reads absence as "leave whatever the
   // account already carries alone", so a plain re-send can't silently waive a
   // requirement an admin set earlier.
   invite: (id: string, options: CredentialOptions = {}) =>
     apiClient.post<AccountActionResult>(`/employees/${id}/invite`, credentialBody(options)),
 
-  // Issues a NEW password and emails that. The same operation as invite now
-  // that there is no link — they differ only in what the response says.
+  // Emails the current sign-in details again. The same operation as invite —
+  // they differ only in what the response says.
   resetPassword: (id: string, options: CredentialOptions = {}) =>
     apiClient.post<AccountActionResult>(`/employees/${id}/reset_password`, credentialBody(options)),
+
+  // The password the employee signs in with now — administrators only. null
+  // when none has been recorded yet (set before the copy was kept).
+  currentPassword: (id: string) =>
+    apiClient.get<{ password: string | null }>(`/employees/${id}/current_password`),
 
   // The code to prefill the add-employee form with. A suggestion the user can
   // overwrite, not a reservation — nothing is consumed by asking.

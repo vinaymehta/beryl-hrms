@@ -8,9 +8,9 @@ class AppraisalAnswer < ApplicationRecord
   acts_as_tenant(:company)
 
   RATING_RANGE = (1..5).freeze
-  # The scope's rule: a rating at either extreme, or adjacent to one, has to be
-  # justified. 3 is the only rating that can stand without evidence.
-  RATINGS_REQUIRING_COMMENT = [ 1, 2, 4, 5 ].freeze
+  # Every rating has to be justified with evidence — including a middling 3,
+  # which used to be the one rating allowed to stand on its own.
+  RATINGS_REQUIRING_COMMENT = RATING_RANGE.to_a.freeze
 
   belongs_to :company
   belongs_to :appraisal_revision, inverse_of: :answers

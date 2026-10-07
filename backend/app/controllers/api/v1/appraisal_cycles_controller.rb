@@ -101,6 +101,21 @@ module Api
         render_data(Api::V1::AppraisalCycleSerializer.new(cycle.reload).as_json)
       end
 
+      # Puts a closed cycle back in play — typically after correcting it (a
+      # closed cycle can be edited). Its appraisals pick up where they were.
+      def reopen
+        cycle = find_cycle
+        authorize cycle, :reopen?
+        unless cycle.closed?
+          return render json: { errors: [ { code: "not_closed", message: "Only a closed cycle can be reopened." } ] },
+                        status: :unprocessable_content
+        end
+
+        cycle.update!(status: :active, closed_at: nil)
+        ::Audit::Record.call(action: "appraisal_cycle.reopened", auditable: cycle, request: request)
+        render_data(Api::V1::AppraisalCycleSerializer.new(cycle.reload).as_json)
+      end
+
       # A started cycle can be deleted too.
       #
       # It used to be refused, on the reasoning that appraisals in flight are
@@ -161,7 +176,10 @@ module Api
           desired &= current_company.employees.where(id: desired).pluck(:id)
 
           current = cycle.participants.pluck(:employee_id)
-          cycle.participants.where(employee_id: current - desired).destroy_all
+          # Only a cycle that hasn't started can lose people. Once it has, each
+          # participant has an appraisal, so the list can grow but never shrink
+          # from here — an employee left off the submitted list stays in.
+          cycle.participants.where(employee_id: current - desired).destroy_all unless cycle.started?
 
           @participant_result = ::Appraisals::AddParticipants.call(
             cycle: cycle, employee_ids: desired - current, actor: Current.user

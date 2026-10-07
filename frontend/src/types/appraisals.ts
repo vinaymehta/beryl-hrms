@@ -228,6 +228,8 @@ export interface AppraisalViewer {
   /** A reviewer at their own stage — may save their review in progress. */
   canSaveReviewDraft: boolean
   canSubmitSelf: boolean
+  /** Identity documents ("Aadhaar", "PAN") the employee must upload before submitting their self-appraisal. */
+  missingIdentityDocuments: string[]
   canSubmitReview: boolean
   canReturnForCorrection: boolean
   canAdvance: boolean
@@ -523,7 +525,20 @@ export interface Calibration {
 
 /** The Discussion step's choice, made by Admin/HR before release. */
 export interface AppraisalDiscussion {
+  /**
+   * Previous income — as saved, or, until it is, the employee's latest pay
+   * record (only for a viewer who may read pay records).
+   */
+  currentCompensation: string | null
+  /** True when `currentCompensation` came from the pay record, not a save. */
+  currentCompensationPrefilled: boolean
   incrementPercentage: string | null
+  /** New income. */
+  approvedCompensation: string | null
+  /** Incentive before the decision; pay records hold none, so never pre-filled. */
+  currentIncentive: string | null
+  /** New incentive. */
+  approvedIncentive: string | null
   /** true = promote, false = not promoting, null = not decided yet. */
   promote: boolean | null
   proposedDesignationId: string | null

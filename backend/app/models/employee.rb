@@ -264,6 +264,18 @@ class Employee < ApplicationRecord
     "#{first_name} #{last_name}".strip
   end
 
+  # Identity documents an employee must have on file before submitting a
+  # self-appraisal. Key → the name shown to them.
+  REQUIRED_IDENTITY_DOCUMENTS = { "aadhaar" => "Aadhaar", "pan" => "PAN" }.freeze
+
+  # Names of the required identity documents with no uploaded file on this
+  # employee's profile, e.g. ["Aadhaar", "PAN"]; empty once both are there.
+  def missing_identity_documents
+    present = documents.where(document_type: REQUIRED_IDENTITY_DOCUMENTS.keys)
+                       .joins(:file_attachment).distinct.pluck(:document_type)
+    REQUIRED_IDENTITY_DOCUMENTS.except(*present).values
+  end
+
   # The employment fields whose changes are worth a history entry, mapped to
   # the event type each produces. Address and phone are deliberately absent:
   # correcting a typo in a postcode is not an employment event.

@@ -1,10 +1,12 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  BookOpenIcon,
   CalendarDaysIcon,
   CheckIcon,
   CloudIcon,
@@ -22,6 +24,7 @@ import { cn } from "cn"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { AppraisalStatusBadge } from "@/features/appraisals/components/appraisal-badges"
 import { AppraisalWorkflowTimeline } from "@/features/appraisals/components/appraisal-workflow-timeline"
 import { PerformanceAreaList } from "@/features/appraisals/components/performance-area-list"
@@ -476,7 +479,10 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
   }
 
   const isPending = submitSelf.isPending || submitReview.isPending
-  const canSubmit = unrated === 0 && missingEvidence === 0
+  // The server refuses a self-appraisal while Aadhaar or PAN is missing from the
+  // employee's profile; say so here instead of letting Submit fail.
+  const missingDocuments = viewer.canSubmitSelf ? (viewer.missingIdentityDocuments ?? []) : []
+  const canSubmit = unrated === 0 && missingEvidence === 0 && missingDocuments.length === 0
 
   // --- the panels beneath ---------------------------------------------------
 
@@ -557,8 +563,23 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
         Step {stepIndex + 1} of {steps.length} · {current.title}
       </p>
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,65fr)_minmax(0,35fr)]">
+      <div className="grid items-start gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
         <div className="grid min-w-0 gap-4">
+          {/* At the top, so it's read before the form is filled in rather
+              than discovered at the Submit button. */}
+          {missingDocuments.length > 0 && (
+            <div role="alert" className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
+              <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-warning" />
+              <p>
+                Upload your {missingDocuments.join(" and ")} on your profile before you can submit your
+                self-appraisal.{" "}
+                <Link href="/profile?tab=documents" className="font-medium underline underline-offset-2">
+                  Go to Documents
+                </Link>
+              </p>
+            </div>
+          )}
+
           {current.key === "areas" && (
             <PerformanceAreaList
               categories={categories}
@@ -610,99 +631,118 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
               valueOf={valueOf}
               weightedScore={estimatedScore}
               outstanding={outstanding}
+              documentsMissing={missingDocuments.length > 0}
               onGoToStep={(key: string) => goTo(steps.findIndex((entry) => entry.key === key))}
             />
           )}
 
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-            <Button
-              variant="outline"
-              className="gap-1.5"
-              disabled={stepIndex === 0}
-              onClick={() => goTo(stepIndex - 1)}
-            >
-              <ArrowLeftIcon className="size-4" /> Back
-            </Button>
-            <Button variant="ghost" disabled={!saveDraft || saveDraft.isPending} onClick={() => persist()}>
-              Save draft
-            </Button>
+          <div className="grid gap-2 border-t pt-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Button
+                variant="outline"
+                className="gap-1.5"
+                disabled={stepIndex === 0}
+                onClick={() => goTo(stepIndex - 1)}
+              >
+                <ArrowLeftIcon className="size-4" /> Back
+              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" disabled={!saveDraft || saveDraft.isPending} onClick={() => persist()}>
+                  Save
+                </Button>
+                {primaryAction}
+              </div>
+            </div>
+            <p className="text-right text-[11px] text-muted-foreground">Your progress is saved automatically</p>
           </div>
         </div>
 
-        {/* The standing summary. Everything in it is derived from what has
-              been entered — there is nothing to fill in here. */}
-        {/* Tighter than the left column and pinned to the top of it: this
-              is a running total, read at a glance and returned to, so height
-              spent on it is height taken from the form being filled in. */}
-        <aside className="grid content-start gap-2.5 lg:sticky lg:top-4">
-          <section className="grid gap-2 rounded-xl border p-3">
-            <h3 className="flex items-center gap-2 text-sm font-semibold">
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-role-hr/12 text-role-hr">
-                <TargetIcon className="size-3.5" />
-              </span>
-              Your progress
-            </h3>
-            <div className="flex items-center gap-3">
-              <div className="relative flex shrink-0 items-center justify-center">
-                <ProgressRing percent={percentComplete} />
-                <span className="absolute text-xs font-semibold tabular-nums">
-                  {percentComplete}%
-                </span>
-              </div>
-              <div className="min-w-0">
-                <p className="text-lg leading-tight font-semibold tabular-nums">
-                  {completedAreas} of {categories.length}
-                </p>
-                <p className="text-xs text-muted-foreground">areas completed</p>
-              </div>
-            </div>
-          </section>
-
-          <section className="grid gap-2 rounded-xl border p-3">
-            <h3 className="text-sm font-semibold">Selected ratings</h3>
-            <ul className="grid gap-1.5">
-              {areaProgress.map(({ category, average }) => (
-                <li key={category.id} className="flex items-center gap-2 text-xs">
-                  <span className="min-w-0 flex-1 truncate">{category.name}</span>
-                  {average == null ? (
-                    <span className="shrink-0 text-muted-foreground">Not rated</span>
-                  ) : (
-                    <span className="shrink-0 font-semibold tabular-nums">
-                      {Number.isInteger(average) ? average : average.toFixed(1)}{" "}
-                      <span className="font-normal text-muted-foreground">/ {ratingMax}</span>
+        {/* The standing summary, folded into icons so the form keeps the full
+              width: progress (with the running percentage under its icon) and
+              the rating guide, each opened on a click. */}
+        <aside className="flex gap-2 sm:sticky sm:top-4 sm:flex-col" aria-label="Appraisal helpers">
+          <Popover>
+            <PopoverTrigger
+              aria-label="Your progress"
+              className="flex w-14 flex-col items-center gap-0.5 rounded-xl border bg-background p-2 text-role-hr transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-popup-open:bg-muted"
+            >
+              <TargetIcon className="size-4.5" />
+              <span className="text-[10px] font-semibold tabular-nums text-foreground">{percentComplete}%</span>
+            </PopoverTrigger>
+            <PopoverContent side="left" align="start" className="grid w-80 gap-2.5 p-3">
+                <section className="grid gap-2 rounded-xl border p-3">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-role-hr/12 text-role-hr">
+                      <TargetIcon className="size-3.5" />
                     </span>
-                  )}
-                </li>
-              ))}
-            </ul>
+                    Your progress
+                  </h3>
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex shrink-0 items-center justify-center">
+                      <ProgressRing percent={percentComplete} />
+                      <span className="absolute text-xs font-semibold tabular-nums">
+                        {percentComplete}%
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-lg leading-tight font-semibold tabular-nums">
+                        {completedAreas} of {categories.length}
+                      </p>
+                      <p className="text-xs text-muted-foreground">areas completed</p>
+                    </div>
+                  </div>
+                </section>
 
-            <div className="mt-1 grid gap-1.5 border-t pt-3">
-              <p className="text-xs font-medium text-muted-foreground">Estimated overall score</p>
-              <p className="text-2xl leading-none font-bold tabular-nums">
-                {estimatedScore == null ? "—" : estimatedScore.toFixed(1)}
-                <span className="text-base font-normal text-muted-foreground"> / {ratingMax}</span>
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Based on completed ratings (weighted)
-              </p>
-              <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-role-hr transition-[width] duration-500"
-                  style={{ width: `${estimatedScore == null ? 0 : (estimatedScore / ratingMax) * 100}%` }}
-                />
-              </div>
-            </div>
-          </section>
+                <section className="grid gap-2 rounded-xl border p-3">
+                  <h3 className="text-sm font-semibold">Selected ratings</h3>
+                  <ul className="grid gap-1.5">
+                    {areaProgress.map(({ category, average }) => (
+                      <li key={category.id} className="flex items-center gap-2 text-xs">
+                        <span className="min-w-0 flex-1 truncate">{category.name}</span>
+                        {average == null ? (
+                          <span className="shrink-0 text-muted-foreground">Not rated</span>
+                        ) : (
+                          <span className="shrink-0 font-semibold tabular-nums">
+                            {Number.isInteger(average) ? average : average.toFixed(1)}{" "}
+                            <span className="font-normal text-muted-foreground">/ {ratingMax}</span>
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
 
-          <div className="grid gap-1.5">
-            {primaryAction}
-            <p className="text-center text-[11px] text-muted-foreground">
-              Your progress is saved automatically
-            </p>
-          </div>
+                  <div className="mt-1 grid gap-1.5 border-t pt-3">
+                    <p className="text-xs font-medium text-muted-foreground">Estimated overall score</p>
+                    <p className="text-2xl leading-none font-bold tabular-nums">
+                      {estimatedScore == null ? "—" : estimatedScore.toFixed(1)}
+                      <span className="text-base font-normal text-muted-foreground"> / {ratingMax}</span>
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Based on completed ratings (weighted)
+                    </p>
+                    <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-role-hr transition-[width] duration-500"
+                        style={{ width: `${estimatedScore == null ? 0 : (estimatedScore / ratingMax) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                </section>
+            </PopoverContent>
+          </Popover>
 
-          {/* Shown once for the whole form, always in view while rating. */}
-          <RatingGuide guide={appraisal.template.structure?.ratingGuide} />
+          <Popover>
+            <PopoverTrigger
+              aria-label="Rating guide"
+              className="flex w-14 flex-col items-center gap-0.5 rounded-xl border bg-background p-2 text-role-hr transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-popup-open:bg-muted"
+            >
+              <BookOpenIcon className="size-4.5" />
+              <span className="text-[10px] font-medium text-foreground">Guide</span>
+            </PopoverTrigger>
+            <PopoverContent side="left" align="start" className="max-h-(--available-height) w-80 overflow-y-auto p-0">
+              <RatingGuide guide={appraisal.template.structure?.ratingGuide} />
+            </PopoverContent>
+          </Popover>
         </aside>
       </div>
     </div>
@@ -828,7 +868,7 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
 
   const primaryAction = isLast ? (
     <Button
-      className="w-full gap-1.5 bg-role-hr text-role-hr-foreground shadow-2xs hover:bg-role-hr/90"
+      className="gap-1.5 bg-role-hr text-role-hr-foreground shadow-2xs hover:bg-role-hr/90"
       disabled={isPending || !canSubmit}
       onClick={submit}
     >
@@ -841,10 +881,10 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
     </Button>
   ) : (
     <Button
-      className="w-full gap-1.5 bg-role-hr text-role-hr-foreground shadow-2xs hover:bg-role-hr/90"
+      className="gap-1.5 bg-role-hr text-role-hr-foreground shadow-2xs hover:bg-role-hr/90"
       onClick={() => goTo(stepIndex + 1)}
     >
-      Continue to next step <ArrowRightIcon className="size-4" />
+      Next <ArrowRightIcon className="size-4" />
     </Button>
   )
 
@@ -1170,6 +1210,7 @@ function FinalReviewPanel({
   valueOf,
   weightedScore,
   outstanding,
+  documentsMissing,
   onGoToStep,
 }: {
   appraisal: AppraisalDetail
@@ -1179,6 +1220,8 @@ function FinalReviewPanel({
   valueOf: (key: string) => string
   weightedScore: number | null
   outstanding: { id: string; where: string; reason: string }[]
+  /** Aadhaar/PAN still missing — the warning at the top of the form says so. */
+  documentsMissing: boolean
   onGoToStep: (key: string) => void
 }) {
   // The top of the template's own rating scale — not a fixed 5.
@@ -1188,45 +1231,50 @@ function FinalReviewPanel({
 
   return (
     <div className="grid gap-4">
-      <div
-        className={cn(
-          "flex flex-wrap items-center gap-2 rounded-xl border px-4 py-3 text-sm",
-          complete
-            ? "border-success/40 bg-success/5 text-success"
-            : "border-warning/40 bg-warning/5 text-warning"
-        )}
-      >
-        {complete ? (
-          <>
-            <CheckIcon className="size-4" />
-            <span>Everything is filled in. Read it through, then submit.</span>
-          </>
-        ) : (
-          <>
-            <TriangleAlertIcon className="size-4" />
-            <span>
-              {outstanding.length} item{outstanding.length === 1 ? "" : "s"} still to finish
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-auto"
-              onClick={() => onGoToStep("areas")}
-            >
-              Fix in Performance Areas
-            </Button>
-            {/* Named, not counted. Which one is missing is the whole question
-                the reader has when they believe they filled everything in. */}
-            <ul className="w-full grid gap-1 border-t border-current/20 pt-2">
-              {outstanding.map((item) => (
-                <li key={`${item.id}-${item.reason}`} className="text-xs">
-                  {item.where} — {item.reason}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </div>
+      {/* Not the green "go ahead and submit" while documents are still
+          missing — that would contradict the warning above and the disabled
+          Submit button. The form's own state is then left to the warning. */}
+      {!(complete && documentsMissing) && (
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-2 rounded-xl border px-4 py-3 text-sm",
+            complete
+              ? "border-success/40 bg-success/5 text-success"
+              : "border-warning/40 bg-warning/5 text-warning"
+          )}
+        >
+          {complete ? (
+            <>
+              <CheckIcon className="size-4" />
+              <span>Everything is filled in. Read it through, then submit.</span>
+            </>
+          ) : (
+            <>
+              <TriangleAlertIcon className="size-4" />
+              <span>
+                {outstanding.length} item{outstanding.length === 1 ? "" : "s"} still to finish
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto"
+                onClick={() => onGoToStep("areas")}
+              >
+                Fix in Performance Areas
+              </Button>
+              {/* Named, not counted. Which one is missing is the whole question
+                  the reader has when they believe they filled everything in. */}
+              <ul className="w-full grid gap-1 border-t border-current/20 pt-2">
+                {outstanding.map((item) => (
+                  <li key={`${item.id}-${item.reason}`} className="text-xs">
+                    {item.where} — {item.reason}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-2 sm:grid-cols-3">
         <Stat

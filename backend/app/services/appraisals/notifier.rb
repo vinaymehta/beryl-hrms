@@ -13,7 +13,7 @@ module Appraisals
         category: "appraisal.self_appraisal_opened",
         title: "Your self-appraisal is open",
         body: "#{appraisal.appraisal_cycle.name} — complete and submit your self-appraisal#{deadline_phrase(appraisal.appraisal_cycle.employee_submission_deadline)}.",
-        email_context: context_for(appraisal, action: "Complete and submit your self-appraisal", stage: "Self-appraisal")
+        email_context: context_for(appraisal, action: "Complete and submit your self-appraisal", stage: "Self-appraisal", deadline: :employee)
       )
     end
 
@@ -23,7 +23,7 @@ module Appraisals
         category: "appraisal.submission_due",
         title: "Your self-appraisal is due soon",
         body: "#{appraisal.appraisal_cycle.name} — your self-appraisal is still to be submitted#{deadline_phrase(appraisal.appraisal_cycle.employee_submission_deadline)}.",
-        email_context: context_for(appraisal, action: "Submit your self-appraisal", stage: "Self-appraisal")
+        email_context: context_for(appraisal, action: "Submit your self-appraisal", stage: "Self-appraisal", deadline: :employee)
       )
     end
 
@@ -35,7 +35,7 @@ module Appraisals
       kwargs = {
         category: "appraisal.overdue",
         title: "Appraisal action overdue",
-        email_context: context_for(appraisal, action: "This is past its deadline", stage: stage_label(appraisal))
+        email_context: context_for(appraisal, action: "This is past its deadline", stage: stage_label(appraisal), deadline: role.to_sym)
       }
 
       case role.to_s
@@ -58,7 +58,8 @@ module Appraisals
         category: "appraisal.review_pending",
         title: "An appraisal is waiting for your review",
         body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}. You are the level #{level} reviewer.",
-        email_context: context_for(appraisal, action: "Review and submit your assessment", stage: "Level #{level} manager review")
+        email_context: context_for(appraisal, action: "Review and submit your assessment", stage: "Level #{level} manager review",
+                                                deadline: :manager)
       )
     end
 
@@ -70,7 +71,7 @@ module Appraisals
         category: "appraisal.review_pending",
         title: "An appraisal is ready for final review",
         body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}. The manager reviews are complete.",
-        email_context: context_for(appraisal, action: "Complete the final review", stage: "Final review")
+        email_context: context_for(appraisal, action: "Complete the final review", stage: "Final review", deadline: :final)
       )
     end
 
@@ -85,7 +86,8 @@ module Appraisals
         category: "appraisal.ready_for_release",
         title: "An appraisal is ready to release",
         body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}. The final review is complete.",
-        email_context: context_for(appraisal, action: "Release the appraisal to the employee", stage: "Ready to release")
+        email_context: context_for(appraisal, action: "Release the appraisal to the employee", stage: "Ready to release",
+                                  deadline: :final)
       )
     end
 
@@ -95,7 +97,8 @@ module Appraisals
         category: "appraisal.returned",
         title: "Your appraisal was returned for correction",
         body: note.presence || "Your appraisal has been reopened — please review and resubmit.",
-        email_context: context_for(appraisal, action: "Review the feedback and resubmit", stage: "Returned for correction")
+        email_context: context_for(appraisal, action: "Review the feedback and resubmit", stage: "Returned for correction",
+                                  deadline: :employee)
       )
     end
 
@@ -149,14 +152,28 @@ module Appraisals
     # is at and what is being asked. No ratings, no scores, no review
     # commentary — an appraisal's content stays behind the login, and mail is
     # the one channel whose audience we do not control.
-    def self.context_for(appraisal, action:, stage: nil)
+    #
+    # `deadline:` names WHOSE deadline applies to this message — the step being
+    # asked for, not always the self-appraisal one. It used to print the
+    # employee submission date on every email, so a manager asked to review was
+    # shown the employee's (already past) date instead of their own. nil for
+    # messages that ask nobody to do anything by a date (released, acknowledged).
+    DEADLINES = {
+      employee: [ "Self-appraisal deadline", :employee_submission_deadline ],
+      manager: [ "Manager review deadline", :primary_review_deadline ],
+      final: [ "Final review deadline", :finalization_deadline ]
+    }.freeze
+
+    def self.context_for(appraisal, action:, stage: nil, deadline: nil)
       cycle = appraisal.appraisal_cycle
+      label, column = DEADLINES[deadline]
+      date = column && cycle.public_send(column)
       [
         [ "Employee", appraisal.employee.full_name ],
         [ "Appraisal cycle", cycle.name ],
         stage.present? ? [ "Stage", stage ] : nil,
         [ "Action required", action ],
-        cycle.employee_submission_deadline.present? ? [ "Deadline", cycle.employee_submission_deadline.strftime("%-d %b %Y") ] : nil
+        date.present? ? [ label, date.strftime("%-d %b %Y") ] : nil
       ].compact
     end
 
