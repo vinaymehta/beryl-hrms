@@ -239,6 +239,23 @@ module Api
 
       # Reopens the self-appraisal. Destroys nothing: the next submission simply
       # becomes the next version number.
+      # PATCH /appraisals/:id/skip_final_review — Admin/HR choosing not to write
+      # a Final review: the appraisal moves on to Discussion as it would after
+      # one, and the last manager's review (and its score) stands as the final.
+      def skip_final_review
+        appraisal = find_appraisal
+        authorize appraisal, :skip_final_review?
+        ActiveRecord::Base.transaction do
+          appraisal.update!(review_drafts: appraisal.review_drafts.except(appraisal.review_draft_key))
+          ::Appraisals::Workflow.new(
+            appraisal: appraisal, to: :appraisal_discussion, actor: Current.user,
+            notes: params[:notes].presence || "Final review skipped — the last manager review stands"
+          ).call
+        end
+        ::Audit::Record.call(action: "appraisal.final_review_skipped", auditable: appraisal, request: request)
+        render_detail(appraisal)
+      end
+
       def return_for_correction
         appraisal = find_appraisal
         authorize appraisal, :return_for_correction?
@@ -352,7 +369,9 @@ module Api
       def export
         appraisal = find_appraisal
         authorize appraisal, :show?
-        exporter = ::Appraisals::WorkbookExporter.new(appraisal: appraisal)
+        # The reviewer whose turn it is gets their review form; anyone else the
+        # employee's self-appraisal workbook.
+        exporter = ::Appraisals::WorkbookExporter.new(appraisal: appraisal, reviewer: policy(appraisal).submit_review?)
         ::Audit::Record.call(action: "appraisal.workbook_exported", auditable: appraisal, request: request)
         send_data exporter.call,
                   filename: exporter.filename,
@@ -361,13 +380,14 @@ module Api
       end
 
       # Upload → Validate → Parse → PREVIEW. Persists nothing: the parsed rows
-      # go back to the employee, who confirms them in the form and submits
-      # through #submit_self like any other self-appraisal. The spreadsheet is
+      # go back to the employee (or the reviewer whose turn it is), who checks
+      # them in the form and submits through #submit_self / #submit_review. The spreadsheet is
       # an input convenience; the database remains the system of record.
       def import_preview
         appraisal = find_appraisal
-        authorize appraisal, :submit_self?
-        preview = ::Appraisals::SelfAppraisalImport.call(appraisal: appraisal, file: params[:file])
+        reviewer = policy(appraisal).submit_review?
+        authorize appraisal, reviewer ? :submit_review? : :submit_self?
+        preview = ::Appraisals::SelfAppraisalImport.call(appraisal: appraisal, file: params[:file], reviewer: reviewer)
         ::Audit::Record.call(action: "appraisal.workbook_imported", auditable: appraisal, request: request)
         # Camelised here rather than by Alba: this is a plain Hash from a
         # service, not a serialized record, so it never passes through

@@ -9,59 +9,9 @@ import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { LensBadge } from "@/features/appraisals/components/appraisal-badges"
 import { appraisalTemplatesApi } from "@/features/appraisals/api"
 import { ApiError } from "@/types/api"
 import type { TemplateImportPreview } from "@/types/appraisals"
-
-/**
- * The spreadsheet path into the template builder: Upload → Validate → Parse →
- * PREVIEW → admin confirms → Save.
- *
- * The upload writes nothing. What comes back is reviewed here and then loaded
- * into the builder, where it is edited and created through the ordinary
- * endpoint — so an imported template passes exactly the same rules as a typed
- * one, including the 100% weight total.
- */
-
-/** One detected section, listed so the admin can see it survived the import. */
-function DetectedSection({
-  title,
-  count,
-  children,
-}: {
-  title: string
-  count: number
-  children: React.ReactNode
-}) {
-  if (count === 0) return null
-
-  return (
-    <div className="grid gap-1 rounded-lg border p-2.5">
-      <p className="flex items-center justify-between gap-2 text-xs font-semibold">
-        {title}
-        <Badge variant="outline" className="tabular-nums">
-          {count}
-        </Badge>
-      </p>
-      {children}
-    </div>
-  )
-}
-
-/** Labels with whatever the workbook already had typed against them. */
-function FieldList({ fields }: { fields: { label: string; value: string | null }[] }) {
-  return (
-    <ul className="grid gap-0.5">
-      {fields.map((field) => (
-        <li key={field.label} className="flex items-start justify-between gap-2 text-xs text-muted-foreground">
-          <span>· {field.label}</span>
-          {field.value && <span className="shrink-0 font-medium text-foreground">{field.value}</span>}
-        </li>
-      ))}
-    </ul>
-  )
-}
 
 export function TemplateImportPanel({
   onUse,
@@ -75,7 +25,15 @@ export function TemplateImportPanel({
   async function handleFile(file: File) {
     setIsUploading(true)
     try {
-      setPreview(await appraisalTemplatesApi.importPreview(file))
+      const result = await appraisalTemplatesApi.importPreview(file)
+      // Loaded straight into the builder — no second "load" step. What was
+      // read stays listed above it, and anything the file got wrong is still
+      // reported; a file with no categories loads nothing.
+      if (result.categories.length > 0) {
+        onUse(result)
+        toast.success("Loaded into the builder — review it, then create the template.")
+      }
+      setPreview(result)
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Couldn't read that file.")
       setPreview(null)
@@ -200,112 +158,11 @@ export function TemplateImportPanel({
             </div>
           )}
 
-          <ul className="grid max-h-80 gap-1.5 overflow-y-auto">
-            {preview.categories.map((category) => (
-              <li key={`${category.name}-${category.position}`} className="grid gap-1 rounded-lg border p-2.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-medium">{category.name}</p>
-                  <div className="flex items-center gap-1.5">
-                    {category.lens ? (
-                      <LensBadge lens={category.lens} />
-                    ) : (
-                      <Badge variant="outline" className="text-muted-foreground">
-                        Perspective not set
-                      </Badge>
-                    )}
-                    <Badge variant="outline" className="tabular-nums">
-                      {category.weight}%
-                    </Badge>
-                  </div>
-                </div>
-                <ul className="grid gap-0.5">
-                  {category.questions.map((question, index) => (
-                    <li key={`${question.prompt}-${index}`} className="text-xs text-muted-foreground">
-                      · {question.prompt}
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            ))}
-          </ul>
-
-          {/* Everything else the workbook carried. Shown before saving so the
-              admin can confirm it was all read — the importer used to stop at
-              the totals row and discard every one of these sections. */}
-          {(preview.perspectives?.length ?? 0) +
-            (preview.developmentFields?.length ?? 0) +
-            (preview.finalReviewFields?.length ?? 0) +
-            (preview.ratingGuide?.length ?? 0) >
-            0 && (
-            <div className="grid gap-1.5">
-              <p className="text-xs font-semibold">Also detected in this workbook</p>
-
-              <DetectedSection
-                title="Employee information fields"
-                count={preview.employeeFields?.fields.length ?? 0}
-              >
-                <FieldList fields={preview.employeeFields?.fields ?? []} />
-                {(preview.employeeFields?.missing.length ?? 0) > 0 && (
-                  <p className="text-xs text-warning">
-                    Not found: {preview.employeeFields!.missing.join(", ")}
-                  </p>
-                )}
-              </DetectedSection>
-
-              <DetectedSection title="Performance perspectives" count={preview.perspectives?.length ?? 0}>
-                <ul className="grid gap-0.5">
-                  {preview.perspectives?.map((perspective) => (
-                    <li
-                      key={perspective.name}
-                      className="flex items-start justify-between gap-2 text-xs text-muted-foreground"
-                    >
-                      <span>· {perspective.name}</span>
-                      <span className="shrink-0 tabular-nums">{perspective.weight}%</span>
-                    </li>
-                  ))}
-                </ul>
-              </DetectedSection>
-
-              <DetectedSection
-                title="Development & career discussion"
-                count={preview.developmentFields?.length ?? 0}
-              >
-                <FieldList fields={preview.developmentFields ?? []} />
-              </DetectedSection>
-
-              <DetectedSection title="Final review" count={preview.finalReviewFields?.length ?? 0}>
-                <FieldList fields={preview.finalReviewFields ?? []} />
-              </DetectedSection>
-
-              <DetectedSection title="Rating guide" count={preview.ratingGuide?.length ?? 0}>
-                <ul className="grid gap-0.5">
-                  {preview.ratingGuide?.map((row) => (
-                    <li key={row.rating ?? row.level} className="text-xs text-muted-foreground">
-                      · <span className="font-medium text-foreground">{row.rating}</span> {row.level} —{" "}
-                      {row.definition}
-                    </li>
-                  ))}
-                </ul>
-              </DetectedSection>
-            </div>
-          )}
-
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <p className="mr-auto text-xs text-muted-foreground">
-              Loading this replaces what is in the builder below — you can still edit everything before saving.
-            </p>
-            <Button
-              size="sm"
-              disabled={preview.categories.length === 0}
-              onClick={() => {
-                onUse(preview)
-                setPreview(null)
-                toast.success("Loaded into the builder — review it, then create the template.")
-              }}
-            >
-              Load into builder
-            </Button>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            {preview.categories.length > 0
+              ? "Loaded into the builder below — you can still edit everything before creating the template."
+              : "Nothing was loaded: no categories were found in this file."}
+          </p>
         </div>
       )}
     </section>

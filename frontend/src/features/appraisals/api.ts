@@ -103,6 +103,8 @@ export const appraisalsApi = {
     apiClient.post<AppraisalDetail>(`/appraisals/${id}/submit_review`, values),
   advance: (id: string, to: string, notes?: string) =>
     apiClient.patch<AppraisalDetail>(`/appraisals/${id}/advance`, { to, notes }),
+  /** Passing on the (optional) Final review: on to Discussion, the last manager review standing. */
+  skipFinalReview: (id: string) => apiClient.patch<AppraisalDetail>(`/appraisals/${id}/skip_final_review`, {}),
   returnForCorrection: (id: string, notes?: string) =>
     apiClient.patch<AppraisalDetail>(`/appraisals/${id}/return_for_correction`, { notes }),
   overrideScore: (id: string, score: number, reason: string) =>

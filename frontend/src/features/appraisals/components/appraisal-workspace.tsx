@@ -32,7 +32,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
@@ -65,7 +64,9 @@ import {
   NARRATIVE_FIELDS,
   ratingScaleFrom,
   templateFieldAudience,
-  type NarrativeKey, formatRating } from "@/features/appraisals/constants"
+  type NarrativeKey,
+  formatRating,
+} from "@/features/appraisals/constants"
 import {
   useSaveReviewDraft,
   useSaveSelfAppraisalDraft,
@@ -233,7 +234,15 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
   const categories = appraisal.template.categories
   // A reviewer resumes their own review draft; the employee their self draft.
   const draft = forReviewer ? appraisal.reviewDraft : appraisal.selfAppraisalDraft
-  const formRole: FormRole = !forReviewer ? "employee" : appraisal.status === "final_review" ? "admin" : "manager"
+  const formRole: FormRole = !forReviewer
+    ? "employee"
+    : appraisal.status === "final_review"
+      ? "admin"
+      : "manager"
+  // The Final review is Admin/HR's own optional pass over the managers'
+  // reviews: any of it may be left blank and submitted, which moves the
+  // appraisal on to Discussion with the last manager review standing.
+  const fieldsOptional = formRole === "admin"
   const sections = useMemo(
     () => narrativeSections(appraisal.template, formRole),
     [appraisal.template, formRole]
@@ -368,12 +377,12 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
               ? category.name
               : `${category.name} — ${question.prompt}`
           if ((answer?.rating ?? null) == null)
-            return [{ id: question.id, where, reason: "not rated" }]
+            return fieldsOptional ? [] : [{ id: question.id, where, reason: "not rated" }]
           if (needsEvidence(answer)) return [{ id: question.id, where, reason: "needs evidence" }]
           return []
         })
       ),
-    [categories, answers]
+    [categories, answers, fieldsOptional]
   )
 
   const unrated = outstanding.filter((item) => item.reason === "not rated").length
@@ -587,12 +596,18 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
           {/* At the top, so it's read before the form is filled in rather
               than discovered at the Submit button. */}
           {missingDocuments.length > 0 && (
-            <div role="alert" className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-foreground"
+            >
               <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-warning" />
               <p>
-                Upload your {missingDocuments.join(" and ")} on your profile before you can submit your
-                self-appraisal.{" "}
-                <Link href="/profile?tab=documents" className="font-medium underline underline-offset-2">
+                Upload your {missingDocuments.join(" and ")} on your profile before you can submit
+                your self-appraisal.{" "}
+                <Link
+                  href="/profile?tab=documents"
+                  className="font-medium underline underline-offset-2"
+                >
                   Go to Documents
                 </Link>
               </p>
@@ -612,23 +627,7 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
                   ? `${referenceRevision.label} · ${referenceRevision.authorName}`
                   : undefined
               }
-              // The workbook route sits on the heading row rather than in a
-              // panel of its own above it — it is another way to fill THIS
-              // section in, not a thing in its own right.
-              action={
-                <>
-                  {viewer.canSubmitSelf && (
-                    <SelfAppraisalImport
-                      appraisalId={appraisal.id}
-                      onConfirm={applyImported}
-                      compact
-                      hideButtons
-                      controlRef={importRef}
-                    />
-                  )}
-                  {toolsMenu}
-                </>
-              }
+              action={toolsMenu}
             />
           )}
 
@@ -658,6 +657,7 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
               // Withheld from the employee, who is never shown a score.
               weightedScore={subjectOnlyView ? undefined : estimatedScore}
               outstanding={outstanding}
+              optional={fieldsOptional}
               documentsMissing={missingDocuments.length > 0}
               onGoToStep={(key: string) => goTo(steps.findIndex((entry) => entry.key === key))}
             />
@@ -674,101 +674,115 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
                 <ArrowLeftIcon className="size-4" /> Back
               </Button>
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" disabled={!saveDraft || saveDraft.isPending} onClick={() => persist()}>
+                <Button
+                  variant="outline"
+                  disabled={!saveDraft || saveDraft.isPending}
+                  onClick={() => persist()}
+                >
                   Save
                 </Button>
                 {primaryAction}
               </div>
             </div>
-            <p className="text-right text-[11px] text-muted-foreground">Your progress is saved automatically</p>
+            <p className="text-right text-[11px] text-muted-foreground">
+              Your progress is saved automatically
+            </p>
           </div>
         </div>
 
         {/* The Tools menu's side panel (progress & score, or the rating guide). */}
 
-          <Sheet open={toolPanel !== null} onOpenChange={(open) => !open && setToolPanel(null)}>
-            <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
-              <PanelHeader
-                icon={toolPanel === "guide" ? BookOpenIcon : TargetIcon}
-                title={toolPanel === "guide" ? "Rating guide" : "Your progress"}
-                description={
-                  toolPanel === "guide"
-                    ? "What each rating means."
-                    : "Worked out from what has been filled in so far."
-                }
-              />
-              <PanelBody>
-                {toolPanel === "guide" ? (
-                  <RatingGuide guide={appraisal.template.structure?.ratingGuide} />
-                ) : (
-                  <div className="grid gap-2.5">
-                        <section className="grid gap-2 rounded-xl border p-3">
-                          <h3 className="flex items-center gap-2 text-sm font-semibold">
-                            <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-role-hr/12 text-role-hr">
-                              <TargetIcon className="size-3.5" />
-                            </span>
-                            Your progress
-                          </h3>
-                          <div className="flex items-center gap-3">
-                            <div className="relative flex shrink-0 items-center justify-center">
-                              <ProgressRing percent={percentComplete} />
-                              <span className="absolute text-xs font-semibold tabular-nums">
-                                {percentComplete}%
+        <Sheet open={toolPanel !== null} onOpenChange={(open) => !open && setToolPanel(null)}>
+          <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+            <PanelHeader
+              icon={toolPanel === "guide" ? BookOpenIcon : TargetIcon}
+              title={toolPanel === "guide" ? "Rating guide" : "Your progress"}
+              description={
+                toolPanel === "guide"
+                  ? "What each rating means."
+                  : "Worked out from what has been filled in so far."
+              }
+            />
+            <PanelBody>
+              {toolPanel === "guide" ? (
+                <RatingGuide guide={appraisal.template.structure?.ratingGuide} />
+              ) : (
+                <div className="grid gap-2.5">
+                  <section className="grid gap-2 rounded-xl border p-3">
+                    <h3 className="flex items-center gap-2 text-sm font-semibold">
+                      <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-role-hr/12 text-role-hr">
+                        <TargetIcon className="size-3.5" />
+                      </span>
+                      Your progress
+                    </h3>
+                    <div className="flex items-center gap-3">
+                      <div className="relative flex shrink-0 items-center justify-center">
+                        <ProgressRing percent={percentComplete} />
+                        <span className="absolute text-xs font-semibold tabular-nums">
+                          {percentComplete}%
+                        </span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-lg leading-tight font-semibold tabular-nums">
+                          {completedAreas} of {categories.length}
+                        </p>
+                        <p className="text-xs text-muted-foreground">areas completed</p>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="grid gap-2 rounded-xl border p-3">
+                    <h3 className="text-sm font-semibold">Selected ratings</h3>
+                    <ul className="grid gap-1.5">
+                      {areaProgress.map(({ category, average }) => (
+                        <li key={category.id} className="flex items-center gap-2 text-xs">
+                          <span className="min-w-0 flex-1 truncate">{category.name}</span>
+                          {average == null ? (
+                            <span className="shrink-0 text-muted-foreground">Not rated</span>
+                          ) : (
+                            <span className="shrink-0 font-semibold tabular-nums">
+                              {Number.isInteger(average) ? average : average.toFixed(1)}{" "}
+                              <span className="font-normal text-muted-foreground">
+                                / {ratingMax}
                               </span>
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-lg leading-tight font-semibold tabular-nums">
-                                {completedAreas} of {categories.length}
-                              </p>
-                              <p className="text-xs text-muted-foreground">areas completed</p>
-                            </div>
-                          </div>
-                        </section>
-
-                        <section className="grid gap-2 rounded-xl border p-3">
-                          <h3 className="text-sm font-semibold">Selected ratings</h3>
-                          <ul className="grid gap-1.5">
-                            {areaProgress.map(({ category, average }) => (
-                              <li key={category.id} className="flex items-center gap-2 text-xs">
-                                <span className="min-w-0 flex-1 truncate">{category.name}</span>
-                                {average == null ? (
-                                  <span className="shrink-0 text-muted-foreground">Not rated</span>
-                                ) : (
-                                  <span className="shrink-0 font-semibold tabular-nums">
-                                    {Number.isInteger(average) ? average : average.toFixed(1)}{" "}
-                                    <span className="font-normal text-muted-foreground">/ {ratingMax}</span>
-                                  </span>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-
-                          {/* Scores are never shown to the employee — not even an estimate of their own. */}
-                          {!subjectOnlyView && (
-                            <div className="mt-1 grid gap-1.5 border-t pt-3">
-                              <p className="text-xs font-medium text-muted-foreground">Estimated overall score</p>
-                              <p className="text-2xl leading-none font-bold tabular-nums">
-                                {estimatedScore == null ? "—" : estimatedScore.toFixed(1)}
-                                <span className="text-base font-normal text-muted-foreground"> / {ratingMax}</span>
-                              </p>
-                              <p className="text-[11px] text-muted-foreground">
-                                Based on completed ratings (weighted)
-                              </p>
-                              <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                                <div
-                                  className="h-full rounded-full bg-role-hr transition-[width] duration-500"
-                                  style={{ width: `${estimatedScore == null ? 0 : (estimatedScore / ratingMax) * 100}%` }}
-                                />
-                              </div>
-                            </div>
+                            </span>
                           )}
-                        </section>
-            
-                  </div>
-                )}
-              </PanelBody>
-            </SheetContent>
-          </Sheet>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {/* Scores are never shown to the employee — not even an estimate of their own. */}
+                    {!subjectOnlyView && (
+                      <div className="mt-1 grid gap-1.5 border-t pt-3">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Estimated overall score
+                        </p>
+                        <p className="text-2xl leading-none font-bold tabular-nums">
+                          {estimatedScore == null ? "—" : estimatedScore.toFixed(1)}
+                          <span className="text-base font-normal text-muted-foreground">
+                            {" "}
+                            / {ratingMax}
+                          </span>
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Based on completed ratings (weighted)
+                        </p>
+                        <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-role-hr transition-[width] duration-500"
+                            style={{
+                              width: `${estimatedScore == null ? 0 : (estimatedScore / ratingMax) * 100}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </section>
+                </div>
+              )}
+            </PanelBody>
+          </SheetContent>
+        </Sheet>
       </div>
     </div>
   )
@@ -921,18 +935,6 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
         <DropdownMenuItem onClick={() => setToolPanel("guide")}>
           <BookOpenIcon className="size-4" /> Rating guide
         </DropdownMenuItem>
-        {viewer.canSubmitSelf && (
-          <>
-            <DropdownMenuSeparator />
-            {/* A real link: the workbook is a streamed download. */}
-            <DropdownMenuItem render={<a href={appraisalsApi.exportUrl(appraisal.id)} />}>
-              <DownloadIcon className="size-4" /> Download workbook
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => importRef.current?.openFilePicker()}>
-              <UploadIcon className="size-4" /> Upload filled file
-            </DropdownMenuItem>
-          </>
-        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -972,32 +974,75 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
         {/* One tab bar for the whole page. The form is the first tab rather
           than a slab above the strip — stacked, the two read as two separate
           windows on one screen. */}
-        <nav
-          aria-label="Appraisal sections"
-          className="-mx-1 flex gap-1 overflow-x-auto border-b px-1 pb-px"
-        >
-          {tabs.map((tab) => {
-            const Icon = tab.icon
-            const isActive = tab.id === activeTab.id
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                aria-current={isActive ? "page" : undefined}
-                onClick={() => selectTab(tab.id)}
-                className={cn(
-                  "flex shrink-0 items-center gap-1.5 rounded-t-lg border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors",
-                  isActive
-                    ? "border-role-hr font-semibold text-role-hr"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                )}
+        <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2 border-b">
+          <nav
+            aria-label="Appraisal sections"
+            className="-mx-1 -mb-px flex min-w-0 gap-1 overflow-x-auto px-1"
+          >
+            {tabs.map((tab) => {
+              const Icon = tab.icon
+              const isActive = tab.id === activeTab.id
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  aria-current={isActive ? "page" : undefined}
+                  onClick={() => selectTab(tab.id)}
+                  className={cn(
+                    "flex shrink-0 items-center gap-1.5 rounded-t-lg border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors",
+                    isActive
+                      ? "border-role-hr font-semibold text-role-hr"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Icon className="size-4" />
+                  {tab.label}
+                </button>
+              )
+            })}
+          </nav>
+          {/* The workbook route: fill the form in Excel instead — the
+              employee their self-appraisal, a reviewer (on their turn) their
+              review. The server hands each the right file. */}
+          {isEditor && (
+            <div className="flex shrink-0 gap-2 pb-1.5">
+              {/* A real link: the workbook is a streamed download. */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                nativeButton={false}
+                render={<a href={appraisalsApi.exportUrl(appraisal.id)} />}
               >
-                <Icon className="size-4" />
-                {tab.label}
-              </button>
-            )
-          })}
-        </nav>
+                <DownloadIcon className="size-3.5" /> Download workbook
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => importRef.current?.openFilePicker()}
+              >
+                <UploadIcon className="size-3.5" /> Upload filled file
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Always mounted, so Upload works from any tab: the answers go into the
+            form, the form tab opens, and what was read is listed here, full
+            width, above it. */}
+        {isEditor && (
+          <SelfAppraisalImport
+            appraisalId={appraisal.id}
+            onConfirm={(rows, responses) => {
+              applyImported(rows, responses)
+              if (activeTab.id !== "form") selectTab("form")
+            }}
+            compact
+            hideButtons
+            controlRef={importRef}
+          />
+        )}
 
         <section className="rounded-xl border bg-card p-4 shadow-2xs sm:p-5">
           {activeTab.render()}
@@ -1281,6 +1326,7 @@ function FinalReviewPanel({
   valueOf,
   weightedScore,
   outstanding,
+  optional,
   documentsMissing,
   onGoToStep,
 }: {
@@ -1292,6 +1338,8 @@ function FinalReviewPanel({
   /** Undefined hides the stat — for the employee, who is never shown a score. */
   weightedScore?: number | null
   outstanding: { id: string; where: string; reason: string }[]
+  /** The Final review: nothing has to be filled in before submitting. */
+  optional?: boolean
   /** Aadhaar/PAN still missing — the warning at the top of the form says so. */
   documentsMissing: boolean
   onGoToStep: (key: string) => void
@@ -1318,7 +1366,11 @@ function FinalReviewPanel({
           {complete ? (
             <>
               <CheckIcon className="size-4" />
-              <span>Everything is filled in. Read it through, then submit.</span>
+              <span>
+                {optional
+                  ? "Every field here is optional — fill in what you want to add, or leave it blank, then submit to move on to Discussion."
+                  : "Everything is filled in. Read it through, then submit."}
+              </span>
             </>
           ) : (
             <>
@@ -1348,7 +1400,12 @@ function FinalReviewPanel({
         </div>
       )}
 
-      <div className={cn("grid gap-2", weightedScore === undefined ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
+      <div
+        className={cn(
+          "grid gap-2",
+          weightedScore === undefined ? "sm:grid-cols-2" : "sm:grid-cols-3"
+        )}
+      >
         {weightedScore !== undefined && (
           <Stat
             label="Weighted score"
@@ -1420,7 +1477,8 @@ function FinalReviewPanel({
         {appraisal.viewer.canSubmitSelf
           ? (appraisal.managers[0]?.employee?.fullName ?? "Admin / HR for the final review")
           : appraisal.status === "manager_review" && appraisal.reviewLevel != null
-            ? (appraisal.managers[appraisal.reviewLevel]?.employee?.fullName ?? "Admin / HR for the final review")
+            ? (appraisal.managers[appraisal.reviewLevel]?.employee?.fullName ??
+              "Admin / HR for the final review")
             : "the next step"}
         . After that it is locked, and any change has to come back as a correction.
       </p>
@@ -1461,20 +1519,27 @@ function SummaryBlock({
 
 /** The reviewer chain this appraisal was snapshotted against, then Admin/HR. */
 function ManagerChain({ appraisal }: { appraisal: AppraisalDetail }) {
+  // When the last manager is Admin/HR, their review is the Final review as
+  // well — one person, one step, so one row rather than a separate Final one.
+  const finalIsManager = appraisal.managers.some((manager) => manager.alsoFinalReviewer)
   return (
     <ul className="grid gap-2">
-      {appraisal.managers.map(({ level, employee }) =>
+      {appraisal.managers.map(({ level, employee, alsoFinalReviewer }) =>
         employee ? (
           <li key={level} className="flex items-center justify-between gap-2 rounded-lg border p-2.5">
-            <span className="text-xs text-muted-foreground">Level {level} manager</span>
+            <span className="text-xs text-muted-foreground">
+              Level {level} manager{alsoFinalReviewer && " · Final review"}
+            </span>
             <span className="text-sm font-medium">{employee.fullName}</span>
           </li>
         ) : null
       )}
-      <li className="flex items-center justify-between gap-2 rounded-lg border border-dashed p-2.5">
-        <span className="text-xs text-muted-foreground">Final review</span>
-        <span className="text-sm font-medium">Admin / HR</span>
-      </li>
+      {!finalIsManager && (
+        <li className="flex items-center justify-between gap-2 rounded-lg border border-dashed p-2.5">
+          <span className="text-xs text-muted-foreground">Final review</span>
+          <span className="text-sm font-medium">Admin / HR</span>
+        </li>
+      )}
     </ul>
   )
 }

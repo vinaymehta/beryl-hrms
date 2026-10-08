@@ -49,16 +49,23 @@ module Appraisals
 
     def self.call(...) = new(...).call
 
-    def initialize(appraisal:, file:)
+    # reviewer: the file is a manager's / Admin's review workbook — its written
+    # questions are the reviewer's (WorkbookExporter, reviewer: true).
+    def initialize(appraisal:, file:, reviewer: false)
       @appraisal = appraisal
       @file = file
+      @reviewer = reviewer
     end
 
     def call
       validate_file!
       validate_workbook_identity!
 
-      answer_sheet? ? import_answer_sheet : import_full_form
+      return import_answer_sheet if answer_sheet?
+      # The company form only carries the employee's side.
+      raise Error, "Upload the review workbook downloaded from this page" if @reviewer
+
+      import_full_form
     end
 
     private
@@ -123,10 +130,21 @@ module Appraisals
       # has: a column of question ids. Everything else — headings, column
       # order, which cells are filled — varies between real workbooks.
       def answer_sheet?
-        header = spreadsheet.sheet(0).row(1).map { |cell| cell.to_s.strip.downcase }
+        sheet = spreadsheet.sheet(0)
+        header = sheet.row(header_row_number(sheet)).map { |cell| cell.to_s.strip.downcase }
         header.any? { |h| h.include?("question id") || h == "id" }
       rescue StandardError
         false
+      end
+
+      # The row holding the column headings: the first of the opening rows that
+      # has a "Question ID" cell — the download puts a title block above it —
+      # or row 1 for a sheet that starts with its headings.
+      def header_row_number(sheet)
+        last = [ sheet.last_row.to_i, 15 ].min
+        (1..last).find do |number|
+          sheet.row(number).any? { |cell| cell.to_s.strip.downcase.include?("question id") }
+        end || 1
       end
 
       # Questions of the CYCLE's frozen template — a row pointing at a question
@@ -148,29 +166,64 @@ module Appraisals
         rows = parse_answer_rows
         raise Error, "No question rows were found in that file" if rows.empty?
 
-        summarise(rows, layout: "answer_sheet")
+        summarise(rows, layout: "answer_sheet", responses: parse_written_answers)
       end
 
       def parse_answer_rows
         sheet = spreadsheet.sheet(0)
-        header = sheet.row(1).map { |cell| cell.to_s.strip.downcase }
+        header_at = header_row_number(sheet)
+        header = sheet.row(header_at).map { |cell| cell.to_s.strip.downcase }
         index = {
           question_id: header.index { |h| h.include?("question id") || h == "id" },
           prompt: header.index { |h| h == "question" || h.include?("prompt") },
-          rating: header.index { |h| h.include?("rating") || h.include?("score") },
-          comment: header.index { |h| h.include?("comment") || h.include?("evidence") }
+          # The LAST such column: a review workbook shows the employee's
+          # rating and comments first, then the reviewer's own.
+          rating: header.rindex { |h| h.include?("rating") || h.include?("score") },
+          comment: header.rindex { |h| h.include?("comment") || h.include?("evidence") }
         }
 
         if index[:question_id].nil? || index[:rating].nil?
           raise Error, "The sheet needs at least a 'Question ID' and a 'Rating' column"
         end
 
-        (2..sheet.last_row).filter_map { |number| build_answer_row(sheet.row(number), index) }
+        ((header_at + 1)..sheet.last_row).filter_map { |number| build_answer_row(sheet.row(number), index) }
+      end
+
+      # The "Written answers" sheet, when the file has one: {key:, value:} for
+      # each answered field the employee may write — the same list the form
+      # fills them into. A row whose key isn't one of those is ignored.
+      # The written answers: rows on the answer sheet keyed by a field key (the
+      # one-sheet download), or — from an older two-sheet download — the
+      # "Written answers" sheet. {key:, value:} for each answered field the
+      # employee may write; a key that isn't one of those is ignored.
+      def parse_written_answers
+        allowed = WorkbookExporter.new(appraisal: @appraisal, reviewer: @reviewer).written_fields.map { |field| field[:key] }
+        sheets = [ spreadsheet.sheets.first ]
+        sheets << WorkbookExporter::WRITTEN_SHEET if spreadsheet.sheets.include?(WorkbookExporter::WRITTEN_SHEET)
+
+        sheets.flat_map do |name|
+          sheet = spreadsheet.sheet(name)
+          header_at = header_row_number(sheet)
+          header = sheet.row(header_at).map { |cell| cell.to_s.strip.downcase }
+          key_at = header.index { |h| h.include?("question id") || h.include?("field key") || h == "key" || h == "id" }
+          value_at = header.rindex { |h| h.include?("answer") || h.include?("comment") || h == "value" }
+          next [] if key_at.nil? || value_at.nil?
+
+          ((header_at + 1)..sheet.last_row.to_i).filter_map do |number|
+            cells = sheet.row(number)
+            key = cells[key_at].to_s.strip
+            value = cells[value_at].to_s.strip
+            { key: key, value: value } if allowed.include?(key) && value.present?
+          end
+        end.uniq { |answer| answer[:key] }
       end
 
       def build_answer_row(cells, index)
         raw_id = cells[index[:question_id]]
         return nil if raw_id.blank?
+        # A written-question row (keyed by field, not a number) — read by
+        # #parse_written_answers instead.
+        return nil unless raw_id.to_s.strip.match?(/\A\d+(\.0+)?\z/)
 
         question = questions[raw_id.to_i]
         rating = normalise_rating(cells[index[:rating]])

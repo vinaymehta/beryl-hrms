@@ -231,6 +231,8 @@ export interface AppraisalViewer {
   /** Identity documents ("Aadhaar", "PAN") the employee must upload before submitting their self-appraisal. */
   missingIdentityDocuments: string[]
   canSubmitReview: boolean
+  /** Admin/HR at the Final review, which is optional — they may skip it. */
+  canSkipFinalReview: boolean
   canReturnForCorrection: boolean
   canAdvance: boolean
   canOverrideScore: boolean
@@ -274,7 +276,12 @@ export interface AppraisalDetail extends AppraisalSummary {
   /** Empty unless the viewer may record a promotion. */
   designationOptions: { id: string; title: string }[]
   /** The reviewer chain, level 1 first. */
-  managers: { level: number; employee: EmployeeSummary | null }[]
+  managers: {
+    level: number
+    employee: EmployeeSummary | null
+    /** The last manager, when Admin/HR: their review is the Final review too. */
+    alsoFinalReviewer?: boolean
+  }[]
   viewer: AppraisalViewer
   /** Null for everyone but the employee, and once they have submitted. */
   selfAppraisalDraft: SelfAppraisalDraft | null

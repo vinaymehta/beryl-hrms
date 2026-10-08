@@ -117,6 +117,8 @@ Rails.application.routes.draw do
           patch :discussion
           # A reviewer's independent version at the stage they own.
           post :submit_review
+          # Admin/HR passing on the (optional) Final review.
+          patch :skip_final_review
           patch :advance
           patch :return_for_correction
           patch :override_score

@@ -53,6 +53,12 @@ class AppraisalPolicy < ApplicationPolicy
 
   def advance? = administrator? || current_stage_reviewer?
 
+  # The Final review is Admin/HR's choice, not a requirement: at that step they
+  # may skip it, and the last manager's review stands as the final one. A
+  # manager who is also Admin/HR is not offered this at their own manager
+  # level — there they review like any manager.
+  def skip_final_review? = administrator? && record.final_review?
+
   # Calibration belongs to the Final review, which is Admin/HR's.
   def override_score? = administrator?
 

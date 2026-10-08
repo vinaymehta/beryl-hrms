@@ -101,6 +101,15 @@ export function useAdvanceAppraisal(id: string) {
   )
 }
 
+export function useSkipFinalReview(id: string) {
+  return useAppraisalAction(
+    id,
+    () => appraisalsApi.skipFinalReview(id),
+    "Final review skipped — it's at the Discussion step now.",
+    "Couldn't skip the final review."
+  )
+}
+
 export function useReturnForCorrection(id: string) {
   return useAppraisalAction(
     id,

@@ -45,12 +45,11 @@ export function NotificationBell() {
       <DropdownMenuTrigger
         render={<Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground" aria-label="Notifications" />}
       >
-        <BellIcon className="size-4.5" />
+        <BellIcon className="size-5.5" />
         {unreadCount > 0 && (
-          // Pinned to the button's corner and nudged out past it, with a ring
-          // in the page colour, so the count sits beside the bell's shoulder
-          // instead of on top of it. The brand colour, not an alarm red.
-          <span className="absolute top-0 right-0 flex h-4 min-w-4 translate-x-1/2 -translate-y-1/3 items-center justify-center rounded-full bg-primary px-1 text-[10px] leading-none font-semibold tabular-nums text-primary-foreground shadow-sm ring-2 ring-background">
+          // On the bell's top-right corner, the usual app badge: red, with a
+          // ring in the page colour so it reads cleanly against the icon.
+          <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-destructive px-0.5 text-[9px] leading-none font-semibold tabular-nums text-white shadow-sm ring-[1.5px] ring-background">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}

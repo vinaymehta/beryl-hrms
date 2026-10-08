@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import {
+  SkipForwardIcon,
   SendIcon,
   SignatureIcon,
   TriangleAlertIcon,
@@ -24,6 +25,7 @@ import {
 import {
   useAdvanceAppraisal,
   useReturnForCorrection,
+  useSkipFinalReview,
   useOverrideScore,
   useReleaseAppraisal,
 } from "@/features/appraisals/hooks/use-appraisal-mutations"
@@ -53,6 +55,8 @@ export function AppraisalActions({ appraisal }: { appraisal: AppraisalDetail }) 
 
   const advance = useAdvanceAppraisal(appraisal.id)
   const returnForCorrection = useReturnForCorrection(appraisal.id)
+  const skipFinal = useSkipFinalReview(appraisal.id)
+  const [skipOpen, setSkipOpen] = useState(false)
   const override = useOverrideScore(appraisal.id)
   const release = useReleaseAppraisal(appraisal.id)
 
@@ -68,7 +72,11 @@ export function AppraisalActions({ appraisal }: { appraisal: AppraisalDetail }) 
   const canSignHere = viewer.canSign && viewer.isAdministrator
   // Exactly the buttons rendered below — otherwise the bar shows up empty for
   // someone who MAY release but has nothing releasable yet.
-  const anyAction = canReturn || canCalibrate || canReleaseNow || canSignHere || canClose
+  // The Final review is optional for Admin/HR (a manager who is also Admin/HR
+  // reviews at their own level like any manager, and is not offered this).
+  const canSkipFinal = viewer.canSkipFinalReview
+  const anyAction =
+    canReturn || canCalibrate || canReleaseNow || canSignHere || canClose || canSkipFinal
   // Admin/HR (and reviewers, once signed) see where the letter stands beside
   // the actions — the employee has their own Letter tab for that.
   const showLetterStatus = !viewer.isSubject && Boolean(appraisal.letter?.available)
@@ -80,6 +88,17 @@ export function AppraisalActions({ appraisal }: { appraisal: AppraisalDetail }) 
       {(anyAction || showLetterStatus) && (
         <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-2 rounded-xl border bg-background p-3 shadow-[0_-1px_8px_rgba(0,0,0,0.06)]">
           {showLetterStatus && <LetterStatusLine appraisal={appraisal} />}
+
+          {canSkipFinal && (
+            <Button
+              variant="outline"
+              className="gap-1.5"
+              disabled={skipFinal.isPending}
+              onClick={() => setSkipOpen(true)}
+            >
+              <SkipForwardIcon className="size-4" /> Skip final review
+            </Button>
+          )}
 
           {canReturn && (
             <Button variant="outline" className="gap-1.5" onClick={() => setReturnOpen(true)}>
@@ -102,8 +121,7 @@ export function AppraisalActions({ appraisal }: { appraisal: AppraisalDetail }) 
               disabled={release.isPending}
               onClick={() => setReleaseOpen(true)}
             >
-              <SendIcon className="size-4" />{" "}
-              {release.isPending ? "Sending…" : "Send"}
+              <SendIcon className="size-4" /> {release.isPending ? "Sending…" : "Send"}
             </Button>
           )}
 
@@ -125,6 +143,29 @@ export function AppraisalActions({ appraisal }: { appraisal: AppraisalDetail }) 
               Close appraisal
             </Button>
           )}
+
+          <Dialog open={skipOpen} onOpenChange={setSkipOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Skip the final review?</DialogTitle>
+                <DialogDescription>
+                  The appraisal moves on to the Discussion step without a final review. The last
+                  manager&apos;s review — and its score — stands as the final one.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogClose render={<Button variant="outline">Cancel</Button>} />
+                <Button
+                  disabled={skipFinal.isPending}
+                  onClick={() =>
+                    skipFinal.mutate(undefined, { onSuccess: () => setSkipOpen(false) })
+                  }
+                >
+                  {skipFinal.isPending ? "Skipping…" : "Skip final review"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <Dialog open={returnOpen} onOpenChange={setReturnOpen}>
             <DialogContent>

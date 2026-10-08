@@ -45,7 +45,7 @@ export function Topbar() {
               onSettings && "bg-muted text-foreground"
             )}
           >
-            <SettingsIcon className="size-4.5" />
+            <SettingsIcon className="size-5.5" />
           </Button>
         )}
         <NotificationBell />

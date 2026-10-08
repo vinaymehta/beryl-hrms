@@ -27,7 +27,10 @@ module Appraisals
       unless %w[appraisal_discussion compensation_approval].include?(@appraisal.status)
         raise Error, "An appraisal can only be released after the discussion step"
       end
-      raise Error, "This appraisal has no final review to release" if @appraisal.revision_for(:final_review).nil?
+      # A Final review, or — when Admin/HR skipped it — the managers' reviews.
+      unless @appraisal.revisions.where(stage: %i[manager_review primary_review secondary_review final_review]).exists?
+        raise Error, "This appraisal has no review to release"
+      end
 
       letter = generate_letter
 

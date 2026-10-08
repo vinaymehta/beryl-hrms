@@ -256,9 +256,18 @@ module Appraisals
       # Names only — the reviewer chain is not sensitive, and the employee is
       # explicitly allowed to see who their managers are.
       # The reviewer chain, level 1 first.
+      # The reviewer chain. The LAST manager is marked as the final reviewer too
+      # when they are Admin/HR: their manager review is recorded as the Final
+      # review (AppraisalsController#submit_review), so there is no second step.
       def managers_payload
-        @appraisal.reviewers.each_with_index.map do |employee, index|
-          { "level" => index + 1, "employee" => manager_summary(employee) }
+        reviewers = @appraisal.reviewers
+        reviewers.each_with_index.map do |employee, index|
+          last = index == reviewers.size - 1
+          {
+            "level" => index + 1,
+            "employee" => manager_summary(employee),
+            "alsoFinalReviewer" => last && employee.user&.permission?(::Appraisals::Notifier::FINAL_REVIEW_PERMISSION) || false
+          }
         end
       end
 
@@ -280,6 +289,7 @@ module Appraisals
           # Only computed for the person who would submit — nobody else is blocked by it.
           "missingIdentityDocuments" => @policy.submit_self? ? @appraisal.employee.missing_identity_documents : [],
           "canSubmitReview" => @policy.submit_review?,
+          "canSkipFinalReview" => @policy.skip_final_review?,
           "canReturnForCorrection" => @policy.return_for_correction?,
           "canAdvance" => @policy.advance?,
           "canOverrideScore" => @policy.override_score?,
