@@ -32,6 +32,9 @@ module Api
               # A reset satisfies a required change: they have just chosen a
               # new password, which is the whole of what was being demanded.
               user.update_column(:must_change_password, false) if user.must_change_password?
+              # Choosing a password from a link sent to their own email also
+              # sets up an account that was never sent its credentials.
+              user.update!(status: :active, invitation_accepted_at: user.invitation_accepted_at || Time.current) if user.invited?
               user.sessions.destroy_all
               ::Audit::Record.call(action: "auth.password_reset", actor: user, company: user.company, auditable: user, request: request)
               render_data({ message: "Password has been reset. Please log in again." })

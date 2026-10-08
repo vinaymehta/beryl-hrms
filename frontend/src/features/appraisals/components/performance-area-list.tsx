@@ -1,6 +1,6 @@
 "use client"
 
-import { InfoIcon, TriangleAlertIcon } from "lucide-react"
+import { TriangleAlertIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Badge } from "@/components/ui/badge"
@@ -10,13 +10,13 @@ import {
   needsEvidence,
   type AnswerValue,
 } from "@/features/appraisals/components/question-answer"
-import { SIGNIFICANT_RATING_GAP, formatRating } from "@/features/appraisals/constants"
+import { formatRating } from "@/features/appraisals/constants"
 import type { AppraisalTemplateCategory } from "@/types/appraisals"
+import { PreviousFeedback, type PreviousEntry } from "@/features/appraisals/components/previous-feedback"
 
 /** The length the evidence box is sized for. A guide, not a cap. */
 const EVIDENCE_GUIDE_LENGTH = 1000
 
-type ReferenceAnswer = { rating: number | null; comment: string | null }
 
 /**
  * The performance areas, every one laid out in full — number, name and weight
@@ -32,16 +32,15 @@ export function PerformanceAreaList({
   answers,
   onChange,
   readOnly,
-  reference,
-  referenceLabel,
+  previousFor,
   action,
 }: {
   categories: AppraisalTemplateCategory[]
   answers: Record<string, AnswerValue>
   onChange: (questionId: string, patch: Partial<AnswerValue>) => void
   readOnly?: boolean
-  reference?: Record<string, ReferenceAnswer>
-  referenceLabel?: string
+  /** A reviewer's form: earlier versions' answers to a question. */
+  previousFor?: (questionId: string) => PreviousEntry[]
   /** The workbook download/upload controls, on the heading row. */
   action?: React.ReactNode
 }) {
@@ -132,8 +131,7 @@ export function PerformanceAreaList({
                       value={answers[question.id] ?? EMPTY_ANSWER}
                       onChange={(patch) => onChange(question.id, patch)}
                       readOnly={readOnly}
-                      reference={reference?.[String(question.id)]}
-                      referenceLabel={referenceLabel}
+                      previous={previousFor?.(String(question.id))}
                     />
                   ))}
                 </div>
@@ -154,8 +152,7 @@ function AreaQuestion({
   value,
   onChange,
   readOnly,
-  reference,
-  referenceLabel,
+  previous,
 }: {
   prompt: string | null
   description: string | null
@@ -164,16 +161,9 @@ function AreaQuestion({
   value: AnswerValue
   onChange: (patch: Partial<AnswerValue>) => void
   readOnly?: boolean
-  reference?: ReferenceAnswer
-  referenceLabel?: string
+  previous?: PreviousEntry[]
 }) {
   const missing = needsEvidence(value)
-  // Scope §12: a significant gap between the employee's own rating and the
-  // reviewer's is flagged, so calibration has something to look at rather than
-  // two numbers sitting silently side by side.
-  const gap =
-    reference?.rating != null && value.rating != null ? value.rating - reference.rating : null
-  const significantGap = gap != null && Math.abs(gap) >= SIGNIFICANT_RATING_GAP
 
   return (
     <div className="grid gap-3">
@@ -187,30 +177,7 @@ function AreaQuestion({
         </div>
       )}
 
-      {reference && (
-        <div
-          className={cn(
-            "grid gap-1 rounded-lg border border-dashed bg-muted/40 p-2.5",
-            significantGap && "border-warning bg-warning/5"
-          )}
-        >
-          <p className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
-            <InfoIcon className="size-3" />
-            {referenceLabel} rated {formatRating(reference.rating)}
-            {significantGap && (
-              <span className="flex items-center gap-1 rounded-full bg-warning/15 px-1.5 py-0.5 text-warning">
-                <TriangleAlertIcon className="size-3" />
-                {gap > 0
-                  ? `You rated ${formatRating(gap)} higher`
-                  : `You rated ${formatRating(Math.abs(gap))} lower`}
-              </span>
-            )}
-          </p>
-          {reference.comment && (
-            <p className="text-xs text-muted-foreground">{reference.comment}</p>
-          )}
-        </div>
-      )}
+      {previous && <PreviousFeedback entries={previous} myRating={value.rating} />}
 
       {/* Stars take 45% from the left, evidence 50% from the right, 5% between
           them (column gap 5%, then 45fr / 50fr of the rest). */}

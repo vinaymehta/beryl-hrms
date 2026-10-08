@@ -70,8 +70,7 @@ module Api
         private
           def sign_in_blocked_message(user)
             if user.invited?
-              "This account hasn't been set up yet. Open the invitation link sent to your email, " \
-                "or ask your administrator to send a new one."
+              "This account doesn't have a password yet. Ask your administrator to set one."
             else
               "This account has been disabled. Contact your administrator."
             end

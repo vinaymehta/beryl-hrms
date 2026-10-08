@@ -56,6 +56,14 @@ import {
   type SelfAppraisalImportHandle,
 } from "@/features/appraisals/components/self-appraisal-import"
 import {
+  PreviousFeedback,
+  previousAnswers,
+  previousPerspective,
+  previousResponses,
+  priorRevisions,
+  type PreviousEntry,
+} from "@/features/appraisals/components/previous-feedback"
+import {
   EMPTY_ANSWER,
   needsEvidence,
   type AnswerValue,
@@ -66,6 +74,7 @@ import {
   templateFieldAudience,
   type NarrativeKey,
   formatRating,
+  isNarrativeKey,
 } from "@/features/appraisals/constants"
 import {
   useSaveReviewDraft,
@@ -93,9 +102,6 @@ const EMPTY_NARRATIVE: NarrativeState = {
   nextPeriodGoals: "",
 }
 
-const NARRATIVE_KEYS = NARRATIVE_FIELDS.map((field) => field.key)
-const isNarrativeKey = (key: string): key is NarrativeKey =>
-  (NARRATIVE_KEYS as string[]).includes(key)
 
 /** Which narrative fields the built-in fallback puts on which tab. */
 const STORY_KEYS: NarrativeKey[] = ["summary", "achievements", "strengths"]
@@ -286,22 +292,25 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
   const [savedAt, setSavedAt] = useState<string | null>(draft?.savedAt ?? null)
   const [step, setStep] = useState(() => Math.max(0, (draft?.step ?? 1) - 1))
 
-  // A reviewer writes against the employee's own V1; the employee writes
-  // against nothing, because there is nothing they may compare with yet.
-  const referenceRevision = appraisal.revisions.find(
-    (revision) => revision.stage === "self_appraisal"
+  // A reviewer writes on top of every earlier version they may see — the
+  // employee's own V1, then each manager level's; the employee writes against
+  // nothing, because there is nothing they may compare with yet.
+  const earlier = useMemo(
+    () =>
+      forReviewer
+        ? priorRevisions(appraisal.revisions, {
+            stage: appraisal.status,
+            level: appraisal.status === "manager_review" ? (appraisal.reviewLevel ?? null) : null,
+          })
+        : [],
+    [forReviewer, appraisal.revisions, appraisal.status, appraisal.reviewLevel]
   )
-  const referenceAnswers = useMemo(() => {
-    if (!forReviewer) return undefined
-    const map: Record<string, { rating: number | null; comment: string | null }> = {}
-    referenceRevision?.answers.forEach((answer) => {
-      map[String(answer.appraisalTemplateQuestionId)] = {
-        rating: answer.rating,
-        comment: answer.comment,
-      }
-    })
-    return map
-  }, [forReviewer, referenceRevision])
+  const previousForQuestion = forReviewer
+    ? (questionId: string) => previousAnswers(earlier, questionId)
+    : undefined
+  const previousForField = forReviewer
+    ? (key: string) => previousResponses(earlier, key)
+    : undefined
 
   function setAnswer(questionId: string, patch: Partial<AnswerValue>) {
     setAnswers((prev) => ({
@@ -621,12 +630,7 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
               categories={categories}
               answers={answers}
               onChange={setAnswer}
-              reference={referenceAnswers}
-              referenceLabel={
-                referenceRevision
-                  ? `${referenceRevision.label} · ${referenceRevision.authorName}`
-                  : undefined
-              }
+              previousFor={previousForQuestion}
               action={toolsMenu}
             />
           )}
@@ -640,11 +644,22 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
               canAssess={viewer.canSubmitReview}
               valueOf={valueOf}
               onChange={setFieldValue}
+              previousFor={
+                forReviewer
+                  ? (ratingKey: string, summaryKey: string) =>
+                      previousPerspective(earlier, ratingKey, summaryKey)
+                  : undefined
+              }
             />
           )}
 
           {current.section && (
-            <FieldSection section={current.section} valueOf={valueOf} onChange={setFieldValue} />
+            <FieldSection
+              section={current.section}
+              valueOf={valueOf}
+              onChange={setFieldValue}
+              previousFor={previousForField}
+            />
           )}
 
           {current.key === "review" && (
@@ -1197,11 +1212,14 @@ function PerspectivesPanel({
   canAssess,
   valueOf,
   onChange,
+  previousFor,
 }: {
   templatePerspectives: NonNullable<AppraisalDetail["template"]["structure"]>["perspectives"]
   canAssess: boolean
   valueOf: (key: string) => string
   onChange: (key: string, next: string) => void
+  /** A reviewer's form: earlier managers' rating and evidence per perspective. */
+  previousFor?: (ratingKey: string, summaryKey: string) => PreviousEntry[]
 }) {
   const defined = templatePerspectives ?? []
   const keyFor = (name: string) =>
@@ -1238,6 +1256,12 @@ function PerspectivesPanel({
                 </div>
                 {perspective.assessmentFocus && (
                   <p className="text-xs text-muted-foreground">{perspective.assessmentFocus}</p>
+                )}
+
+                {previousFor && (
+                  <PreviousFeedback
+                    entries={previousFor(base + MANAGER_RATING_SUFFIX, base + MANAGER_SUMMARY_SUFFIX)}
+                  />
                 )}
 
                 {canAssess && (
@@ -1283,11 +1307,14 @@ function FieldSection({
   valueOf,
   onChange,
   readOnly,
+  previousFor,
 }: {
   section: TemplateWizardSection
   valueOf: (key: string) => string
   onChange: (key: string, next: string) => void
   readOnly?: boolean
+  /** A reviewer's form: earlier versions' answers, above each field. */
+  previousFor?: (key: string) => PreviousEntry[]
 }) {
   return (
     <div className="grid gap-4">
@@ -1303,6 +1330,7 @@ function FieldSection({
           {field.description && (
             <p className="text-xs text-muted-foreground">{field.description}</p>
           )}
+          {previousFor && <PreviousFeedback entries={previousFor(field.key)} />}
           <textarea
             id={`field-${field.key}`}
             rows={4}

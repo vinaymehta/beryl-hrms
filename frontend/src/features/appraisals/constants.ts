@@ -211,6 +211,10 @@ export type NarrativeKey =
   | "trainingNeeds"
   | "nextPeriodGoals"
 
+/** The six fixed narrative fields, which a revision keeps in their own columns. */
+export const isNarrativeKey = (key: string): key is NarrativeKey =>
+  NARRATIVE_FIELDS.some((field) => field.key === key)
+
 /** §22 review types. One attribute on the cycle, not a second workflow. */
 export const REVIEW_TYPES = [
   { value: "annual", label: "Annual appraisal" },

@@ -1157,8 +1157,8 @@ export function EmployeeForm({
                           {employee?.user
                             ? `The address this employee signs in with. Changing it renames their account — they'll sign in with the new one, and it will need verifying again.${workEmailDomain ? ` Must end with @${workEmailDomain}.` : ""}`
                             : workEmailDomain
-                              ? `Must end with @${workEmailDomain}. Leave blank if this employee needs no login — otherwise they get an email to set their own password, and no password is ever set here.`
-                              : "Leave blank if this employee needs no login. Otherwise they get an email to set their own password — no password is ever set here."}
+                              ? `Must end with @${workEmailDomain}. Leave blank if this employee needs no login. Otherwise they can sign in with this email and the password below as soon as you save — sending them the details is a separate step.`
+                              : "Leave blank if this employee needs no login. Otherwise they can sign in with this email and the password below as soon as you save — sending them the details is a separate step."}
                         </InfoTip>
                       </div>
                       <FormControl>
