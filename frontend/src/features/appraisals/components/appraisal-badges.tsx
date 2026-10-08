@@ -20,16 +20,20 @@ export function RevisionBadge({
   stage,
   versionNumber,
   reviewLevel,
+  alsoLevel,
 }: {
   stage: AppraisalStage
   versionNumber?: number
   reviewLevel?: number | null
+  /** The manager level this same submission also stands for ("Level 1 + Final"). */
+  alsoLevel?: number | null
 }) {
   const meta = appraisalStageMeta(stage, reviewLevel)
   return (
     <Badge className={meta.className}>
       {versionNumber != null && <span className="font-semibold">V{versionNumber}</span>}
       {versionNumber != null && " · "}
+      {alsoLevel != null && `${appraisalStageMeta("manager_review", alsoLevel).shortLabel} + `}
       {meta.shortLabel}
     </Badge>
   )

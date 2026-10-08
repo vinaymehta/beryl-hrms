@@ -15,9 +15,14 @@ import { PERMISSIONS } from "@/constants/permissions"
  * replacing them — Overview is the cards that were already there, and each
  * further tab is one generic record panel.
  *
- * A restricted tab (compensation) is hidden outright from anyone without its
- * key, so pay data isn't merely collapsed behind a click.
+ * Only some record panels are offered: Assets to everyone, and History to
+ * those who may read it (Admin and HR — employee_history.view). Compensation,
+ * Goals, Skills, Training and PIP are not shown for now. Hidden outright, not
+ * merely greyed out.
  */
+/** The record panels shown as tabs, by resource. */
+const VISIBLE_PANELS = new Set(["employment_events", "assets"])
+
 export function EmployeeRecordTabs({
   employeeId,
   overview,
@@ -27,13 +32,15 @@ export function EmployeeRecordTabs({
   overview: React.ReactNode
   documents: React.ReactNode
 }) {
-  const canSeeCompensation = usePermission(PERMISSIONS.compensationManage)
+  const canSeeHistory = usePermission(PERMISSIONS.employeeHistoryView)
   // ?tab=documents (and the like) opens straight on that tab — the self-appraisal
   // links here when Aadhaar/PAN still have to be uploaded.
   const requestedTab = useSearchParams().get("tab")
-  const [active, setActive] = useState<string>(requestedTab ?? "overview")
+  const [selected, setSelected] = useState<string>(requestedTab ?? "overview")
 
-  const panels = RECORD_PANELS.filter((panel) => !panel.restricted || canSeeCompensation)
+  const panels = RECORD_PANELS.filter(
+    (panel) => VISIBLE_PANELS.has(panel.resource) && (panel.resource !== "employment_events" || canSeeHistory)
+  )
 
   const tabs = [
     { id: "overview", label: "Overview", icon: UserIcon },
@@ -41,6 +48,8 @@ export function EmployeeRecordTabs({
     { id: "documents", label: "Documents", icon: FileTextIcon },
   ]
 
+  // A link to a tab that isn't offered (?tab=goals) lands on Overview.
+  const active = tabs.some((tab) => tab.id === selected) ? selected : "overview"
   const activePanel = panels.find((panel) => panel.resource === active)
 
   return (
@@ -53,7 +62,7 @@ export function EmployeeRecordTabs({
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActive(tab.id)}
+              onClick={() => setSelected(tab.id)}
               className={cn(
                 "flex shrink-0 items-center gap-1.5 rounded-t-lg border-b-2 px-3 py-2 text-sm transition-colors",
                 isActive

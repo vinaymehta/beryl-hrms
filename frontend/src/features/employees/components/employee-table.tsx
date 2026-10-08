@@ -1,6 +1,6 @@
 "use client"
 
-import { UsersIcon, UserPlusIcon, TriangleAlertIcon, ArrowUpIcon, ArrowDownIcon, ChevronsUpDownIcon } from "lucide-react"
+import { UsersIcon, UserPlusIcon, TriangleAlertIcon, ArrowUpIcon, ArrowDownIcon, ChevronsUpDownIcon, PencilIcon } from "lucide-react"
 
 import { cn } from "cn"
 
@@ -116,6 +116,7 @@ export function EmployeeTable({
   hasFilters,
   onRetry,
   onSelectEmployee,
+  onEditEmployee,
   onAddEmployee,
   sort,
   onSort,
@@ -127,6 +128,8 @@ export function EmployeeTable({
   hasFilters?: boolean
   onRetry?: () => void
   onSelectEmployee: (id: string) => void
+  /** Shows the Actions column with Edit; left out for someone who can't edit. */
+  onEditEmployee?: (id: string) => void
   onAddEmployee?: () => void
   sort: EmployeeSort
   onSort: (column: EmployeeSortKey) => void
@@ -196,13 +199,14 @@ export function EmployeeTable({
         <TableHeader>
           <TableRow>
             <SortableHead column="name" label="Employee" sort={sort} onSort={onSort} />
-            <SortableHead column="designation" label="Job title" sort={sort} onSort={onSort} />
+            <SortableHead column="designation" label="Designation" sort={sort} onSort={onSort} />
             <SortableHead column="department" label="Department" sort={sort} onSort={onSort} />
             {/* Not sortable: the column shows one name out of a hierarchy the
                 server has no single column for. */}
             <TableHead className="hidden lg:table-cell">Primary manager</TableHead>
             <TableHead className="hidden xl:table-cell">Roles</TableHead>
             <SortableHead column="status" label="Status" sort={sort} onSort={onSort} />
+            {onEditEmployee && <TableHead className="w-px text-right">Actions</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -247,6 +251,24 @@ export function EmployeeTable({
                 )}
               </TableCell>
               <TableCell><EmployeeStatusBadge status={employee.status} /></TableCell>
+              {onEditEmployee && (
+                <TableCell className="text-right">
+                  {/* Its own action: opens the edit panel here, without the
+                      row's click taking the page to the profile. */}
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    aria-label={`Edit ${employee.firstName} ${employee.lastName}`}
+                    title="Edit"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onEditEmployee(employee.id)
+                    }}
+                  >
+                    <PencilIcon className="size-3.5" />
+                  </Button>
+                </TableCell>
+              )}
             </TableRow>
           ))}
         </TableBody>

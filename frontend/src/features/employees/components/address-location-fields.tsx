@@ -50,7 +50,7 @@ interface LocationFieldValues {
 
 /**
  * The Country, State and City pickers (plus the free-text box behind "Other"),
- * shared by the HR employee form and the employee's own Edit my details panel.
+ * used by the employee form.
  *
  * Renders three grid cells and no wrapper, so the caller places them in its
  * own grid next to the postal code. `idPrefix` names them —

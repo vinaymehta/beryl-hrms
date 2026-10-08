@@ -32,22 +32,24 @@ module Appraisals
     # role: :employee, :manager (whoever's level it is now) or :final
     # (Admin/HR, who hold the Final review between them).
     def self.overdue(appraisal, role:)
+      name = appraisal.employee.full_name
       kwargs = {
         category: "appraisal.overdue",
-        title: "Appraisal action overdue",
         email_context: context_for(appraisal, action: "This is past its deadline", stage: stage_label(appraisal), deadline: role.to_sym)
       }
 
       case role.to_s
       when "employee"
-        deliver_to_employee_record(appraisal, appraisal.employee,
+        deliver_to_employee_record(appraisal, appraisal.employee, title: "Appraisal action overdue",
                                    body: "Your self-appraisal for #{appraisal.appraisal_cycle.name} is past its deadline.", **kwargs)
       when "manager"
         deliver_to_employee_record(appraisal, appraisal.current_reviewer,
-                                   body: "#{appraisal.employee.full_name}'s appraisal is past its manager review deadline.", **kwargs)
+                                   title: "#{name}'s appraisal review is overdue",
+                                   body: "#{name}'s appraisal is past its manager review deadline.", **kwargs)
       when "final"
         deliver_to_permission_holders(appraisal, FINAL_REVIEW_PERMISSION,
-                                      body: "#{appraisal.employee.full_name}'s appraisal is past its final review deadline.", **kwargs)
+                                      title: "#{name}'s final review is overdue",
+                                      body: "#{name}'s appraisal is past its final review deadline.", **kwargs)
       end
     end
 
@@ -56,7 +58,7 @@ module Appraisals
       deliver_to_employee_record(
         appraisal, appraisal.reviewer_id_at(level) && Employee.find_by(id: appraisal.reviewer_id_at(level)),
         category: "appraisal.review_pending",
-        title: "An appraisal is waiting for your review",
+        title: "#{appraisal.employee.full_name}'s appraisal is waiting for your review",
         body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}. You are the level #{level} reviewer.",
         email_context: context_for(appraisal, action: "Review and submit your assessment", stage: "Level #{level} manager review",
                                                 deadline: :manager)
@@ -69,7 +71,7 @@ module Appraisals
       deliver_to_permission_holders(
         appraisal, FINAL_REVIEW_PERMISSION, except_user: except_user,
         category: "appraisal.review_pending",
-        title: "An appraisal is ready for final review",
+        title: "#{appraisal.employee.full_name}'s appraisal is ready for final review",
         body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}. The manager reviews are complete.",
         email_context: context_for(appraisal, action: "Complete the final review", stage: "Final review", deadline: :final)
       )
@@ -84,7 +86,7 @@ module Appraisals
       deliver_to_permission_holders(
         appraisal, "appraisals.release", except_user: except_user,
         category: "appraisal.ready_for_release",
-        title: "An appraisal is ready to release",
+        title: "#{appraisal.employee.full_name}'s appraisal letter is ready to send",
         body: "#{appraisal.employee.full_name} — #{appraisal.appraisal_cycle.name}. The final review is complete.",
         email_context: context_for(appraisal, action: "Release the appraisal to the employee", stage: "Ready to release",
                                   deadline: :final)
@@ -134,7 +136,7 @@ module Appraisals
 
       shared = {
         category: "appraisal.letter_signed",
-        title: "Appraisal letter signed",
+        title: "#{appraisal.employee.full_name} has signed their appraisal letter",
         body: "#{appraisal.employee.full_name} has signed their appraisal letter for #{appraisal.appraisal_cycle.name}."
       }
 
@@ -166,7 +168,7 @@ module Appraisals
         deliver_to_employee_record(
           appraisal, recipient,
           category: "appraisal.acknowledged",
-          title: "Appraisal acknowledged",
+          title: "#{appraisal.employee.full_name} has acknowledged their appraisal",
           body: "#{appraisal.employee.full_name} has acknowledged their appraisal.",
           email_context: context_for(appraisal, action: "No action needed — for your information", stage: "Acknowledged")
         )

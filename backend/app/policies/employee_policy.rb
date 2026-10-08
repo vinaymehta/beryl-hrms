@@ -3,11 +3,6 @@ class EmployeePolicy < ApplicationPolicy
   def show? = permission?("employees.view")
   def create? = permission?("employees.create")
   def update? = permission?("employees.update")
-  # The narrow self-service edit (Profile → Edit my details): whoever may edit
-  # the record in full, or the employee the record belongs to. It opens only
-  # the personal columns — the controller permits nothing else on this path —
-  # so being yourself never reaches your job, pay, managers or roles.
-  def update_personal? = update? || own_record?
   # Checking whether an Employee ID is free — for whoever may set one.
   def code_available? = create? || update?
   # Deactivation (status -> inactive/offboarded) is gated on the delete
@@ -39,11 +34,6 @@ class EmployeePolicy < ApplicationPolicy
   # it belongs — Settings → Change password, and Forgot password.
   def manage_account_access? = manage_roles?
   def manage_reporting_managers? = permission?("employees.manage_reporting_managers")
-
-  private
-    def own_record?
-      same_company? && record.id.present? && record.id == user.employee_record&.id
-    end
 
   class Scope < ApplicationPolicy::Scope
     # employees.create is the seeded proxy for "HR/Admin, looks after other

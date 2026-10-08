@@ -1,7 +1,5 @@
 /**
- * Keystroke filters for the employee's phone and postal-code inputs. Shared by
- * the HR employee form and the employee's own Edit my details panel, so the
- * same box behaves the same way wherever it appears.
+ * Keystroke filters for the employee form's phone and postal-code inputs.
  */
 
 /** Phone and postal code are digits only — anything else is dropped as it is typed or pasted. */

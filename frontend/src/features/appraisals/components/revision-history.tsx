@@ -101,7 +101,29 @@ export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
     () => [...appraisal.revisions].sort((a, b) => a.versionNumber - b.versionNumber),
     [appraisal.revisions]
   )
-  const [openId, setOpenId] = useState<string | null>(chronological.at(-1)?.id ?? null)
+  // When the last manager is also Admin/HR they review once, and that one
+  // submission is kept twice — as their manager review and as the Final review
+  // (the release and the final score read the latter). Shown here as the one
+  // version it is: the Final copy, labelled with both steps. Recognised as a
+  // Final review by the same person within two minutes of their manager review.
+  const shown = useMemo(() => {
+    const items: { revision: AppraisalRevision; alsoLevel: number | null }[] = []
+    for (const revision of chronological) {
+      const prior = items.at(-1)?.revision
+      const sameSubmission =
+        prior &&
+        revision.stage === "final_review" &&
+        prior.stage === "manager_review" &&
+        prior.authorName != null &&
+        prior.authorName === revision.authorName &&
+        Math.abs(new Date(revision.submittedAt).getTime() - new Date(prior.submittedAt).getTime()) < 120_000
+      if (sameSubmission) items[items.length - 1] = { revision, alsoLevel: prior.reviewLevel ?? 1 }
+      else items.push({ revision, alsoLevel: null })
+    }
+    return items
+  }, [chronological])
+  // Every version starts closed; a click opens one (and closes the other).
+  const [openId, setOpenId] = useState<string | null>(null)
 
   if (chronological.length === 0) {
     return (
@@ -118,15 +140,20 @@ export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
   return (
     <div className="grid gap-2">
       <p className="text-xs text-muted-foreground">
-        {chronological.length} version{chronological.length === 1 ? "" : "s"} · each one is kept exactly as it was
+        {shown.length} version{shown.length === 1 ? "" : "s"} · each one is kept exactly as it was
         submitted.
       </p>
 
-      {[...chronological].reverse().map((revision) => {
+      {[...shown].reverse().map(({ revision, alsoLevel }) => {
         const open = openId === revision.id
-        const index = chronological.findIndex((r) => r.id === revision.id)
-        const previous = index > 0 ? chronological[index - 1] : undefined
-        const stage = appraisalStageMeta(revision.stage, revision.reviewLevel)
+        const index = shown.findIndex((item) => item.revision.id === revision.id)
+        const previous = index > 0 ? shown[index - 1].revision : undefined
+        const versionNumber = index + 1
+        const meta = appraisalStageMeta(revision.stage, revision.reviewLevel)
+        const stage =
+          alsoLevel != null
+            ? { ...meta, label: `${appraisalStageMeta("manager_review", alsoLevel).label} + ${meta.label}` }
+            : meta
         // The workflow state this version moved the appraisal into — read from
         // the transition log rather than guessed from the stage name.
         const transition = [...appraisal.transitions]
@@ -144,7 +171,12 @@ export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
               onClick={() => setOpenId(open ? null : revision.id)}
               className="flex w-full flex-wrap items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-accent"
             >
-              <RevisionBadge stage={revision.stage} versionNumber={revision.versionNumber} reviewLevel={revision.reviewLevel} />
+              <RevisionBadge
+                stage={revision.stage}
+                versionNumber={versionNumber}
+                reviewLevel={revision.reviewLevel}
+                alsoLevel={alsoLevel}
+              />
               <div className="min-w-0">
                 <p className="text-sm font-medium">{revision.authorName ?? "Unknown"}</p>
                 <p className="text-[11px] text-muted-foreground">

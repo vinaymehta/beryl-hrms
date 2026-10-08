@@ -26,11 +26,6 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { API_ORIGIN } from "@/lib/api-client"
 import {
-  Sheet,
-  SheetContent,
-} from "@/components/ui/sheet"
-import { PanelBody, PanelFooter, PanelHeader } from "@/components/ui/panel"
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -42,14 +37,12 @@ import {
 import { EmployeeStatusBadge } from "@/features/employees/components/employee-status-badge"
 import { ManagerHierarchyCard } from "@/features/employees/components/manager-hierarchy-card"
 import { EmployeeRecordTabs } from "@/features/employees/components/employee-record-tabs"
-import { EmployeeForm } from "@/features/employees/components/employee-form"
+import { EditEmployeeSheet } from "@/features/employees/components/edit-employee-sheet"
 import { AccountAccess } from "@/features/employees/components/account-access"
-import { PersonalDetailsPanel } from "@/features/employees/components/personal-details-panel"
 import { useEmployee } from "@/features/employees/hooks/use-employees"
-import { useUpdateEmployee, useDeactivateEmployee, useReactivateEmployee } from "@/features/employees/hooks/use-employee-mutations"
+import { useDeactivateEmployee, useReactivateEmployee } from "@/features/employees/hooks/use-employee-mutations"
 import { EmployeeDocumentsSection } from "@/features/documents/components/employee-documents-section"
 import { usePermission } from "@/features/auth/hooks/use-permission"
-import { useCurrentUser } from "@/features/auth/hooks/use-current-user"
 import { PERMISSIONS, PEOPLE_MANAGEMENT_PERMISSIONS } from "@/constants/permissions"
 
 function initials(first: string, last: string) {
@@ -143,7 +136,6 @@ export function EmployeeDetailContent({
   }
 
   const { data: employee, isLoading, isError, refetch } = useEmployee(employeeId)
-  const updateEmployee = useUpdateEmployee(employeeId)
   const deactivateEmployee = useDeactivateEmployee()
   const reactivateEmployee = useReactivateEmployee()
   const canUpdate = usePermission(PERMISSIONS.employeesUpdate)
@@ -152,14 +144,6 @@ export function EmployeeDetailContent({
   // giving them a login in the first place — see EmployeePolicy.
   const canManageRoles = usePermission(PERMISSIONS.employeesManageRoles)
   const [editOpen, setEditOpen] = useState(false)
-  const [personalOpen, setPersonalOpen] = useState(false)
-  // Somebody looking at their OWN record who can't use the full Edit gets the
-  // narrow one instead: personal, contact, address and emergency contact,
-  // saved straight away (EmployeePolicy#update_personal?). Anyone with
-  // employees.update already edits all of that through Edit.
-  const { user } = useCurrentUser()
-  const isOwnRecord = user?.employeeId != null && String(user.employeeId) === employeeId
-  const canEditOwnDetails = isOwnRecord && !canUpdate
   const [confirmOpen, setConfirmOpen] = useState(false)
 
   if (isLoading) {
@@ -216,7 +200,7 @@ export function EmployeeDetailContent({
           header ribbon, so they are in reach without scrolling. Actions are
           hidden entirely for a viewer who can do neither thing, rather than
           offering buttons the API would refuse. */}
-      {(showBack || canUpdate || canDeactivate || canEditOwnDetails) && (
+      {(showBack || canUpdate || canDeactivate) && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           {showBack ? (
             <Button
@@ -235,11 +219,6 @@ export function EmployeeDetailContent({
             {canUpdate && (
               <Button variant="outline" className="gap-1.5" onClick={() => setEditOpen(true)}>
                 <PencilIcon className="size-4" /> Edit
-              </Button>
-            )}
-            {canEditOwnDetails && (
-              <Button variant="outline" className="gap-1.5" onClick={() => setPersonalOpen(true)}>
-                <PencilIcon className="size-4" /> Edit my details
               </Button>
             )}
             {canDeactivate &&
@@ -279,7 +258,7 @@ export function EmployeeDetailContent({
               {employee.firstName} {employee.lastName}
             </h1>
             <p className="truncate text-sm text-white/80">
-              {employee.designation?.title ?? "No job title"} · {employee.department?.name ?? "No department"}
+              {employee.designation?.title ?? "No designation"} · {employee.department?.name ?? "No department"}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <EmployeeStatusBadge
@@ -310,7 +289,7 @@ export function EmployeeDetailContent({
             <InfoRow label="Employee ID" value={employee.employeeCode} />
             <InfoRow label="Date of joining" value={employee.dateOfJoining} icon={CalendarDaysIcon} />
             <InfoRow label="Department" value={employee.department?.name ?? null} />
-            <InfoRow label="Job title" value={employee.designation?.title ?? null} />
+            <InfoRow label="Designation" value={employee.designation?.title ?? null} />
             <InfoRow label="Status" value={<EmployeeStatusBadge status={employee.status} />} />
           </div>
         </SectionCard>
@@ -357,40 +336,7 @@ export function EmployeeDetailContent({
         }
       />
 
-      <Sheet open={editOpen} onOpenChange={setEditOpen}>
-        <SheetContent side="right" className="w-full p-0 flex flex-col gap-0 sm:w-[45vw] sm:min-w-180 sm:max-w-275">
-          <PanelHeader
-            icon={PencilIcon}
-            title="Edit employee"
-            description={<>Update {employee.firstName}&apos;s profile, reporting managers and access.</>}
-          />
-          <PanelBody>
-            <EmployeeForm
-              employee={employee}
-              isPending={updateEmployee.isPending}
-              onSubmit={(values) => updateEmployee.mutate(values, { onSuccess: () => setEditOpen(false) })}
-            />
-          </PanelBody>
-          <PanelFooter>
-            <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              form="employee-form"
-              disabled={updateEmployee.isPending}
-              className="gap-1.5 bg-role-hr text-role-hr-foreground hover:bg-role-hr/90 shadow-2xs"
-            >
-              <PencilIcon className="size-4" />
-              {updateEmployee.isPending ? "Saving…" : "Save changes"}
-            </Button>
-          </PanelFooter>
-        </SheetContent>
-      </Sheet>
-
-      {canEditOwnDetails && (
-        <PersonalDetailsPanel employee={employee} open={personalOpen} onOpenChange={setPersonalOpen} />
-      )}
+      <EditEmployeeSheet employeeId={employeeId} open={editOpen} onOpenChange={setEditOpen} />
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>

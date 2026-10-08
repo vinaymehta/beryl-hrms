@@ -19,6 +19,8 @@ export interface ColumnSpec {
   label: string
   /** How to render the value. `enum` humanises an underscored enum name. */
   kind?: "text" | "label" | "date" | "enum" | "percent" | "money" | "boolean"
+  /** Column width classes, for a column that should stay compact. */
+  className?: string
 }
 
 export interface RecordPanelSpec {
@@ -55,8 +57,10 @@ export const RECORD_PANELS: RecordPanelSpec[] = [
     // to add or edit by hand.
     readOnly: true,
     columns: [
-      { key: "effectiveOn", label: "Date", kind: "date" },
-      { key: "eventType", label: "Change", kind: "enum" },
+      { key: "effectiveOn", label: "Date", kind: "date", className: "w-28 whitespace-nowrap" },
+      { key: "eventType", label: "Change", kind: "enum", className: "w-44 whitespace-nowrap" },
+      // Which manager level, for a manager change ("1st Level Manager").
+      { key: "note", label: "Details", className: "w-44" },
       { key: "fromValue", label: "From", kind: "label" },
       { key: "toValue", label: "To", kind: "label" },
     ],

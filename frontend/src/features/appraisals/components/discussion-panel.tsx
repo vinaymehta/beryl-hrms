@@ -47,7 +47,7 @@ import type { AppraisalDetail, AppraisalRevision, BreakdownKey } from "@/types/a
  *
  * Chosen here by Admin/HR: the current and new monthly gross, its breakdown
  * into the letter's compensation table, the effective and next-appraisal
- * dates, and whether to promote (and to which job title).
+ * dates, and whether to promote (and to which designation).
  */
 export function DiscussionPanel({ appraisal }: { appraisal: AppraisalDetail }) {
   const ratingMax = useRatingScale().at(-1)?.value ?? 5
@@ -267,7 +267,7 @@ function DecisionForm({ appraisal }: { appraisal: AppraisalDetail }) {
       <div className="grid gap-3 sm:grid-cols-3">
         <MoneyField
           id="discussion-current-gross"
-          label="Current monthly gross"
+          label="Current Salary"
           value={currentGross}
           readOnly={readOnly}
           disabled={busy}
@@ -282,7 +282,9 @@ function DecisionForm({ appraisal }: { appraisal: AppraisalDetail }) {
           }}
         />
         <div className="grid content-start gap-1.5">
-          <Label htmlFor="discussion-increment">Increment (%)</Label>
+          <div className="flex h-4 items-center">
+            <Label htmlFor="discussion-increment">Increment (%)</Label>
+          </div>
           {readOnly ? (
             <p className="text-sm tabular-nums">{increment === "" ? "—" : `${Number(increment)}%`}</p>
           ) : (
@@ -305,11 +307,11 @@ function DecisionForm({ appraisal }: { appraisal: AppraisalDetail }) {
         </div>
         <MoneyField
           id="discussion-new-gross"
-          label="New monthly gross"
+          label="New salary"
           value={newGross}
           readOnly={readOnly}
           disabled={busy}
-          tip="Worked out from the current gross and the increment, to the rupee. Type over it to set it yourself — the table below is re-filled from it."
+          tip="Worked out from the current salary and the increment, to the rupee. Type over it to set it yourself — the table below is re-filled from it."
           onChange={changeNewGross}
         />
       </div>
@@ -323,7 +325,7 @@ function DecisionForm({ appraisal }: { appraisal: AppraisalDetail }) {
       />
       {hasGross && !totalMatches && (
         <p className="-mt-2 text-xs text-destructive" role="alert">
-          The breakdown adds up to {rupees.format(total)} a month, but the new monthly gross is{" "}
+          The breakdown adds up to {rupees.format(total)} a month, but the new salary is{" "}
           {rupees.format(Number(newGross))}.
         </p>
       )}
@@ -399,7 +401,7 @@ function DecisionForm({ appraisal }: { appraisal: AppraisalDetail }) {
       {promote === true && (
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
-            <Label htmlFor="discussion-designation">New job title</Label>
+            <Label htmlFor="discussion-designation">New designation</Label>
             <Select
               items={designations?.map((d) => ({ value: String(d.id), label: d.title }))}
               value={designationId || null}
@@ -407,7 +409,7 @@ function DecisionForm({ appraisal }: { appraisal: AppraisalDetail }) {
               disabled={busy}
             >
               <SelectTrigger id="discussion-designation" className="h-9 w-full">
-                <SelectValue placeholder={saved.proposedDesignationTitle ?? "Select a job title"} />
+                <SelectValue placeholder={saved.proposedDesignationTitle ?? "Select a designation"} />
               </SelectTrigger>
               <SelectContent>
                 {designations?.map((d) => (
@@ -417,7 +419,7 @@ function DecisionForm({ appraisal }: { appraisal: AppraisalDetail }) {
                 ))}
               </SelectContent>
             </Select>
-            {!promotionOk && <p className="text-xs text-destructive">Choose the new job title</p>}
+            {!promotionOk && <p className="text-xs text-destructive">Choose the new designation</p>}
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="discussion-reason">Reason</Label>
@@ -486,8 +488,8 @@ function BreakdownTable({
         <p className="text-sm font-medium">Compensation and benefits structure</p>
         {!readOnly && (
           <InfoTip label="Compensation and benefits structure">
-            Filled from the salary rules in All Settings whenever the new monthly gross changes. Any row can be
-            edited; the earnings rows must add up to the new monthly gross. The E.P.F. rows are not part of it.
+            Filled from the salary rules in All Settings whenever the new salary changes. Any row can be
+            edited; the earnings rows must add up to the new salary. The E.P.F. rows are not part of it.
           </InfoTip>
         )}
       </div>
@@ -550,7 +552,7 @@ function BreakdownTable({
           <InfoTip label="Annual CTC">(Monthly gross + E.P.F. Employer) × 12 — the figure the letter states.</InfoTip>
         </p>
       ) : (
-        <p className="text-xs text-muted-foreground">Enter the new monthly gross to fill in the table.</p>
+        <p className="text-xs text-muted-foreground">Enter the new salary to fill in the table.</p>
       )}
     </div>
   )
@@ -580,7 +582,7 @@ function MoneyField({
 }) {
   return (
     <div className="grid content-start gap-1.5">
-      <div className="flex items-center gap-1">
+      <div className="flex h-4 items-center gap-1">
         <Label htmlFor={readOnly ? undefined : id}>{label}</Label>
         {tip && !readOnly && <InfoTip label={label}>{tip}</InfoTip>}
       </div>

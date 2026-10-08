@@ -69,7 +69,9 @@ Rails.application.configure do
     config.action_mailer.delivery_method = :smtp
     config.action_mailer.smtp_settings = {
       address: "smtp.resend.com",
-      port: 587,
+      # RESEND_SMTP_PORT — 2587 on the server: DigitalOcean blocks outbound
+      # 25/465/587 (Net::OpenTimeout); Resend also listens on 2587 (STARTTLS).
+      port: ENV.fetch("RESEND_SMTP_PORT").to_i,
       user_name: "resend",
       password: ENV["RESEND_API_KEY"].presence,
       authentication: :plain,

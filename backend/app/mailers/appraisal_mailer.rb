@@ -23,7 +23,7 @@ class AppraisalMailer < ApplicationMailer
     @button = "Open the appraisal"
     attach_letter(@appraisal.signed_letter_pdf, Appraisals::Release.letter_filename(@appraisal, suffix: "signed"))
 
-    mail(to: @user.email_address, subject: "#{notification.title}: #{@appraisal.employee.full_name}")
+    mail(to: @user.email_address, subject: notification.title)
   end
 
   private

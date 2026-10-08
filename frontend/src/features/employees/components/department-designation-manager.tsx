@@ -1,10 +1,20 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { PlusIcon, EyeIcon, PencilIcon, Trash2Icon, Building2Icon, BriefcaseIcon, IdCardIcon } from "lucide-react"
+import {
+  PlusIcon,
+  EyeIcon,
+  PencilIcon,
+  Trash2Icon,
+  Building2Icon,
+  BriefcaseIcon,
+  IdCardIcon,
+} from "lucide-react"
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,7 +28,13 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Sheet, SheetClose, SheetContent } from "@/components/ui/sheet"
 import { PanelBody, PanelFooter, PanelHeader, PanelSection } from "@/components/ui/panel"
 import {
@@ -30,7 +46,12 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog"
-import { useDepartments, useDesignations, useEmploymentTypes } from "@/features/employees/hooks/use-employees"
+import {
+  useDepartments,
+  useDesignations,
+  useEmployees,
+  useEmploymentTypes,
+} from "@/features/employees/hooks/use-employees"
 import {
   useCreateDepartment,
   useUpdateDepartment,
@@ -100,7 +121,11 @@ function DepartmentDialog({
           description="Departments group employees and designations for reporting."
         />
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="flex min-h-0 flex-1 flex-col"
+            noValidate
+          >
             <PanelBody>
               <PanelSection title="Details">
                 <FormField
@@ -109,7 +134,9 @@ function DepartmentDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Name</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -120,7 +147,14 @@ function DepartmentDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Description</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
+                      <FormControl>
+                        <textarea
+                          rows={4}
+                          {...field}
+                          value={field.value ?? ""}
+                          className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive dark:bg-input/30"
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -128,7 +162,13 @@ function DepartmentDialog({
               </PanelSection>
             </PanelBody>
             <PanelFooter>
-              <SheetClose render={<Button type="button" variant="outline">Cancel</Button>} />
+              <SheetClose
+                render={
+                  <Button type="button" variant="outline">
+                    Cancel
+                  </Button>
+                }
+              />
               <Button type="submit" disabled={saving} onClick={form.handleSubmit(onSubmit)}>
                 {saving ? "Saving…" : editing ? "Save changes" : "Create"}
               </Button>
@@ -140,7 +180,10 @@ function DepartmentDialog({
   )
 }
 
-/** Read-only detail, for looking without risking an edit. */
+/**
+ * Read-only detail, for looking without risking an edit: a side panel with the
+ * department's description and the people in it (active employees).
+ */
 function DepartmentDetailDialog({
   department,
   onOpenChange,
@@ -148,30 +191,76 @@ function DepartmentDetailDialog({
   department: Department
   onOpenChange: (next: boolean) => void
 }) {
+  const { data, isLoading } = useEmployees({
+    departmentId: String(department.id),
+    status: "active",
+    perPage: 100,
+    sortBy: "name",
+    sortDir: "asc",
+  })
+  const employees = data?.data ?? []
+
   return (
-    <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{department.name}</DialogTitle>
-          <DialogDescription>
-            {department.description || "No description."}
-          </DialogDescription>
-        </DialogHeader>
-        <dl className="grid grid-cols-2 gap-4 border-t pt-4">
-          <div>
-            <dt className="text-xs text-muted-foreground">Employees</dt>
-            <dd className="text-lg font-semibold tabular-nums">{department.employeeCount}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Designations</dt>
-            <dd className="text-lg font-semibold tabular-nums">{department.designationCount}</dd>
-          </div>
-        </dl>
-        <DialogFooter>
-          <DialogClose render={<Button variant="outline">Close</Button>} />
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Sheet open onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+        <PanelHeader
+          icon={Building2Icon}
+          title={department.name}
+          description={`${department.employeeCount} employee${department.employeeCount === 1 ? "" : "s"} · ${department.designationCount} designation${department.designationCount === 1 ? "" : "s"}`}
+        />
+        <PanelBody>
+          <PanelSection title="Description">
+            <p className="text-sm whitespace-pre-line text-muted-foreground">
+              {department.description || "No description."}
+            </p>
+          </PanelSection>
+          <PanelSection title={`Employees${data ? ` (${data.meta.totalCount})` : ""}`}>
+            {isLoading ? (
+              <div className="grid gap-2">
+                {Array.from({ length: 4 }, (_, i) => (
+                  <Skeleton key={i} className="h-12 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : employees.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nobody is in this department yet.</p>
+            ) : (
+              <ul className="grid gap-1">
+                {employees.map((employee) => {
+                  const name = `${employee.firstName} ${employee.lastName}`.trim()
+                  return (
+                    <li key={employee.id}>
+                      <Link
+                        href={`/employees/${employee.id}`}
+                        className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted/60"
+                      >
+                        <Avatar size="sm">
+                          {employee.profilePhotoUrl && (
+                            <AvatarImage src={employee.profilePhotoUrl} alt="" />
+                          )}
+                          <AvatarFallback className="text-[11px]">
+                            {`${employee.firstName[0] ?? ""}${employee.lastName[0] ?? ""}`.toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">{name}</span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {employee.designation?.title ?? "No designation"} ·{" "}
+                            {employee.employeeCode}
+                          </span>
+                        </span>
+                      </Link>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </PanelSection>
+        </PanelBody>
+        <PanelFooter>
+          <SheetClose render={<Button variant="outline">Close</Button>} />
+        </PanelFooter>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -276,7 +365,7 @@ function BulkDeleteDepartmentsDialog({
   )
 }
 
-/** Create and edit a job title, in one panel like DepartmentDialog. */
+/** Create and edit a designation, in one panel like DepartmentDialog. */
 function JobTitleDialog({
   designation,
   onOpenChange,
@@ -309,11 +398,15 @@ function JobTitleDialog({
       <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
         <PanelHeader
           icon={BriefcaseIcon}
-          title={editing ? `Edit ${designation.title}` : "New job title"}
-          description="Job titles sit within a department."
+          title={editing ? `Edit ${designation.title}` : "New designation"}
+          description="Designations sit within a department."
         />
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="flex min-h-0 flex-1 flex-col"
+            noValidate
+          >
             <PanelBody>
               <PanelSection title="Details">
                 <FormField
@@ -322,7 +415,9 @@ function JobTitleDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Title</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -339,10 +434,16 @@ function JobTitleDialog({
                         onValueChange={(v) => field.onChange(v ?? "")}
                       >
                         <FormControl>
-                          <SelectTrigger className="w-full"><SelectValue placeholder="Select department" /></SelectTrigger>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select department" />
+                          </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {departments?.map((d) => <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>)}
+                          {departments?.map((d) => (
+                            <SelectItem key={d.id} value={String(d.id)}>
+                              {d.name}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -352,7 +453,13 @@ function JobTitleDialog({
               </PanelSection>
             </PanelBody>
             <PanelFooter>
-              <SheetClose render={<Button type="button" variant="outline">Cancel</Button>} />
+              <SheetClose
+                render={
+                  <Button type="button" variant="outline">
+                    Cancel
+                  </Button>
+                }
+              />
               <Button type="submit" disabled={saving} onClick={form.handleSubmit(onSubmit)}>
                 {saving ? "Saving…" : editing ? "Save changes" : "Create"}
               </Button>
@@ -364,7 +471,7 @@ function JobTitleDialog({
   )
 }
 
-/** Create and edit an employee type. */
+/** Create and edit an employment type. */
 function EmploymentTypeDialog({
   employmentType,
   onOpenChange,
@@ -379,7 +486,10 @@ function EmploymentTypeDialog({
 
   const form = useForm<EmploymentTypeFormValues>({
     resolver: zodResolver(employmentTypeFormSchema),
-    defaultValues: { name: employmentType?.name ?? "", description: employmentType?.description ?? "" },
+    defaultValues: {
+      name: employmentType?.name ?? "",
+      description: employmentType?.description ?? "",
+    },
   })
 
   function onSubmit(values: EmploymentTypeFormValues) {
@@ -393,11 +503,15 @@ function EmploymentTypeDialog({
       <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
         <PanelHeader
           icon={IdCardIcon}
-          title={editing ? `Edit ${employmentType.name}` : "New designation"}
-          description="Offered as Designation on the employee form."
+          title={editing ? `Edit ${employmentType.name}` : "New employment type"}
+          description="Offered as Employment type on the employee form."
         />
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="flex min-h-0 flex-1 flex-col"
+            noValidate
+          >
             <PanelBody>
               <PanelSection title="Details">
                 <FormField
@@ -406,7 +520,9 @@ function EmploymentTypeDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Name</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -417,7 +533,14 @@ function EmploymentTypeDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Description</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
+                      <FormControl>
+                        <textarea
+                          rows={4}
+                          {...field}
+                          value={field.value ?? ""}
+                          className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive dark:bg-input/30"
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -425,7 +548,13 @@ function EmploymentTypeDialog({
               </PanelSection>
             </PanelBody>
             <PanelFooter>
-              <SheetClose render={<Button type="button" variant="outline">Cancel</Button>} />
+              <SheetClose
+                render={
+                  <Button type="button" variant="outline">
+                    Cancel
+                  </Button>
+                }
+              />
               <Button type="submit" disabled={saving} onClick={form.handleSubmit(onSubmit)}>
                 {saving ? "Saving…" : editing ? "Save changes" : "Create"}
               </Button>
@@ -437,7 +566,7 @@ function EmploymentTypeDialog({
   )
 }
 
-/** A plain "are you sure" for job titles and employee types. */
+/** A plain "are you sure" for designations and employment types. */
 function ConfirmDeleteDialog({
   name,
   detail,
@@ -552,7 +681,7 @@ export function AddJobTitleButton() {
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)}>
-        <PlusIcon /> Add job title
+        <PlusIcon /> Add designation
       </Button>
       {open && <JobTitleDialog onOpenChange={setOpen} />}
     </>
@@ -568,7 +697,7 @@ export function AddEmploymentTypeButton() {
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)}>
-        <PlusIcon /> Add designation
+        <PlusIcon /> Add employment type
       </Button>
       {open && <EmploymentTypeDialog onOpenChange={setOpen} />}
     </>
@@ -629,7 +758,10 @@ export function DepartmentsManager() {
           ) : (
             <div className="grid gap-2">
               {departments.map((d) => (
-                <div key={d.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                <div
+                  key={d.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border p-3"
+                >
                   <div className="flex min-w-0 items-center gap-3">
                     {canDelete && (
                       <Checkbox
@@ -647,7 +779,9 @@ export function DepartmentsManager() {
                     )}
                     <div className="min-w-0">
                       <p className="text-sm font-medium">{d.name}</p>
-                      {d.description && <p className="text-xs text-muted-foreground">{d.description}</p>}
+                      {d.description && (
+                        <p className="text-xs text-muted-foreground">{d.description}</p>
+                      )}
                       <p className="text-xs text-muted-foreground">
                         {d.employeeCount} {d.employeeCount === 1 ? "employee" : "employees"}
                       </p>
@@ -675,10 +809,16 @@ export function DepartmentsManager() {
         />
       )}
       {viewing && (
-        <DepartmentDetailDialog department={viewing} onOpenChange={(next) => !next && setViewing(null)} />
+        <DepartmentDetailDialog
+          department={viewing}
+          onOpenChange={(next) => !next && setViewing(null)}
+        />
       )}
       {deleting && (
-        <DeleteDepartmentDialog department={deleting} onOpenChange={(next) => !next && setDeleting(null)} />
+        <DeleteDepartmentDialog
+          department={deleting}
+          onOpenChange={(next) => !next && setDeleting(null)}
+        />
       )}
       {bulkDeleting && (
         <BulkDeleteDepartmentsDialog
@@ -694,7 +834,7 @@ export function DepartmentsManager() {
   )
 }
 
-/** Job titles (designations) — list, edit and delete. */
+/** Designations — list, edit and delete. */
 export function JobTitlesManager() {
   const [editing, setEditing] = useState<Designation | null>(null)
   const [deleting, setDeleting] = useState<Designation | null>(null)
@@ -710,17 +850,23 @@ export function JobTitlesManager() {
   return (
     <Card>
       <CardContent className="grid gap-3 pt-6">
-        <p className="text-sm text-muted-foreground">{designations?.length ?? 0} total job titles</p>
+        <p className="text-sm text-muted-foreground">
+          {designations?.length ?? 0} total designations
+        </p>
         {isLoading ? (
           <Skeleton className="h-24 w-full" />
         ) : !designations?.length ? (
-          <p className="text-sm text-muted-foreground">No job titles yet.</p>
+          <p className="text-sm text-muted-foreground">No designations yet.</p>
         ) : (
           <div className="grid gap-2">
             {designations.map((d) => {
-              const department = d.departmentId != null ? departmentName.get(String(d.departmentId)) : undefined
+              const department =
+                d.departmentId != null ? departmentName.get(String(d.departmentId)) : undefined
               return (
-                <div key={d.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                <div
+                  key={d.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border p-3"
+                >
                   <div className="min-w-0">
                     <p className="text-sm font-medium">{d.title}</p>
                     <p className="text-xs text-muted-foreground">
@@ -739,7 +885,13 @@ export function JobTitlesManager() {
         )}
       </CardContent>
 
-      {editing && <JobTitleDialog key={editing.id} designation={editing} onOpenChange={(next) => !next && setEditing(null)} />}
+      {editing && (
+        <JobTitleDialog
+          key={editing.id}
+          designation={editing}
+          onOpenChange={(next) => !next && setEditing(null)}
+        />
+      )}
       {deleting && (
         <ConfirmDeleteDialog
           name={deleting.title}
@@ -753,7 +905,7 @@ export function JobTitlesManager() {
   )
 }
 
-/** Employee types (Full-time, Contract, …) — list, edit and delete. */
+/** Employment types (Full-time, Contract, …) — list, edit and delete. */
 export function EmploymentTypesManager() {
   const [editing, setEditing] = useState<EmploymentType | null>(null)
   const [deleting, setDeleting] = useState<EmploymentType | null>(null)
@@ -766,18 +918,23 @@ export function EmploymentTypesManager() {
   return (
     <Card>
       <CardContent className="grid gap-3 pt-6">
-        <p className="text-sm text-muted-foreground">{types?.length ?? 0} total designations</p>
+        <p className="text-sm text-muted-foreground">{types?.length ?? 0} total employment types</p>
         {isLoading ? (
           <Skeleton className="h-24 w-full" />
         ) : !types?.length ? (
-          <p className="text-sm text-muted-foreground">No designations yet.</p>
+          <p className="text-sm text-muted-foreground">No employment types yet.</p>
         ) : (
           <div className="grid gap-2">
             {types.map((t) => (
-              <div key={t.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+              <div
+                key={t.id}
+                className="flex items-center justify-between gap-3 rounded-lg border p-3"
+              >
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{t.name}</p>
-                  {t.description && <p className="text-xs text-muted-foreground">{t.description}</p>}
+                  {t.description && (
+                    <p className="text-xs text-muted-foreground">{t.description}</p>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     {t.employeeCount} {t.employeeCount === 1 ? "employee" : "employees"}
                   </p>
@@ -794,7 +951,11 @@ export function EmploymentTypesManager() {
       </CardContent>
 
       {editing && (
-        <EmploymentTypeDialog key={editing.id} employmentType={editing} onOpenChange={(next) => !next && setEditing(null)} />
+        <EmploymentTypeDialog
+          key={editing.id}
+          employmentType={editing}
+          onOpenChange={(next) => !next && setEditing(null)}
+        />
       )}
       {deleting && (
         <ConfirmDeleteDialog

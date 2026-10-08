@@ -3,6 +3,7 @@
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -122,6 +123,15 @@ function RecordFormBody({
                   ))}
                 </SelectContent>
               </Select>
+            ) : field.type === "date" ? (
+              // The same calendar as the employee form's dates.
+              <DatePicker
+                id={`record-${field.key}`}
+                value={values[field.key] ?? ""}
+                onChange={(next) => set(field.key, next)}
+                placeholder="dd/mm/yyyy"
+                clearable={!field.required}
+              />
             ) : (
               <Input
                 id={`record-${field.key}`}

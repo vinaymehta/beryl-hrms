@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { PlusIcon, PencilIcon, Trash2Icon, CheckCircle2Icon, LockIcon } from "lucide-react"
 
+import { cn } from "cn"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -103,7 +104,9 @@ export function EmployeeRecordPanel({
             <TableHeader>
               <TableRow>
                 {spec.columns.map((column) => (
-                  <TableHead key={column.key}>{column.label}</TableHead>
+                  <TableHead key={column.key} className={column.className}>
+                    {column.label}
+                  </TableHead>
                 ))}
                 {writable && <TableHead className="w-24" />}
               </TableRow>
@@ -112,7 +115,7 @@ export function EmployeeRecordPanel({
               {rows.map((row) => (
                 <TableRow key={row.id}>
                   {spec.columns.map((column) => (
-                    <TableCell key={column.key} className="max-w-64 align-top text-sm">
+                    <TableCell key={column.key} className={cn("max-w-64 align-top text-sm", column.className)}>
                       {renderCell(row, column)}
                     </TableCell>
                   ))}

@@ -137,7 +137,7 @@ const baseEmployeeFields = z.object({
   lastName: z.string().trim().min(1, "Last name is required"),
   employeeCode: z.string().trim().min(1, "Employee ID is required"),
   departmentId: z.string().optional(),
-  /** The job title. Designation IS the job title — there is no second field. */
+  /** The designation (within the chosen department). */
   designationId: z.string().optional(),
   currentLevel: z.enum(EMPLOYEE_LEVEL_VALUES).optional().or(z.literal("")),
   employmentTypeId: z.string().optional(),
@@ -164,7 +164,21 @@ const baseEmployeeFields = z.object({
    * access" — not every employee needs one. The backend never sets or returns
    * a password; it emails a setup link instead.
    */
-  workEmail: z.string().trim().email("Enter a valid work email").optional().or(z.literal("")),
+  workEmail: z
+    .string()
+    .trim()
+    .superRefine((value, ctx) => {
+      if (!value) return
+      // Two "@"s: a domain typed into the name part, in front of the company
+      // domain the field adds itself.
+      if ((value.match(/@/g) ?? []).length > 1) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Type only the name — the domain is added for you" })
+      } else if (!z.string().email().safeParse(value).success) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Enter a valid work email" })
+      }
+    })
+    .optional()
+    .or(z.literal("")),
   /**
    * Role ids on the linked User account. The backend always adds the Employee
    * role on top of whatever is sent here, so an empty array is still a valid
@@ -217,49 +231,6 @@ const baseEmployeeFields = z.object({
 /** The add-employee rules. An edit uses buildEmployeeFormSchema({isNew:false}). */
 export const employeeFormSchema = buildEmployeeFormSchema({ isNew: true })
 export type EmployeeFormValues = z.infer<typeof baseEmployeeFields>
-
-/**
- * What an employee may change about themselves from Profile → Edit my details
- * (PATCH /employees/:id/personal). Picked from the employee form's own fields
- * rather than restated, so a phone number, postal code or email is judged by
- * exactly the same rule — and the same sentence — on both screens.
- *
- * Unlike an HR edit, the 22-year floor is checked on every save here, not
- * only for a new hire: the panel's calendar stops at it too, and every record
- * added through the employee form already meets it. The server checks it
- * whenever the date actually changes.
- */
-export const personalDetailsSchema = baseEmployeeFields
-  .pick({
-    dateOfBirth: true,
-    gender: true,
-    phone: true,
-    personalEmail: true,
-    addressLine1: true,
-    addressLine2: true,
-    city: true,
-    cityOther: true,
-    state: true,
-    postalCode: true,
-    country: true,
-    emergencyContactName: true,
-    emergencyContactPhone: true,
-  })
-  .superRefine((values, ctx) => {
-    if (values.dateOfBirth && values.dateOfBirth > maxBirthDateIso()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["dateOfBirth"],
-        message: `Employees must be at least ${MINIMUM_AGE_YEARS} years old`,
-      })
-    }
-  })
-export type PersonalDetailsValues = z.infer<typeof personalDetailsSchema>
-
-/** As sent: "Other" resolved to the typed-in city, and null for a cleared one. */
-export interface PersonalDetailsPayload extends Omit<PersonalDetailsValues, "city" | "cityOther"> {
-  city?: string | null
-}
 
 export const departmentFormSchema = z.object({
   name: z.string().trim().min(1, "Department name is required"),

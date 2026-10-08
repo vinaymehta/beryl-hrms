@@ -47,7 +47,10 @@ export function NotificationBell() {
       >
         <BellIcon className="size-4.5" />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+          // Pinned to the button's corner and nudged out past it, with a ring
+          // in the page colour, so the count sits beside the bell's shoulder
+          // instead of on top of it. The brand colour, not an alarm red.
+          <span className="absolute top-0 right-0 flex h-4 min-w-4 translate-x-1/2 -translate-y-1/3 items-center justify-center rounded-full bg-primary px-1 text-[10px] leading-none font-semibold tabular-nums text-primary-foreground shadow-sm ring-2 ring-background">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}

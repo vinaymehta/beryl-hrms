@@ -12,7 +12,6 @@ import type { Role } from "@/types/auth"
 import type { SalaryStructureRules } from "@/types/appraisals"
 import type {
   EmployeePayload,
-  PersonalDetailsPayload,
   DepartmentFormValues,
   DesignationFormValues,
   EmploymentTypeFormValues,
@@ -50,11 +49,6 @@ export const employeesApi = {
   get: (id: string) => apiClient.get<Employee>(`/employees/${id}`),
   create: (values: EmployeePayload) => apiClient.post<Employee>("/employees", values),
   update: (id: string, values: Partial<EmployeePayload>) => apiClient.patch<Employee>(`/employees/${id}`, values),
-  // The employee's own edit from Profile. A separate route from `update`
-  // because it is a separate permission: it accepts only the personal
-  // columns, and anything else in the body is ignored by the server.
-  updatePersonal: (id: string, values: PersonalDetailsPayload) =>
-    apiClient.patch<Employee>(`/employees/${id}/personal`, values),
   // Hits the dedicated /deactivate endpoint (not the plain update route) so
   // it goes through its own permission check (employees.delete) and its own
   // audit trail entry, in both directions — status: "active" reactivates.

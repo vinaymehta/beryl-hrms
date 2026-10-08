@@ -279,6 +279,16 @@ class Employee < ApplicationRecord
   # The employment fields whose changes are worth a history entry, mapped to
   # the event type each produces. Address and phone are deliberately absent:
   # correcting a typo in a postcode is not an employment event.
+  # The manager levels as the employee form names them, for the history.
+  MANAGER_LEVEL_HISTORY_LABELS = {
+    "primary" => "1st Level Manager",
+    "secondary" => "2nd Level Manager",
+    "final" => "3rd Level Manager",
+    "project_manager" => "Project Manager(s)",
+    "department_head" => "Department Head",
+    "additional" => "Additional Manager(s)"
+  }.freeze
+
   TRACKED_EMPLOYMENT_CHANGES = {
     "designation_id" => :designation_changed,
     "department_id" => :department_changed,
@@ -303,6 +313,10 @@ class Employee < ApplicationRecord
       raise ManagerHierarchyError, "#{level} is not a manager level" unless EmployeeManager::LEVELS.include?(level)
     end
 
+    # Who holds each submitted level now, so only the levels that really change
+    # are written to the history — the form sends every level on every save.
+    before = submitted.keys.index_with { |level| manager_names_at(level) }
+
     release_moved_managers(submitted)
 
     submitted.each do |level, value|
@@ -315,7 +329,24 @@ class Employee < ApplicationRecord
 
     reset_manager_associations
     enforce_hierarchy_shape!
-    record_manager_change(submitted.keys)
+    record_manager_change(before)
+    refresh_open_appraisal_reviewers
+  end
+
+  # An appraisal keeps its reviewer chain from the moment it was created. One
+  # that hasn't reached manager review yet takes the new chain instead — a
+  # manager set (or changed) after the employee was added to a cycle would
+  # otherwise be left out, and the self-appraisal would skip straight past
+  # them to the Final review. Appraisals already in review keep the chain they
+  # were reviewed under.
+  def refresh_open_appraisal_reviewers
+    appraisals.where(status: %i[draft self_appraisal_open]).update_all(
+      reviewer_ids: review_chain_ids,
+      primary_manager_id: primary_manager_id,
+      secondary_manager_id: secondary_manager_id,
+      final_manager_id: final_manager_id,
+      updated_at: Time.current
+    )
   end
 
   # Reads the loaded association when it is already in memory, so a
@@ -370,22 +401,30 @@ class Employee < ApplicationRecord
       end
     end
 
-    def record_manager_change(levels)
-      levels.each do |level|
-        association = EmployeeManager::ASSOCIATION_FOR_LEVEL.fetch(level.to_s)
-        assigned = public_send(association)
-        # The plural slot records the whole set, so the history entry reads as
-        # "who are the project managers now" rather than one line per person.
-        to_value = assigned.is_a?(Enumerable) ? assigned.map(&:full_name).join(", ").presence : assigned&.full_name
+    # One history entry per level whose holder(s) actually changed: who it was
+    # (From), who it is now (To), and which level, in the note.
+    def record_manager_change(before)
+      before.each do |level, from_value|
+        to_value = manager_names_at(level)
+        next if from_value == to_value
 
         employment_events.create!(
           event_type: :manager_changed,
-          from_value: level.to_s,
+          from_value: from_value,
           to_value: to_value,
+          note: MANAGER_LEVEL_HISTORY_LABELS.fetch(level.to_s, level.to_s.humanize),
           effective_on: Date.current,
           recorded_by: Current.user
         )
       end
+    end
+
+    # The holder(s) of a level as one readable string (nil when empty). The
+    # plural slots read as the whole set — "who are the project managers now".
+    def manager_names_at(level)
+      assigned = public_send(EmployeeManager::ASSOCIATION_FOR_LEVEL.fetch(level.to_s))
+      names = assigned.is_a?(Enumerable) ? assigned.map(&:full_name) : [ assigned&.full_name ]
+      names.compact.join(", ").presence
     end
 
     # Names, not ids: an event has to stay readable after the record it points

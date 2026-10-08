@@ -60,7 +60,7 @@ class AppraisalCompensationDecision < ApplicationRecord
   # tries to send it to the employee.
   def letter_blocker
     return "Save the decision with an effective date before releasing." if effective_date.blank?
-    return "Save the new monthly gross and its breakdown before releasing." if approved_compensation.blank? || breakdown.nil?
+    return "Save the new salary and its breakdown before releasing." if approved_compensation.blank? || breakdown.nil?
 
     nil
   end
@@ -105,7 +105,7 @@ class AppraisalCompensationDecision < ApplicationRecord
 
       format = Appraisals::SalaryStructure.method(:format_amount)
       errors.add(:base, "The breakdown adds up to ₹#{format.call(total)} a month, " \
-                        "but the new monthly gross is ₹#{format.call(gross)}.")
+                        "but the new salary is ₹#{format.call(gross)}.")
     end
 
     def next_appraisal_after_effective_date

@@ -55,9 +55,6 @@ Rails.application.routes.draw do
         end
         member do
           patch :deactivate
-          # The employee's own edit of their personal details, from Profile.
-          # Separate from `update` so it can only ever touch those columns.
-          patch :personal, action: :update_personal
           # Account access, kept apart from the profile edit above. Neither
           # sets a password: both send the employee a link and return only
           # the address it went to.

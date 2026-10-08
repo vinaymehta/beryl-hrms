@@ -6,6 +6,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { PanelBody, PanelFooter, PanelHeader, PanelSection } from "@/components/ui/panel"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { MultiSelect } from "@/components/ui/multi-select"
@@ -127,12 +128,23 @@ function CycleForm({
     return (
       <div className="grid gap-1.5">
         <Label htmlFor={`cycle-${key}`}>{label}</Label>
-        <Input
-          id={`cycle-${key}`}
-          type={type}
-          value={values[key]}
-          onChange={(event) => setValues((prev) => ({ ...prev, [key]: event.target.value }))}
-        />
+        {type === "date" ? (
+          // The same calendar as the employee form's dates.
+          <DatePicker
+            id={`cycle-${key}`}
+            value={values[key]}
+            onChange={(next) => setValues((prev) => ({ ...prev, [key]: next }))}
+            placeholder="dd/mm/yyyy"
+            clearable
+          />
+        ) : (
+          <Input
+            id={`cycle-${key}`}
+            type={type}
+            value={values[key]}
+            onChange={(event) => setValues((prev) => ({ ...prev, [key]: event.target.value }))}
+          />
+        )}
       </div>
     )
   }

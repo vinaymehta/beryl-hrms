@@ -14,6 +14,7 @@ import {
 import { PanelBody, PanelFooter, PanelHeader } from "@/components/ui/panel"
 import { EmployeeTable } from "@/features/employees/components/employee-table"
 import { EmployeeFilters } from "@/features/employees/components/employee-filters"
+import { EditEmployeeSheet } from "@/features/employees/components/edit-employee-sheet"
 import { EmployeeForm } from "@/features/employees/components/employee-form"
 import { useEmployees } from "@/features/employees/hooks/use-employees"
 import { useCreateEmployee } from "@/features/employees/hooks/use-employee-mutations"
@@ -102,6 +103,9 @@ export default function EmployeesPage() {
   const { data, isLoading, isError, refetch } = useEmployees(params)
   const createEmployee = useCreateEmployee()
   const canCreate = usePermission(PERMISSIONS.employeesCreate)
+  const canUpdate = usePermission(PERMISSIONS.employeesUpdate)
+  // The employee whose Edit was pressed in the list; the panel opens over it.
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   if (redirectToOwnRecord || (!isUserLoading && !managesPeople)) return null
 
@@ -119,7 +123,7 @@ export default function EmployeesPage() {
           <div>
             <h1 className="text-2xl leading-tight font-semibold tracking-tight">Employees</h1>
             <p className="text-xs text-muted-foreground">
-              Profiles, job titles, reporting managers and system access.
+              Profiles, designations, reporting managers and system access.
             </p>
           </div>
         </div>
@@ -161,6 +165,7 @@ export default function EmployeesPage() {
         hasFilters={hasFilters}
         onRetry={() => refetch()}
         onSelectEmployee={(employeeId) => router.push(`/employees/${employeeId}`)}
+        onEditEmployee={canUpdate ? setEditingId : undefined}
         onAddEmployee={canCreate ? () => setAddOpen(true) : undefined}
         sort={{ by: params.sortBy, dir: params.sortDir ?? "asc" }}
         onSort={toggleSort}
@@ -212,6 +217,15 @@ export default function EmployeesPage() {
             </Button>
           </div>
         </div>
+      )}
+
+      {editingId && (
+        <EditEmployeeSheet
+          key={editingId}
+          employeeId={editingId}
+          open
+          onOpenChange={(open) => !open && setEditingId(null)}
+        />
       )}
 
       <Sheet open={addOpen} onOpenChange={setAddOpen}>

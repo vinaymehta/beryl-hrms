@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type Ref } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useForm, type FieldErrors } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { LockIcon, PlusIcon, RefreshCwIcon, XIcon } from "lucide-react"
+import { LockIcon, MailIcon, PlusIcon, RefreshCwIcon, XIcon } from "lucide-react"
 import { cn } from "cn"
 import { toast } from "sonner"
 
@@ -793,10 +793,7 @@ export function EmployeeForm({
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                {/* The Designation model IS the job title. Shown as "Job title"
-                    only: "Designation" is the label of the employment-type
-                    field below, by the business's own naming. */}
-                <Label htmlFor="employee-designation">Job title</Label>
+                <Label htmlFor="employee-designation">Designation</Label>
                 <Select
                   items={designations?.map((d) => ({ value: String(d.id), label: d.title }))}
                   value={form.watch("designationId") || null}
@@ -804,7 +801,7 @@ export function EmployeeForm({
                 >
                   <SelectTrigger id="employee-designation" className="h-9 w-full">
                     <SelectValue
-                      placeholder={departmentId ? "Select job title" : "Select a department first"}
+                      placeholder={departmentId ? "Select designation" : "Select a department first"}
                     />
                   </SelectTrigger>
                   <SelectContent>
@@ -820,7 +817,7 @@ export function EmployeeForm({
 
             <div className="grid gap-3.5 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <Label htmlFor="employee-employment-type">Designation</Label>
+                <Label htmlFor="employee-employment-type">Employment type</Label>
                 <Select
                   items={employmentTypes?.map((t) => ({ value: String(t.id), label: t.name }))}
                   value={form.watch("employmentTypeId") || null}
@@ -1171,10 +1168,15 @@ export function EmployeeForm({
                             attached to the person follows them — but it is
                             their LOGIN, so the new address starts unverified
                             and they sign in with it from then on. */}
-                        <Input
-                          type="email"
-                          {...field}
-                          placeholder={workEmailDomain ? `priya@${workEmailDomain}` : "priya@company.com"}
+                        <WorkEmailInput
+                          // Fixed only while Settings has the domain check on;
+                          // with it off this is a plain email box.
+                          domain={workEmailDomain}
+                          value={field.value ?? ""}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
                         />
                       </FormControl>
                       <FormMessage />
@@ -1360,8 +1362,7 @@ export function EmployeeForm({
               )}
             />
             <div className="grid gap-3.5 sm:grid-cols-2">
-              {/* Country → State → City, shared with the employee's own
-                  Edit my details panel — see AddressLocationFields. */}
+              {/* Country → State → City — see AddressLocationFields. */}
               <AddressLocationFields form={form} savedCountry={employee?.country} idPrefix="employee" />
               <FormField
                 control={form.control}
@@ -1430,5 +1431,90 @@ export function EmployeeForm({
         </fieldset>
       </form>
     </Form>
+  )
+}
+
+/**
+ * The work email. With the company domain check on (Settings), only the name part is
+ * typed: the domain follows it, fixed, so the box reads as the whole address
+ * ("priya@berylsystems.com") while holding it. A domain typed in as well
+ * ("@gmail.com") is kept, not silently cut, and the form says why it can't be
+ * saved; a pasted address on the company domain keeps just its name. With no
+ * domain set — or an existing address on another domain, never rewritten
+ * silently — it is a plain email box.
+ */
+function WorkEmailInput({
+  domain,
+  value,
+  onChange,
+  onBlur,
+  name,
+  ref,
+  ...control
+}: {
+  domain: string | null
+  value: string
+  onChange: (value: string) => void
+  onBlur: () => void
+  name: string
+  ref?: Ref<HTMLInputElement>
+  /** What FormControl passes down — the field's id and error wiring. */
+  id?: string
+  "aria-invalid"?: boolean
+  "aria-describedby"?: string
+}) {
+  const suffix = domain ? `@${domain.toLowerCase()}` : null
+  const onDomain = suffix !== null && (value === "" || value.toLowerCase().endsWith(suffix))
+
+  if (!suffix || !onDomain) {
+    return (
+      <Input
+        {...control}
+        ref={ref}
+        type="email"
+        name={name}
+        value={value}
+        onBlur={onBlur}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={suffix ? `priya${suffix}` : "priya@company.com"}
+      />
+    )
+  }
+
+  const local = value.slice(0, value.length - suffix.length)
+  return (
+    <div className="relative flex h-8 w-full min-w-0 items-center rounded-lg border border-input bg-transparent transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 has-aria-invalid:border-destructive has-aria-invalid:ring-3 has-aria-invalid:ring-destructive/20 dark:bg-input/30">
+      <MailIcon className="pointer-events-none ml-2.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+      <div className="relative h-full min-w-0 flex-1">
+        {/* The domain, drawn right after the typed name: an invisible copy of
+            the name sets where it starts. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 flex items-center overflow-hidden px-2 text-base whitespace-pre md:text-sm"
+        >
+          <span className="invisible">{local || "name"}</span>
+          <span className="text-muted-foreground">{suffix}</span>
+        </div>
+        <input
+          {...control}
+          ref={ref}
+          name={name}
+          value={local}
+          onBlur={onBlur}
+          // Lower case, no spaces; letters, digits and . _ + - — plus "@",
+          // which is kept so a typed domain shows (and is refused) rather than
+          // being quietly merged into the name.
+          onChange={(event) => {
+            let next = event.target.value.toLowerCase().replace(/[^a-z0-9._+\-@]/g, "")
+            if (next.endsWith(suffix)) next = next.slice(0, -suffix.length)
+            onChange(next ? `${next}${suffix}` : "")
+          }}
+          placeholder="name"
+          autoComplete="off"
+          spellCheck={false}
+          className="relative h-full w-full bg-transparent px-2 text-base outline-none placeholder:text-muted-foreground/70 md:text-sm"
+        />
+      </div>
+    </div>
   )
 }

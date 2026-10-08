@@ -1,7 +1,7 @@
 "use client"
 
 import { CalendarIcon } from "lucide-react"
-import { Input } from "@/components/ui/input"
+import { DatePicker } from "@/components/ui/date-picker"
 import { DATE_RANGE_PRESETS, resolveDateRangePreset, type DateRangePreset } from "../lib/date-range-presets"
 
 interface DateRangePillsProps {
@@ -71,27 +71,23 @@ export function DateRangePills({ preset, customFrom, customTo, onChange }: DateR
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">From</label>
-            <div className="relative">
-              <CalendarIcon className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
-              <Input
-                type="date"
-                value={fromValue}
-                onChange={(e) => editDate("customFrom", e.target.value)}
-                className="pl-8 text-xs bg-background"
-              />
-            </div>
+            {/* The same calendar as the employee form's dates. */}
+            <DatePicker
+              value={fromValue}
+              onChange={(next) => editDate("customFrom", next)}
+              max={toValue || undefined}
+              placeholder="dd/mm/yyyy"
+            />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">To</label>
-            <div className="relative">
-              <CalendarIcon className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
-              <Input
-                type="date"
-                value={toValue}
-                onChange={(e) => editDate("customTo", e.target.value)}
-                className="pl-8 text-xs bg-background"
-              />
-            </div>
+            {/* The same calendar as the employee form's dates. */}
+            <DatePicker
+              value={toValue}
+              onChange={(next) => editDate("customTo", next)}
+              min={fromValue || undefined}
+              placeholder="dd/mm/yyyy"
+            />
           </div>
         </div>
       )}

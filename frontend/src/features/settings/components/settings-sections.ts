@@ -69,8 +69,8 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: "job_titles",
     group: "department",
-    label: "Job Titles",
-    description: "The job titles offered on the employee form, each within a department.",
+    label: "Designations",
+    description: "The designations offered on the employee form, each within a department.",
     href: "/all-settings?section=job_titles",
     icon: BadgeIcon,
     permission: PERMISSIONS.designationsView,
@@ -78,8 +78,8 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: "employment_types",
     group: "department",
-    label: "Designations",
-    description: "The designations offered on the employee form.",
+    label: "Employment Types",
+    description: "The employment types offered on the employee form — Full-time, Contract and so on.",
     href: "/all-settings?section=employment_types",
     icon: BriefcaseIcon,
     permission: PERMISSIONS.employmentTypesView,
@@ -151,7 +151,7 @@ export const SETTINGS_GROUPS: {
   {
     id: "department",
     label: "Department",
-    description: "Departments, job titles and designations.",
+    description: "Departments, designations and employment types.",
     icon: Building2Icon,
     tint: { header: "bg-emerald-500/8", icon: "bg-emerald-500/15 text-emerald-600" },
   },

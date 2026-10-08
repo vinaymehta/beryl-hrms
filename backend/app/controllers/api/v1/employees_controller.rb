@@ -32,14 +32,6 @@ module Api
         "additional" => :additional_manager_ids
       }.freeze
 
-      # What an employee may change about themselves (#update_personal) — a
-      # subset of employee_params, and the whole of what that path permits.
-      PERSONAL_PARAMS = %i[
-        date_of_birth gender phone personal_email
-        address_line1 address_line2 city state postal_code country
-        emergency_contact_name emergency_contact_phone
-      ].freeze
-
       def index
         authorize Employee
         scope = policy_scope(Employee).includes(
@@ -137,31 +129,6 @@ module Api
           ::Audit::Record.call(
             action: "employee.updated", auditable: employee, request: request,
             before_changes: before, after_changes: employee.attributes.slice(*employee_params.keys.map(&:to_s))
-          )
-        end
-
-        render_data(Api::V1::EmployeeSerializer.new(employee.reload).as_json)
-      end
-
-      # PATCH /api/v1/employees/:id/personal — an employee correcting their own
-      # personal details from Profile. Saved straight away, no approval: these
-      # are facts about the person that they know better than HR does.
-      #
-      # Only PERSONAL_PARAMS are read, so anything else in the body (a
-      # department, a name, roles) is dropped rather than applied — and no
-      # manager / account block runs on this path at all. The same model
-      # validations as HR's edit apply.
-      def update_personal
-        employee = policy_scope(Employee).find(params[:id])
-        authorize employee, :update_personal?
-        attributes = params.permit(*PERSONAL_PARAMS)
-        before = employee.attributes.slice(*attributes.keys)
-
-        ActiveRecord::Base.transaction do
-          employee.update!(attributes)
-          ::Audit::Record.call(
-            action: "employee.personal_updated", auditable: employee, request: request,
-            before_changes: before, after_changes: employee.attributes.slice(*attributes.keys)
           )
         end
 
