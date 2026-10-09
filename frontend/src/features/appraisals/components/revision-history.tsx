@@ -104,10 +104,11 @@ export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
   // When the last manager is also Admin/HR they review once, and that one
   // submission is kept twice — as their manager review and as the Final review
   // (the release and the final score read the latter). Shown here as the one
-  // version it is: the Final copy, labelled with both steps. Recognised as a
-  // Final review by the same person within two minutes of their manager review.
+  // version it is — their manager review, "V2 · Level 1" — with the copy
+  // left out. Recognised as a Final review by the same person within two
+  // minutes of their manager review.
   const shown = useMemo(() => {
-    const items: { revision: AppraisalRevision; alsoLevel: number | null }[] = []
+    const items: { revision: AppraisalRevision }[] = []
     for (const revision of chronological) {
       const prior = items.at(-1)?.revision
       const sameSubmission =
@@ -117,8 +118,7 @@ export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
         prior.authorName != null &&
         prior.authorName === revision.authorName &&
         Math.abs(new Date(revision.submittedAt).getTime() - new Date(prior.submittedAt).getTime()) < 120_000
-      if (sameSubmission) items[items.length - 1] = { revision, alsoLevel: prior.reviewLevel ?? 1 }
-      else items.push({ revision, alsoLevel: null })
+      if (!sameSubmission) items.push({ revision })
     }
     return items
   }, [chronological])
@@ -135,7 +135,7 @@ export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
 
   // The employee is sent their own self-appraisal alone, and never a score.
   const subjectOnly = appraisal.viewer.isSubject && !appraisal.viewer.isAdministrator
-  const latestId = chronological.at(-1)?.id
+  const latestId = shown.at(-1)?.revision.id
 
   return (
     <div className="grid gap-2">
@@ -144,21 +144,24 @@ export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
         submitted.
       </p>
 
-      {[...shown].reverse().map(({ revision, alsoLevel }) => {
+      {[...shown].reverse().map(({ revision }) => {
         const open = openId === revision.id
         const index = shown.findIndex((item) => item.revision.id === revision.id)
         const previous = index > 0 ? shown[index - 1].revision : undefined
         const versionNumber = index + 1
-        const meta = appraisalStageMeta(revision.stage, revision.reviewLevel)
-        const stage =
-          alsoLevel != null
-            ? { ...meta, label: `${appraisalStageMeta("manager_review", alsoLevel).label} + ${meta.label}` }
-            : meta
+        const stage = appraisalStageMeta(revision.stage, revision.reviewLevel)
         // The workflow state this version moved the appraisal into — read from
         // the transition log rather than guessed from the stage name.
-        const transition = [...appraisal.transitions]
+        const after = [...appraisal.transitions]
           .filter((t) => new Date(t.createdAt) >= new Date(revision.submittedAt))
-          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0]
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        // An Admin/HR last manager passes straight through the Final review
+        // (the hop is recorded too); where it actually went is the next move.
+        const passedThrough =
+          after[0]?.toStatus === "final_review" &&
+          after[1] != null &&
+          new Date(after[1].createdAt).getTime() - new Date(after[0].createdAt).getTime() < 120_000
+        const transition = passedThrough ? after[1] : after[0]
 
         return (
           <div
@@ -175,7 +178,6 @@ export function RevisionHistory({ appraisal }: { appraisal: AppraisalDetail }) {
                 stage={revision.stage}
                 versionNumber={versionNumber}
                 reviewLevel={revision.reviewLevel}
-                alsoLevel={alsoLevel}
               />
               <div className="min-w-0">
                 <p className="text-sm font-medium">{revision.authorName ?? "Unknown"}</p>

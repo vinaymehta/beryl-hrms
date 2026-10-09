@@ -3,7 +3,7 @@
 # content on principle, and these exist to deliver a document.
 #
 #   letter_issued — to the employee, at release: their letter to read and sign.
-#   letter_signed — to Admin/HR, once signed: the signed copy, with its audit page.
+#   letter_signed — to Admin/HR, once signed: the signed copy.
 #
 # Each is built from the in-app Notification Appraisals::Notifier just created,
 # so the email and the bell say the same thing and point to the same place.

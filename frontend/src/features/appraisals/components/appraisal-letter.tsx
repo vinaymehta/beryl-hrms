@@ -497,7 +497,7 @@ function SignatureUpload({
 /**
  * Where the letter stands, for Admin/HR (and reviewers once it is signed):
  * signed, by whom and when, with the signed copy — or still awaiting the
- * employee's signature.
+ * employee's signature. Either way the letter can be viewed and downloaded.
  */
 export function LetterStatusLine({ appraisal }: { appraisal: AppraisalDetail }) {
   const letter = appraisal.letter
@@ -514,13 +514,6 @@ export function LetterStatusLine({ appraisal }: { appraisal: AppraisalDetail }) 
             {letter.signedName ? ` by ${letter.signedName}` : ""} —
           </span>
           <ViewLetterLink appraisal={appraisal} label="View signed letter" />
-          <span className="text-muted-foreground">·</span>
-          <a
-            href={appraisalsApi.letterUrl(appraisal.id, { download: true })}
-            className="font-medium text-primary underline-offset-4 hover:underline"
-          >
-            Download
-          </a>
         </>
       ) : (
         <>
@@ -528,6 +521,15 @@ export function LetterStatusLine({ appraisal }: { appraisal: AppraisalDetail }) 
           <ViewLetterLink appraisal={appraisal} label="View letter" />
         </>
       )}
+      {/* The copy as it stands: the issued letter until it is signed, the
+          signed one after. */}
+      <span className="text-muted-foreground">·</span>
+      <a
+        href={appraisalsApi.letterUrl(appraisal.id, { download: true })}
+        className="font-medium text-primary underline-offset-4 hover:underline"
+      >
+        Download
+      </a>
     </div>
   )
 }

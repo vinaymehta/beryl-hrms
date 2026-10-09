@@ -37,7 +37,9 @@ export function PdfPages({ src, className }: { src: string; className?: string }
           { type: "module" }
         )
       }
-      const task = pdfjs.getDocument({ url: src })
+      // A server URL needs the session cookie, as every API call sends it;
+      // an object URL (the letter, fetched first) has nothing to send.
+      const task = pdfjs.getDocument({ url: src, withCredentials: !src.startsWith("blob:") })
       destroy = () => void task.destroy()
       const pdf = await task.promise
       // Sharp on high-density screens: drawn at the device's pixel ratio,
@@ -92,7 +94,7 @@ export function PdfPages({ src, className }: { src: string; className?: string }
       )}
       {state === "error" && (
         <p className="p-8 text-center text-sm text-muted-foreground">
-          Couldn&apos;t show the letter. Please try again.
+          Couldn&apos;t show this file. Please try again.
         </p>
       )}
       {/* Pages land here, centred, a hairline between one and the next. */}

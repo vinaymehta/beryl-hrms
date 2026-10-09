@@ -39,18 +39,23 @@ class ZohoAutoScanJob < ApplicationJob
 
   # Runs only while there is something to scan: the 2-minute schedule is
   # switched ON while at least one Zoho mailbox is connected (active) and OFF
-  # when none is — so with Zoho disconnected the job doesn't run at all.
+  # when none is — so with Zoho disconnected the job doesn't run at all. The
+  # token refresh (ZohoTokenRefreshJob) has nothing to do either without a
+  # mailbox, so its schedule is switched with this one.
   # Called whenever a connection is added, removed or changes status
   # (ZohoConnection callback) and when Sidekiq boots (config/initializers/sidekiq.rb).
   def self.sync_schedule!
-    job = Sidekiq::Cron::Job.find(CRON_NAME)
-    return if job.nil?
-
     connected = ActsAsTenant.without_tenant { ZohoConnection.active.exists? }
-    if connected
-      job.enable! unless job.enabled?
-    elsif job.enabled?
-      job.disable!
+
+    [ CRON_NAME, ZohoTokenRefreshJob::CRON_NAME ].each do |name|
+      job = Sidekiq::Cron::Job.find(name)
+      next if job.nil?
+
+      if connected
+        job.enable! unless job.enabled?
+      elsif job.enabled?
+        job.disable!
+      end
     end
   rescue StandardError => e
     # Scheduling is housekeeping; it must never break connecting a mailbox.

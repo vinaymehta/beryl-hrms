@@ -13,15 +13,12 @@ module Appraisals
   #   LetterPdf.call(appraisal)                      → the letter as issued
   #   LetterPdf.call(appraisal, signature: details)  → the same letter with the
   #                                                    employee's signature in
-  #                                                    its signature block, and
-  #                                                    an audit page after it
+  #                                                    its signature block
   #
   # The signed copy is REGENERATED from the same data rather than stamped onto
   # the stored PDF: Prawn writes PDFs, it does not edit them. Everything the
   # letter prints is fixed by the time it is issued — the decision can only be
   # changed at the Discussion step, which release leaves behind — so the two
-  # render the same letter. The audit page records the SHA-256 of the stored
-  # unsigned file, which is the one the employee was sent and read.
   #
   # Built-in Helvetica, not an embedded font: nothing to install on the server.
   # It covers Windows-1252, so the amounts are written "INR", as the reference
@@ -31,14 +28,12 @@ module Appraisals
 
     # What the signed copy needs to know about the signing. `image` is the PNG
     # or JPEG bytes; `signed_at` a Time.
-    Signature = Struct.new(:image, :name, :signed_at, :ip, :user_agent, :method, :email, :letter_sha256,
-                           keyword_init: true)
+    Signature = Struct.new(:image, :name, :signed_at, keyword_init: true)
 
     FONT = "Helvetica".freeze
     FONT_SIZE = 10.5
     MARGIN = 56
     SIGNATURE_BOX = [ 170, 56 ].freeze
-    METHOD_LABELS = { "drawn" => "Drawn on screen", "uploaded" => "Uploaded image" }.freeze
 
     def self.call(...) = new(...).call
 
@@ -64,7 +59,6 @@ module Appraisals
       closing(pdf)
       signature_block(pdf)
       compensation_table(pdf)
-      audit_page(pdf) if @signature
 
       pdf.render
     rescue Prawn::Errors::UnsupportedImageType => e
@@ -191,50 +185,6 @@ module Appraisals
           table.row(-1).font_style = :bold
           table.row(-1).background_color = "F5F5F5"
         end
-      end
-
-      # The record of the signing, on a page of its own after the letter.
-      def audit_page(pdf)
-        pdf.start_new_page
-        pdf.text "Signature audit record", style: :bold, size: FONT_SIZE + 4
-        pdf.move_down 4
-        pdf.text "This page records how the letter above was accepted and signed.", color: "444444"
-        pdf.move_down 14
-
-        zone = local(@signature.signed_at)
-        rows = [
-          [ "Document", safe("#{subject} — #{@appraisal.appraisal_cycle&.name}") ],
-          [ "Employee", safe([ @employee.full_name, @employee.employee_code.presence ].compact.join(" · ")) ],
-          [ "Signed by", safe(@signature.name) ],
-          [ "User", safe(@signature.email.presence || "-") ],
-          [ "Signed at", signed_at_text(zone) ],
-          [ "IP address", safe(@signature.ip.presence || "-") ],
-          [ "User agent", safe(@signature.user_agent.presence || "-") ],
-          [ "Signature method", METHOD_LABELS.fetch(@signature.method.to_s, @signature.method.to_s.humanize.presence || "-") ],
-          [ "Acceptance", "The signer confirmed \"I have read and accept this letter\" before signing." ],
-          [ "SHA-256 of the issued letter", @signature.letter_sha256.presence || "-" ]
-        ]
-
-        pdf.table(rows, width: pdf.bounds.width, column_widths: { 0 => 150 },
-                        cell_style: { size: FONT_SIZE - 0.5, padding: [ 6, 8 ], border_color: "AAAAAA", border_width: 0.5 }) do |table|
-          table.column(0).font_style = :bold
-          table.column(0).background_color = "F3F3F3"
-          # Courier at 8pt keeps the 64 hex digits on one line, so the value
-          # can be read off and compared without guessing where it wrapped.
-          table.row(-1).column(1).font = "Courier"
-          table.row(-1).column(1).size = 8
-        end
-
-        pdf.move_down 14
-        pdf.text "The SHA-256 above is the fingerprint of the unsigned letter as it was issued to the employee. " \
-                 "Any change to that file would produce a different value.", size: FONT_SIZE - 1.5, color: "555555"
-      end
-
-      # "7 October 2026, 12:32:42 PM IST (Chennai)" — the zone's name only
-      # when the abbreviation doesn't already say it.
-      def signed_at_text(time)
-        text = "#{time.strftime('%-d %B %Y, %I:%M:%S %p')} #{time.zone}"
-        time.zone == time.time_zone.name ? text : "#{text} (#{time.time_zone.name})"
       end
 
       def labelled(pdf, label, value)

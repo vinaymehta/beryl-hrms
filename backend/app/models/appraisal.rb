@@ -93,7 +93,7 @@ class Appraisal < ApplicationRecord
 
   # The appraisal letter. `letter_pdf` is the one issued at release (its
   # SHA-256 is letter_sha256); `signed_letter_pdf` is that letter with the
-  # employee's signature placed and the audit page added; `employee_signature`
+  # employee's signature placed; `employee_signature`
   # is the PNG/JPG they drew or uploaded. See Appraisals::Release and
   # Appraisals::SignLetter.
   has_one_attached :letter_pdf

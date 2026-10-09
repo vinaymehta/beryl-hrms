@@ -4,13 +4,13 @@ module Appraisals
   #
   # The signature is an image: drawn on the signature pad (which exports a
   # PNG) or uploaded (PNG or JPG). Both arrive the same way and are handled the
-  # same way; `signature_method` only records which it was, for the audit page.
+  # same way; `signature_method` only records which it was.
   #
   # One transaction does all of it, so a signing either happened completely or
   # not at all:
   #   1. the signature image is stored (Appraisal#employee_signature);
   #   2. the signed letter is generated — the letter with the signature in its
-  #      signature block, plus an audit page — and stored (#signed_letter_pdf);
+  #      signature block — and stored (#signed_letter_pdf);
   #   3. the signing is recorded: signed_at, IP, user agent, name, method, and
   #      acknowledged_at, which everything that already asks "acknowledged?"
   #      reads;
@@ -54,10 +54,7 @@ module Appraisals
       name = @appraisal.employee.full_name
       signed_pdf = LetterPdf.call(
         @appraisal,
-        signature: LetterPdf::Signature.new(
-          image: image, name: name, signed_at: signed_at, ip: @ip, user_agent: @user_agent,
-          method: @signature_method, email: @actor&.email_address, letter_sha256: @appraisal.letter_sha256
-        )
+        signature: LetterPdf::Signature.new(image: image, name: name, signed_at: signed_at)
       )
       signed_filename = Release.letter_filename(@appraisal, suffix: "signed")
 

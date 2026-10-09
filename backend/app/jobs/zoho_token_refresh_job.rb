@@ -9,9 +9,15 @@ class ZohoTokenRefreshJob < ApplicationJob
   queue_as :default
 
   REFRESH_WINDOW = 10.minutes
+  # Its sidekiq-cron entry (config/sidekiq_cron_schedule.yml). Switched off
+  # while no Zoho mailbox is connected — see ZohoAutoScanJob.sync_schedule!.
+  CRON_NAME = "zoho_token_refresh".freeze
 
   def perform
     ActsAsTenant.without_tenant do
+      # A tick already queued when the last mailbox was disconnected.
+      return unless ZohoConnection.active.exists?
+
       ZohoConnection.active.where("token_expires_at <= ?", Time.current + REFRESH_WINDOW).find_each do |connection|
         refresh_one(connection)
       end

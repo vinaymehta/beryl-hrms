@@ -247,8 +247,18 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
       : "manager"
   // The Final review is Admin/HR's own optional pass over the managers'
   // reviews: any of it may be left blank and submitted, which moves the
-  // appraisal on to Discussion with the last manager review standing.
-  const fieldsOptional = formRole === "admin"
+  // appraisal on to Discussion with the last manager review standing. The
+  // same holds when Admin/HR is the LAST manager — their manager review is
+  // recorded as the Final review too (AppraisalsController#submit_review).
+  // An Admin/HR at an earlier level still fills theirs in, since another
+  // manager builds on it.
+  const lastManager = appraisal.managers.at(-1)
+  const adminIsLastManager =
+    formRole === "manager" &&
+    appraisal.status === "manager_review" &&
+    appraisal.reviewLevel === appraisal.managers.length &&
+    Boolean(lastManager?.alsoFinalReviewer)
+  const fieldsOptional = formRole === "admin" || adminIsLastManager
   const sections = useMemo(
     () => narrativeSections(appraisal.template, formRole),
     [appraisal.template, formRole]
