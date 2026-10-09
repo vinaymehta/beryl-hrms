@@ -116,6 +116,7 @@ export function EditProfileSheet({
 function profileDefaults(employee: Employee): ProfileFormValues {
   const saved = savedPersonalDetails(employee)
   return {
+    employeeCode: employee.employeeCode ?? "",
     phones: saved.phones.length ? saved.phones : [""],
     personalEmail: employee.personalEmail ?? "",
     gender: employee.gender === "female" ? "female" : "male",
@@ -142,6 +143,7 @@ function profileDefaults(employee: Employee): ProfileFormValues {
 
 /** The plain text fields, sent as typed when they differ from what's on file. */
 const TEXT_FIELDS = [
+  "employeeCode",
   "personalEmail",
   "gender",
   "dateOfBirth",
@@ -254,6 +256,19 @@ function ProfileForm({
           </PanelSection>
 
           <PanelSection title="Personal info">
+            <FormField
+              control={form.control}
+              name="employeeCode"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Employee ID</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <PhoneListField form={form} />
             <div className="grid items-start gap-3.5 sm:grid-cols-2">
               <FormField

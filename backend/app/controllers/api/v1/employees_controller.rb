@@ -333,9 +333,11 @@ module Api
         end
 
         # Everything an employee may set about themselves — the whole of what
-        # #update_profile reads, and a subset of what HR's edit does.
+        # #update_profile reads, and a subset of what HR's edit does. The
+        # employee ID is theirs to correct too, for now; it stays unique and
+        # above the company's starting code (Employee validations).
         def profile_params
-          params.permit(*PERSONAL_PARAMS)
+          params.permit(*PERSONAL_PARAMS, :employee_code)
         end
 
         # Looked up from the session, never from the URL. A login without an

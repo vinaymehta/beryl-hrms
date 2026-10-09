@@ -407,6 +407,8 @@ export function buildProfileFormSchema({
   savedDateOfBirth: string | null
 }) {
   return personalDetailFields
+    // The employee may correct their own employee ID, for now.
+    .extend({ employeeCode: z.string().trim().min(1, "Employee ID is required") })
     .superRefine((values, ctx) => refinePersonalDetails(values, ctx, saved))
     .superRefine((values, ctx) => {
       const changed = values.dateOfBirth && values.dateOfBirth !== (savedDateOfBirth ?? "")
@@ -419,7 +421,7 @@ export function buildProfileFormSchema({
       }
     })
 }
-export type ProfileFormValues = PersonalDetailValues
+export type ProfileFormValues = PersonalDetailValues & { employeeCode: string }
 
 /**
  * What the profile form sends to PATCH /employees/me: only the fields that
@@ -427,6 +429,7 @@ export type ProfileFormValues = PersonalDetailValues
  * optional because an untouched field is left out rather than re-sent.
  */
 export interface ProfilePayload {
+  employeeCode?: string
   phones?: string[]
   personalEmail?: string
   gender?: string

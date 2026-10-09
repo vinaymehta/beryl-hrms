@@ -443,6 +443,7 @@ class Employee < ApplicationRecord
   # their History shows it. The same columns EmployeesController::PERSONAL_PARAMS
   # permits on that path (#update_profile) — keep the two in step.
   SELF_EDITABLE_FIELDS = {
+    "employee_code" => "Employee ID",
     "phones" => "Phone numbers",
     "personal_email" => "Personal email",
     "gender" => "Gender",
