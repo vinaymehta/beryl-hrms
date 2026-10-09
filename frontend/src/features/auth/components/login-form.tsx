@@ -26,6 +26,13 @@ import {
 import { loginSchema, type LoginValues } from "@/features/auth/schemas"
 import { useLogin } from "@/features/auth/hooks/use-auth-mutations"
 
+/**
+ * The "Create an account" link under the form. Switched off for now, on the
+ * manager's instruction — accounts are set up by Admin/HR. The link and the
+ * /register page are kept; set this to true to show the link again.
+ */
+const SHOW_CREATE_ACCOUNT = false
+
 export function LoginForm() {
   const login = useLogin()
   const form = useForm<LoginValues>({
@@ -97,12 +104,14 @@ export function LoginForm() {
             </Button>
           </form>
         </Form>
-        <p className="mt-4 text-center text-sm text-muted-foreground">
-          Setting up your company for the first time?{" "}
-          <Link href="/register" className="font-medium text-foreground underline-offset-4 hover:underline">
-            Create an account
-          </Link>
-        </p>
+        {SHOW_CREATE_ACCOUNT && (
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            Setting up your company for the first time?{" "}
+            <Link href="/register" className="font-medium text-foreground underline-offset-4 hover:underline">
+              Create an account
+            </Link>
+          </p>
+        )}
       </CardContent>
     </Card>
   )
