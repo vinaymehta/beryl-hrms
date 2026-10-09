@@ -5,9 +5,10 @@ import { SettingsIcon } from "lucide-react"
 
 import { cn } from "cn"
 import { PERSONAL_SETTINGS_TABS, type PersonalSettingsTab } from "./settings-sections"
-import { AccountSettings, SessionsSettings } from "./personal-settings"
+import { AccountSettings, ProfileSettings, SessionsSettings } from "./personal-settings"
 
 const TAB_CONTENT: Record<PersonalSettingsTab, React.ComponentType> = {
+  profile: ProfileSettings,
   account: AccountSettings,
   sessions: SessionsSettings,
 }
@@ -17,12 +18,12 @@ const TAB_CONTENT: Record<PersonalSettingsTab, React.ComponentType> = {
  *
  * Kept deliberately separate from All Settings, which is the workspace
  * administration behind the gear in the top bar. This page belongs to the
- * PERSON: a password, and the devices they are signed in on — one tab each.
+ * PERSON: their profile picture, a password, and the devices they are signed in on — one tab each.
  *
  * Switching tabs is not a route change; the URL is kept in step with
  * history.replaceState so a refresh or a shared link opens the same tab.
  */
-export function SettingsView({ initialTab = "account" }: { initialTab?: PersonalSettingsTab }) {
+export function SettingsView({ initialTab = "profile" }: { initialTab?: PersonalSettingsTab }) {
   const [tab, setTab] = useState<PersonalSettingsTab>(initialTab)
   const active = PERSONAL_SETTINGS_TABS.find((t) => t.id === tab)!
   const Content = TAB_CONTENT[tab]
@@ -30,7 +31,7 @@ export function SettingsView({ initialTab = "account" }: { initialTab?: Personal
 
   function openTab(next: PersonalSettingsTab) {
     setTab(next)
-    window.history.replaceState(null, "", next === "account" ? "/settings" : `/settings?tab=${next}`)
+    window.history.replaceState(null, "", next === "profile" ? "/settings" : `/settings?tab=${next}`)
   }
 
   return (
@@ -42,7 +43,7 @@ export function SettingsView({ initialTab = "account" }: { initialTab?: Personal
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
           <p className="text-sm text-muted-foreground">
-            Manage your password and the devices you are signed in on.
+            Manage your profile picture, your password and the devices you are signed in on.
           </p>
         </div>
       </div>

@@ -12,6 +12,7 @@ import type { Role } from "@/types/auth"
 import type { SalaryStructureRules } from "@/types/appraisals"
 import type {
   EmployeePayload,
+  ProfilePayload,
   DepartmentFormValues,
   DesignationFormValues,
   EmploymentTypeFormValues,
@@ -49,6 +50,17 @@ export const employeesApi = {
   get: (id: string) => apiClient.get<Employee>(`/employees/${id}`),
   create: (values: EmployeePayload) => apiClient.post<Employee>("/employees", values),
   update: (id: string, values: Partial<EmployeePayload>) => apiClient.patch<Employee>(`/employees/${id}`, values),
+  // The signed-in employee's own edit, from Profile. No id: the server always
+  // edits the caller's own record, accepts only the personal fields, and
+  // records each change in their History.
+  updateProfile: (values: ProfilePayload) => apiClient.patch<Employee>("/employees/me", values),
+  // Multipart, so separate from updateProfile's JSON body.
+  uploadProfilePhoto: (file: File) => {
+    const form = new FormData()
+    form.append("profile_photo", file)
+    return apiClient.patchForm<Employee>("/employees/me/photo", form)
+  },
+  removeProfilePhoto: () => apiClient.delete<Employee>("/employees/me/photo"),
   // Hits the dedicated /deactivate endpoint (not the plain update route) so
   // it goes through its own permission check (employees.delete) and its own
   // audit trail entry, in both directions — status: "active" reactivates.

@@ -55,6 +55,8 @@ export default function ProfilePage() {
       // viewing their OWN profile doesn't get a "Back to employees" button
       // that returns them somewhere they never were.
       showBackButton={false}
+      // Their own record, so they may edit their personal details from here.
+      selfService
     />
   )
 }

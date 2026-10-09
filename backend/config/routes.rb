@@ -52,10 +52,17 @@ Rails.application.routes.draw do
           # Whether an Employee ID is free, so the form can say so as it is
           # typed rather than only after Save.
           get :code_available
+          # The signed-in employee's own profile edit, from Profile. No id in
+          # the path: it is always the caller's own record, and it accepts only
+          # the personal columns — separate from `update` so it can't ever
+          # touch anything else.
+          patch :me, action: :update_profile
+          patch "me/photo", action: :update_profile_photo
+          delete "me/photo", action: :destroy_profile_photo
         end
         member do
           patch :deactivate
-          # Account access, kept apart from the profile edit above. Neither
+          # Account access, kept apart from the profile edit. Neither
           # sets a password: both send the employee a link and return only
           # the address it went to.
           post :invite

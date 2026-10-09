@@ -2,9 +2,13 @@ module Api
   module V1
     class EmployeeSerializer < ApplicationSerializer
       attributes :id, :employee_code, :first_name, :last_name, :status, :date_of_joining,
-                 :date_of_birth, :gender, :phone, :personal_email,
+                 :date_of_birth, :celebration_date, :gender, :personal_email,
+                 # Every number they can be reached on, the main one first.
+                 :phones,
                  :address_line1, :address_line2, :city, :state, :postal_code, :country,
-                 :emergency_contact_name, :emergency_contact_phone, :work_location,
+                 # [{ name, relation, phone }] — single-word keys, so they need
+                 # no camelising (see manager_hierarchy below for why that matters).
+                 :emergency_contacts, :work_location,
                  :user_id, :department_id, :designation_id, :employment_type_id,
                  # Career level (Intern → Manager). Null for employees whose
                  # level hasn't been recorded; NOT the same thing as the RBAC
@@ -12,6 +16,18 @@ module Api
                  :current_level
 
       attribute :full_name, &:full_name
+
+      # Bank details and identity numbers — for the employee themselves and
+      # Admin/HR only (EmployeePolicy#view_sensitive_details?). For anyone else
+      # the keys are absent, not null or masked: what isn't sent can't leak
+      # through a devtools panel. Masking for display is the client's job.
+      #
+      # Left off the directory list too (`params[:list]`): nothing there shows
+      # them, and decrypting three columns for every row of every page only
+      # widens where they travel.
+      attributes :bank_account_number, :bank_account_holder_name, :bank_ifsc_code,
+                 :aadhaar_number, :pan_number, :other_identity_numbers,
+                 if: proc { |employee| !params[:list] && sensitive_details_visible?(employee) }
 
       one :department, resource: Api::V1::DepartmentSerializer
       one :designation, resource: Api::V1::DesignationSerializer
@@ -94,6 +110,14 @@ module Api
       attribute :profile_photo_url do |employee|
         employee.profile_photo.attached? ? Rails.application.routes.url_helpers.rails_blob_path(employee.profile_photo, only_path: true) : nil
       end
+
+      private
+        # Current.user rather than a param: every caller would otherwise have to
+        # remember to pass the viewer, and one that forgot would leak. With no
+        # signed-in user (a job, the console) nothing is shown.
+        def sensitive_details_visible?(employee)
+          EmployeePolicy.new(Current.user, employee).view_sensitive_details?
+        end
     end
   end
 end

@@ -1,12 +1,14 @@
 "use client"
 
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { CURRENT_USER_QUERY_KEY } from "@/features/auth/hooks/use-current-user"
 import { toast } from "sonner"
 
 import { employeesApi, departmentsApi, designationsApi, employmentTypesApi } from "@/features/employees/api"
 import { ApiError } from "@/types/api"
 import type {
   EmployeePayload,
+  ProfilePayload,
   DepartmentFormValues,
   DesignationFormValues,
   EmploymentTypeFormValues,
@@ -23,6 +25,8 @@ export function useCreateEmployee() {
     mutationFn: (values: EmployeePayload) => employeesApi.create(values),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["employees"] })
+      // The signed-in user's name comes from their account, which follows the employee record.
+      queryClient.invalidateQueries({ queryKey: CURRENT_USER_QUERY_KEY })
       toast.success("Employee added.")
     },
     onError: (error) => toast.error(errorMessage(error, "Couldn't add that employee.")),
@@ -35,9 +39,47 @@ export function useUpdateEmployee(id: string) {
     mutationFn: (values: Partial<EmployeePayload>) => employeesApi.update(id, values),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["employees"] })
+      // The signed-in user's name comes from their account, which follows the employee record.
+      queryClient.invalidateQueries({ queryKey: CURRENT_USER_QUERY_KEY })
       toast.success("Employee updated.")
     },
     onError: (error) => toast.error(errorMessage(error, "Couldn't update that employee.")),
+  })
+}
+
+/**
+ * What the Edit profile sheet saves: the changed fields, then the photo if one
+ * was chosen or removed. In that order and one after the other, so a refused
+ * field stops the photo from being half-applied on top of it.
+ */
+export interface ProfileUpdate {
+  values: ProfilePayload | null
+  photo: { kind: "upload"; file: File } | { kind: "remove" } | null
+}
+
+/** The employee's own Edit profile — saved straight away, no approval. */
+export function useUpdateOwnProfile() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ values, photo }: ProfileUpdate) => {
+      if (values) await employeesApi.updateProfile(values)
+      if (photo?.kind === "upload") await employeesApi.uploadProfilePhoto(photo.file)
+      if (photo?.kind === "remove") await employeesApi.removeProfilePhoto()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["employees"] })
+      // Each change is a History entry, which an Admin/HR viewer may have open.
+      queryClient.invalidateQueries({ queryKey: ["employee-records"] })
+      // The signed-in user's name comes from their account, which follows the employee record.
+      queryClient.invalidateQueries({ queryKey: CURRENT_USER_QUERY_KEY })
+      toast.success("Your profile was updated.")
+    },
+    onError: (error) => {
+      // A field may have saved before the photo failed; refetch either way so
+      // the page shows what actually stuck.
+      queryClient.invalidateQueries({ queryKey: ["employees"] })
+      toast.error(errorMessage(error, "Couldn't save your profile."))
+    },
   })
 }
 

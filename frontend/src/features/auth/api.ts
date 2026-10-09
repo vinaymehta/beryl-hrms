@@ -20,6 +20,7 @@ function toAuthUser(raw: MeResponse): AuthUser {
     lastName: raw.user.lastName,
     email: raw.user.email,
     employeeId: raw.user.employeeId,
+    profilePhotoUrl: raw.user.profilePhotoUrl ?? null,
     emailVerifiedAt: raw.user.emailVerifiedAt,
     status: raw.user.status,
     roles: raw.roles,

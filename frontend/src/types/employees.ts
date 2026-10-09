@@ -141,9 +141,12 @@ export interface Employee {
   /** Roles on the linked User account — empty when there is no account. */
   roles: Role[]
   user: EmployeeAccount | null
-  phone: string | null
+  /** Every number they can be reached on, the main one first. */
+  phones: string[]
   personalEmail: string | null
   dateOfBirth: string | null
+  /** A second date worth marking — optional, and not the date of birth. */
+  celebrationDate: string | null
   gender: string | null
   addressLine1: string | null
   addressLine2: string | null
@@ -151,9 +154,36 @@ export interface Employee {
   state: string | null
   postalCode: string | null
   country: string | null
-  emergencyContactName: string | null
-  emergencyContactPhone: string | null
+  emergencyContacts: EmergencyContact[]
   profilePhotoUrl: string | null
+  /**
+   * Bank details and identity numbers. Sent ONLY to the employee themselves
+   * and to Admin/HR (EmployeePolicy#view_sensitive_details?); for anyone else
+   * the keys are absent altogether — which is what `hasSensitiveDetails`
+   * checks. Full values when present: masking for display is the UI's job.
+   */
+  bankAccountNumber?: string | null
+  bankAccountHolderName?: string | null
+  bankIfscCode?: string | null
+  aadhaarNumber?: string | null
+  panNumber?: string | null
+  /** Further identity documents (passport, driving licence, UAN…). Sensitive, like the numbers above. */
+  otherIdentityNumbers?: IdentityNumber[] | null
+}
+
+export interface IdentityNumber {
+  label: string
+  number: string
+}
+
+/**
+ * One person to call in an emergency. `relation` is free text ("Mother",
+ * "Spouse"), and null on contacts carried over from before it was asked.
+ */
+export interface EmergencyContact {
+  name: string | null
+  relation: string | null
+  phone: string | null
 }
 
 /**

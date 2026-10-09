@@ -20,8 +20,11 @@ module EmployeeSubresource
     #   queries the model directly rather than through the Employee
     #   association, so the association's own ordering does not apply — and
     #   unordered history is useless history.
-    def employee_subresource(model:, association:, params:, methods: [], order: :newest_first)
+    # @param includes [Array] associations #index preloads — whatever `methods`
+    #   reads through, so a long list isn't a query per row.
+    def employee_subresource(model:, association:, params:, methods: [], order: :newest_first, includes: [])
       define_method(:record_class) { model }
+      define_method(:list_includes) { includes }
       define_method(:association_name) { association }
       define_method(:permitted_keys) { params }
       define_method(:serialized_methods) { methods }
@@ -35,7 +38,7 @@ module EmployeeSubresource
 
   def index
     authorize record_class
-    records = policy_scope(record_class).where(employee_id: @employee.id).public_send(list_order)
+    records = policy_scope(record_class).where(employee_id: @employee.id).includes(list_includes).public_send(list_order)
     render_data(serialize(records.to_a))
   end
 

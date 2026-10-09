@@ -16,6 +16,8 @@ export interface AuthUser {
   lastName: string
   email: string
   employeeId: string | null
+  /** The linked employee's profile photo path (prefix with API_ORIGIN), or null. */
+  profilePhotoUrl: string | null
   emailVerifiedAt: string | null
   status: "active" | "invited" | "disabled"
   roles: Role[]
@@ -54,6 +56,7 @@ export interface MeResponse {
     emailVerifiedAt: string | null
     status: AuthUser["status"]
     employeeId: string | null
+    profilePhotoUrl?: string | null
   }
   company: { id: string; name: string; slug: string }
   roles: Role[]

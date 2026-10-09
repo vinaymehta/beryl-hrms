@@ -32,6 +32,18 @@ module Api
         "additional" => :additional_manager_ids
       }.freeze
 
+      # The personal columns: everything an employee may change about themselves
+      # (#update_profile), and part of what HR's full edit permits. The same set
+      # as Employee::SELF_EDITABLE_FIELDS, spelled as permit shapes — the two
+      # list columns each need their own (`phones: []`, a list of contacts).
+      PERSONAL_PARAMS = [
+        :date_of_birth, :celebration_date, :gender, :personal_email,
+        :address_line1, :address_line2, :city, :state, :postal_code, :country,
+        :bank_account_number, :bank_account_holder_name, :bank_ifsc_code, :aadhaar_number, :pan_number,
+        { phones: [], emergency_contacts: Employee::EMERGENCY_CONTACT_KEYS,
+          other_identity_numbers: Employee::OTHER_IDENTITY_NUMBER_KEYS }
+      ].freeze
+
       def index
         authorize Employee
         scope = policy_scope(Employee).includes(
@@ -62,7 +74,7 @@ module Api
         records = scope.limit(per_page).offset((page - 1) * per_page)
 
         render json: {
-          data: Api::V1::EmployeeSerializer.new(records).as_json,
+          data: Api::V1::EmployeeSerializer.new(records, params: { list: true }).as_json,
           meta: { page: page, perPage: per_page, totalPages: (total_count / per_page.to_f).ceil, totalCount: total_count }
         }
       end
@@ -120,7 +132,8 @@ module Api
       def update
         employee = policy_scope(Employee).find(params[:id])
         authorize employee
-        before = employee.attributes.slice(*employee_params.keys.map(&:to_s))
+        keys = employee_params.keys
+        before = audit_snapshot(employee, keys)
 
         ActiveRecord::Base.transaction do
           employee.update!(employee_params)
@@ -128,8 +141,72 @@ module Api
           apply_account_and_roles(employee)
           ::Audit::Record.call(
             action: "employee.updated", auditable: employee, request: request,
-            before_changes: before, after_changes: employee.attributes.slice(*employee_params.keys.map(&:to_s))
+            before_changes: before, after_changes: audit_snapshot(employee, keys)
           )
+        end
+
+        render_data(Api::V1::EmployeeSerializer.new(employee.reload).as_json)
+      end
+
+      # PATCH /api/v1/employees/me — the signed-in employee editing their own
+      # profile. Saved straight away, no approval: these are facts about the
+      # person that they know better than HR does. Every field that changes is
+      # written to their History instead (Employee#record_profile_changes), so
+      # Admin/HR can see what was edited and by whom.
+      #
+      # Always the caller's OWN record — there is no id to swap — and only
+      # Employee::SELF_EDITABLE_FIELDS are read: a name, department, manager or
+      # role in the body is dropped, not applied, and no manager / account
+      # block runs on this path at all. The same model validations as HR's
+      # edit apply.
+      def update_profile
+        employee = own_employee
+        authorize employee, :update_own_profile?
+        attributes = profile_params
+        keys = attributes.keys
+        before = audit_snapshot(employee, keys)
+
+        ActiveRecord::Base.transaction do
+          employee.update!(attributes)
+          employee.record_profile_changes(employee.saved_changes)
+          ::Audit::Record.call(
+            action: "employee.profile_updated", auditable: employee, request: request,
+            before_changes: before, after_changes: audit_snapshot(employee, keys)
+          )
+        end
+
+        render_data(Api::V1::EmployeeSerializer.new(employee.reload).as_json)
+      end
+
+      # PATCH /api/v1/employees/me/photo — multipart, `profilePhoto`. Separate
+      # from #update_profile so that one can stay a plain JSON body (the
+      # emergency contacts are a list of objects, which multipart can't carry
+      # without a convention of its own).
+      def update_profile_photo
+        employee = own_employee
+        authorize employee, :update_own_profile?
+        photo = params.require(:profile_photo)
+
+        ActiveRecord::Base.transaction do
+          employee.update!(profile_photo: photo)
+          employee.record_profile_photo_change(removed: false)
+          ::Audit::Record.call(action: "employee.profile_photo_updated", auditable: employee, request: request)
+        end
+
+        render_data(Api::V1::EmployeeSerializer.new(employee.reload).as_json)
+      end
+
+      # DELETE /api/v1/employees/me/photo
+      def destroy_profile_photo
+        employee = own_employee
+        authorize employee, :update_own_profile?
+
+        if employee.profile_photo.attached?
+          ActiveRecord::Base.transaction do
+            employee.profile_photo.purge_later
+            employee.record_profile_photo_change(removed: true)
+            ::Audit::Record.call(action: "employee.profile_photo_removed", auditable: employee, request: request)
+          end
         end
 
         render_data(Api::V1::EmployeeSerializer.new(employee.reload).as_json)
@@ -251,10 +328,29 @@ module Api
           params.permit(
             :employee_code, :first_name, :last_name, :department_id, :designation_id,
             :date_of_joining, :status, :current_level, :employment_type_id, :work_location,
-            :date_of_birth, :gender, :phone, :personal_email,
-            :address_line1, :address_line2, :city, :state, :postal_code, :country,
-            :emergency_contact_name, :emergency_contact_phone, :profile_photo
+            :profile_photo, *PERSONAL_PARAMS
           )
+        end
+
+        # Everything an employee may set about themselves — the whole of what
+        # #update_profile reads, and a subset of what HR's edit does.
+        def profile_params
+          params.permit(*PERSONAL_PARAMS)
+        end
+
+        # Looked up from the session, never from the URL. A login without an
+        # employee record (a bare admin account) has no profile to edit.
+        def own_employee
+          Current.user&.employee_record || raise(ActiveRecord::RecordNotFound)
+        end
+
+        # The audit log's before/after, with the encrypted numbers reduced to
+        # whether they were set. `attributes` returns them DECRYPTED, and an
+        # audit row is no place for an Aadhaar number in the clear.
+        def audit_snapshot(employee, keys)
+          employee.attributes.slice(*keys.map(&:to_s)).to_h do |key, value|
+            Employee::SENSITIVE_ATTRIBUTES.include?(key) ? [ key, value.present? ? "[FILTERED]" : nil ] : [ key, value ]
+          end
         end
 
         # Both blocks below are applied only when their keys are actually

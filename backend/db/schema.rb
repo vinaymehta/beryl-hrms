@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_08_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_09_150000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -744,8 +744,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_08_100000) do
   end
 
   create_table "employees", force: :cascade do |t|
+    t.string "aadhaar_number"
     t.string "address_line1"
     t.string "address_line2"
+    t.string "bank_account_holder_name"
+    t.string "bank_account_number"
+    t.string "bank_ifsc_code"
+    t.date "celebration_date"
     t.string "city"
     t.bigint "company_id", null: false
     t.string "country"
@@ -755,15 +760,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_08_100000) do
     t.date "date_of_joining"
     t.bigint "department_id"
     t.bigint "designation_id"
-    t.string "emergency_contact_name"
-    t.string "emergency_contact_phone"
+    t.jsonb "emergency_contacts", default: [], null: false
     t.string "employee_code", null: false
     t.bigint "employment_type_id"
     t.string "first_name", null: false
     t.string "gender"
     t.string "last_name", null: false
+    t.text "other_identity_numbers"
+    t.string "pan_number"
     t.string "personal_email"
-    t.string "phone"
+    t.string "phones", default: [], null: false, array: true
     t.string "postal_code"
     t.string "state"
     t.integer "status", default: 0, null: false

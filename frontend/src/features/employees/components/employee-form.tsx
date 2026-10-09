@@ -37,6 +37,10 @@ import {
   todayIso,
   MAX_JOINING_DAYS_AHEAD,
   WORK_LOCATIONS,
+  emergencyContactsPayload,
+  identityNumbersPayload,
+  phonesPayload,
+  savedPersonalDetails,
   type EmployeeFormValues,
   type EmployeePayload,
 } from "@/features/employees/schemas"
@@ -57,7 +61,14 @@ import {
   OTHER_CITY,
 } from "@/features/employees/constants"
 import { AddressLocationFields, DEFAULT_COUNTRY } from "@/features/employees/components/address-location-fields"
-import { digitsOnly, mobileDigits } from "@/features/employees/input-format"
+import { digitsOnly } from "@/features/employees/input-format"
+import {
+  BankDetailsFields,
+  EmergencyContactsField,
+  IdentityNumbersFields,
+  PhoneListField,
+} from "@/features/employees/components/personal-detail-fields"
+import { formatAadhaar, hasSensitiveDetails } from "@/features/employees/components/sensitive-field"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { useDebounced } from "@/hooks/use-debounced"
 import { PERMISSIONS, roleBadgeClasses } from "@/constants/permissions"
@@ -270,6 +281,11 @@ export function EmployeeForm({
   // viewer who lacks the key, so asking anyway is just a 403 in the console.
   const canManageRoles = usePermission(PERMISSIONS.employeesManageRoles)
   const canManageManagers = usePermission(PERMISSIONS.employeesManageReportingManagers)
+  // Bank details and identity numbers are on the form only when the API sent
+  // them for this record (always, for a new one). For anybody else they are
+  // neither shown nor sent — sending the blanks would clear numbers this
+  // viewer never saw.
+  const showSensitive = !employee || hasSensitiveDetails(employee)
 
   const { data: roles, isLoading: rolesLoading } = useRoles(canManageRoles)
   const [managerSearch, setManagerSearch] = useState("")
@@ -294,7 +310,11 @@ export function EmployeeForm({
     // Built per mode: the joining-date and age windows are hiring rules and
     // must not fire on somebody who is already here — see the schema.
     resolver: zodResolver(
-      buildEmployeeFormSchema({ isNew: !employee, workEmailDomain: () => workEmailDomainRef.current })
+      buildEmployeeFormSchema({
+        isNew: !employee,
+        workEmailDomain: () => workEmailDomainRef.current,
+        saved: savedPersonalDetails(employee),
+      })
     ),
     defaultValues: {
       firstName: employee?.firstName ?? "",
@@ -328,8 +348,10 @@ export function EmployeeForm({
       // Today, because the overwhelmingly common case is somebody starting now.
       dateOfJoining: employee?.dateOfJoining ?? todayIso(),
       dateOfBirth: employee?.dateOfBirth ?? "",
+      celebrationDate: employee?.celebrationDate ?? "",
       gender: (employee?.gender as EmployeeFormValues["gender"]) ?? "male",
-      phone: employee?.phone ?? "",
+      // One empty box to type into when there is nothing on file yet.
+      phones: employee?.phones.length ? employee.phones : [""],
       personalEmail: employee?.personalEmail ?? "",
       addressLine1: employee?.addressLine1 ?? "",
       addressLine2: employee?.addressLine2 ?? "",
@@ -338,8 +360,15 @@ export function EmployeeForm({
       state: employee?.state ?? "",
       postalCode: employee?.postalCode ?? "",
       country: employee?.country || DEFAULT_COUNTRY,
-      emergencyContactName: employee?.emergencyContactName ?? "",
-      emergencyContactPhone: employee?.emergencyContactPhone ?? "",
+      emergencyContacts: employee?.emergencyContacts.length
+        ? savedPersonalDetails(employee).emergencyContacts
+        : [{ name: "", relation: "", phone: "" }],
+      bankAccountNumber: employee?.bankAccountNumber ?? "",
+      bankAccountHolderName: employee?.bankAccountHolderName ?? "",
+      bankIfscCode: employee?.bankIfscCode ?? "",
+      aadhaarNumber: formatAadhaar(employee?.aadhaarNumber ?? ""),
+      panNumber: employee?.panNumber ?? "",
+      otherIdentityNumbers: (employee?.otherIdentityNumbers ?? []).map((r) => ({ label: r.label ?? "", number: r.number ?? "" })),
     },
   })
 
@@ -544,8 +573,10 @@ export function EmployeeForm({
    */
   function reportInvalid(errors: FieldErrors<EmployeeFormValues>) {
     const entries = Object.entries(errors)
-    const [ name, error ] = entries[0] ?? []
-    const message = (error as { message?: string } | undefined)?.message
+    // A list field (phones, emergency contacts) nests its errors per row —
+    // `phones.1`, `emergencyContacts.0.phone` — so the first message, and the
+    // input to scroll to, is found by walking down to it.
+    const [ name, message ] = entries.length ? firstFieldError(entries[0][0], entries[0][1]) : []
     const others = entries.length - 1
 
     // Says how many more there are, so fixing the first isn't followed by a
@@ -614,10 +645,20 @@ export function EmployeeForm({
       roleIds,
       workEmail,
       password,
+      phones,
+      emergencyContacts,
+      bankAccountNumber,
+      bankAccountHolderName,
+      bankIfscCode,
+      aadhaarNumber,
+      panNumber,
+      otherIdentityNumbers,
       ...rest
     } = values
     const payload: EmployeePayload = {
       ...rest,
+      phones: phonesPayload(phones),
+      emergencyContacts: emergencyContactsPayload(emergencyContacts),
       currentLevel: currentLevel || null,
       // "" is "not set", which has to reach the API as null to clear it.
       employmentTypeId: employmentTypeId || null,
@@ -625,6 +666,14 @@ export function EmployeeForm({
       city: rest.city === OTHER_CITY ? cityOther?.trim() || null : rest.city,
     }
 
+    if (showSensitive) {
+      payload.bankAccountNumber = bankAccountNumber
+      payload.bankAccountHolderName = bankAccountHolderName
+      payload.bankIfscCode = bankIfscCode
+      payload.aadhaarNumber = aadhaarNumber.replace(/\s/g, "")
+      payload.panNumber = panNumber
+      payload.otherIdentityNumbers = identityNumbersPayload(otherIdentityNumbers)
+    }
     if (canManageManagers) {
       // "" means "nobody in this slot", which the API expects as an explicit
       // null — omitting the key would instead mean "leave this slot alone".
@@ -688,7 +737,7 @@ export function EmployeeForm({
                 )}
               />
             </div>
-            <div className="grid gap-3.5 sm:grid-cols-3">
+            <div className="grid gap-3.5 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="employeeCode"
@@ -707,28 +756,6 @@ export function EmployeeForm({
                     </div>
                     <FormControl>
                       <Input {...field} placeholder={suggestedCode?.employeeCode ?? "e.g. ACM-007"} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="dateOfBirth"
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="flex items-center gap-1.5">
-                      <FormLabel>Date of birth</FormLabel>
-                      {!employee && <InfoTip label="Date of birth">Employees must be at least 22 years old.</InfoTip>}
-                    </div>
-                    <FormControl>
-                      {/* The calendar itself stops at the 22nd birthday, so a
-                          date that would be refused can't be picked at all.
-                          The zod rule still runs — `max` is advisory in a
-                          typed-in date, and the server decides regardless. */}
-                      {/* Capped for a NEW hire only. On an existing record the
-                          cap would make their own stored date unpickable. */}
-                      <DatePicker max={employee ? undefined : maxBirthDateIso()} placeholder="dd/mm/yyyy" clearable {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -762,6 +789,48 @@ export function EmployeeForm({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="dateOfBirth"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex items-center gap-1.5">
+                      <FormLabel>Date of birth</FormLabel>
+                      {!employee && <InfoTip label="Date of birth">Employees must be at least 22 years old.</InfoTip>}
+                    </div>
+                    <FormControl>
+                      {/* The calendar itself stops at the 22nd birthday, so a
+                          date that would be refused can't be picked at all.
+                          The zod rule still runs — `max` is advisory in a
+                          typed-in date, and the server decides regardless. */}
+                      {/* Capped for a NEW hire only. On an existing record the
+                          cap would make their own stored date unpickable. */}
+                      <DatePicker max={employee ? undefined : maxBirthDateIso()} placeholder="dd/mm/yyyy" clearable {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="celebrationDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex items-center gap-1.5">
+                      <FormLabel>Celebration date</FormLabel>
+                      <InfoTip label="Celebration date">
+                        Optional — a day they celebrate that isn&apos;t their date of birth.
+                      </InfoTip>
+                    </div>
+                    <FormControl>
+                      <DatePicker placeholder="dd/mm/yyyy" clearable {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
           </FormSection>
 
@@ -1295,29 +1364,8 @@ export function EmployeeForm({
           </FormSection>
 
           <FormSection title="Contact" subtitle="How to reach them personally">
+            <PhoneListField form={form} />
             <div className="grid gap-3.5 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="phone"
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="flex items-center gap-1.5">
-                      <FormLabel>Phone</FormLabel>
-                      <InfoTip label="Phone">Indian mobile number, with or without +91.</InfoTip>
-                    </div>
-                    <FormControl>
-                      <Input
-                        type="tel"
-                        inputMode="numeric"
-                        {...field}
-                        onChange={(event) => field.onChange(mobileDigits(event.target.value))}
-                        placeholder="9876543210"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               <FormField
                 control={form.control}
                 name="personalEmail"
@@ -1386,52 +1434,46 @@ export function EmployeeForm({
             </div>
           </FormSection>
 
-          <FormSection
-            title="Emergency contact"
-            subtitle="Who to reach in an emergency"
-          >
-            <div className="grid gap-3.5 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="emergencyContactName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Contact name</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="emergencyContactPhone"
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="flex items-center gap-1.5">
-                      <FormLabel>Contact phone</FormLabel>
-                      <InfoTip label="Contact phone">Indian mobile number, with or without +91.</InfoTip>
-                    </div>
-                    <FormControl>
-                      <Input
-                        type="tel"
-                        inputMode="numeric"
-                        {...field}
-                        onChange={(event) => field.onChange(mobileDigits(event.target.value))}
-                        placeholder="9876543210"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+          <FormSection title="Emergency contacts" subtitle="Who to reach in an emergency">
+            <EmergencyContactsField form={form} />
           </FormSection>
+
+          {showSensitive && (
+            <>
+              <FormSection title="Bank details" subtitle="Where their salary is paid">
+                <BankDetailsFields form={form} />
+              </FormSection>
+
+              <FormSection
+                title="Identity numbers"
+                subtitle="Optional — the Aadhaar and PAN documents themselves go on the Documents tab"
+              >
+                <IdentityNumbersFields form={form} />
+              </FormSection>
+            </>
+          )}
         </fieldset>
       </form>
     </Form>
   )
+}
+
+/**
+ * The first message inside one field's errors, and the dotted name of the
+ * input it belongs to — `phones.1`, `emergencyContacts.0.phone`. A plain field
+ * is its own answer; a list field's errors are arrays/objects keyed by row.
+ */
+function firstFieldError(name: string, error: unknown): [string, string | undefined] {
+  if (!error || typeof error !== "object") return [name, undefined]
+  const message = (error as { message?: unknown }).message
+  if (typeof message === "string") return [name, message]
+
+  for (const [key, child] of Object.entries(error)) {
+    if (key === "ref" || key === "type" || !child || typeof child !== "object") continue
+    const found = firstFieldError(`${name}.${key}`, child)
+    if (found[1]) return found
+  }
+  return [name, undefined]
 }
 
 /**

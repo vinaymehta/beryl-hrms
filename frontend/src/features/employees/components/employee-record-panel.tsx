@@ -33,8 +33,12 @@ function renderCell(row: EmployeeRecordRow, column: ColumnSpec) {
       return <span className="tabular-nums">{Number(raw).toLocaleString()}</span>
     case "label":
       // Raw enum names (full_time) sit alongside free text (Senior Engineer)
-      // in the same column, so this humanises without badging.
-      return <span className="line-clamp-2">{humanise(String(raw))}</span>
+      // in the same column, so this humanises without badging — but only what
+      // looks like an enum name. Free text is shown as written: humanising
+      // turned "priya_k@mail.com" into "Priya k@mail.com".
+      return (
+        <span className="line-clamp-2">{/^[a-z_]+$/.test(String(raw)) ? humanise(String(raw)) : String(raw)}</span>
+      )
     case "boolean":
       return raw ? (
         <Badge className="bg-success/15 text-success">Yes</Badge>

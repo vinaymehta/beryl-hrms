@@ -29,3 +29,16 @@
 
 en:
   hello: "Hello world"
+
+  # How the employee form's fields are named in an error ("IFSC code must be…"),
+  # where the column name alone would read "Bank ifsc code".
+  activerecord:
+    attributes:
+      employee:
+        phones: "Phone numbers"
+        emergency_contacts: "Emergency contacts"
+        bank_account_number: "Bank account number"
+        bank_account_holder_name: "Account holder name"
+        bank_ifsc_code: "IFSC code"
+        aadhaar_number: "Aadhaar number"
+        pan_number: "PAN number"

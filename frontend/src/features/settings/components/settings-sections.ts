@@ -1,4 +1,5 @@
 import {
+  CircleUserIcon,
   Building2Icon,
   CalendarClockIcon,
   BadgeIcon,
@@ -173,10 +174,10 @@ export const SETTINGS_GROUPS: {
 
 /**
  * The sidebar's Settings page, which is NOT part of All Settings: it belongs
- * to the person rather than the workspace. Two tabs — your password, and the
- * devices you are signed in on.
+ * to the person rather than the workspace. Three tabs — your profile picture,
+ * your password, and the devices you are signed in on.
  */
-export type PersonalSettingsTab = "account" | "sessions"
+export type PersonalSettingsTab = "profile" | "account" | "sessions"
 
 export const PERSONAL_SETTINGS_TABS: {
   id: PersonalSettingsTab
@@ -184,6 +185,12 @@ export const PERSONAL_SETTINGS_TABS: {
   description: string
   icon: LucideIcon
 }[] = [
+  {
+    id: "profile",
+    label: "Profile",
+    description: "Your profile picture, shown on your profile and in the top bar.",
+    icon: CircleUserIcon,
+  },
   {
     id: "account",
     label: "Account",

@@ -5,8 +5,11 @@ module Api
     class EmployeeEmploymentEventsController < Api::V1::BaseController
       include EmployeeSubresource
 
+      # `recorded_by_name` — who made the change, which matters most for the
+      # entries an employee writes by editing their own profile.
       employee_subresource(
-        model: EmployeeEmploymentEvent, association: :employment_events, params: [], order: :chronological
+        model: EmployeeEmploymentEvent, association: :employment_events, params: [], order: :chronological,
+        methods: [ :recorded_by_name ], includes: [ { recorded_by: :employee_record } ]
       )
     end
   end

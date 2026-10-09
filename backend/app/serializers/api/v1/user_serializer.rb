@@ -13,6 +13,12 @@ module Api
       attribute :employee_id do |user|
         user.employee_record&.id
       end
+
+      # The linked employee's profile photo (Active Storage path), for the avatar in the top bar. Nil without one.
+      attribute :profile_photo_url do |user|
+        photo = user.employee_record&.profile_photo
+        photo&.attached? ? Rails.application.routes.url_helpers.rails_blob_path(photo, only_path: true) : nil
+      end
     end
   end
 end

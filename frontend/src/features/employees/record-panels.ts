@@ -59,13 +59,17 @@ export const RECORD_PANELS: RecordPanelSpec[] = [
     columns: [
       { key: "effectiveOn", label: "Date", kind: "date", className: "w-28 whitespace-nowrap" },
       { key: "eventType", label: "Change", kind: "enum", className: "w-44 whitespace-nowrap" },
-      // Which manager level, for a manager change ("1st Level Manager").
+      // Which manager level, for a manager change ("1st Level Manager"), or
+      // which field, for a profile edit ("Phone numbers").
       { key: "note", label: "Details", className: "w-44" },
       { key: "fromValue", label: "From", kind: "label" },
       { key: "toValue", label: "To", kind: "label" },
+      // Who made the change — the employee themselves, for a profile edit.
+      { key: "recordedByName", label: "By", className: "w-36" },
     ],
     fields: [],
-    emptyHint: "Changes to designation, department, status, type, location and managers appear here automatically.",
+    emptyHint:
+      "Changes to designation, department, status, type, location and managers — and the employee's own profile edits — appear here automatically.",
   },
   {
     resource: "compensation_records",

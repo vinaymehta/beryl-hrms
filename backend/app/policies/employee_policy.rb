@@ -35,6 +35,27 @@ class EmployeePolicy < ApplicationPolicy
   def manage_account_access? = manage_roles?
   def manage_reporting_managers? = permission?("employees.manage_reporting_managers")
 
+  # The employee editing their own profile (Profile → Edit profile). Only ever
+  # their own record, and holding employees.update does not widen it: an HR
+  # user editing somebody else goes through #update? and the full form.
+  # What this path may touch is Employee::SELF_EDITABLE_FIELDS and nothing
+  # else — the controller permits no other column on it.
+  def update_own_profile? = own_record?
+
+  # Bank account number, IFSC, Aadhaar and PAN. The employee may read their
+  # own, and so may whoever looks after people company-wide (the same keys
+  # that open the whole directory below). Nobody else — not a manager, not a
+  # colleague — receives them at all: EmployeeSerializer leaves the keys out
+  # rather than sending them masked.
+  def view_sensitive_details?
+    own_record? || Scope::MANAGES_PEOPLE.any? { |key| permission?(key) }
+  end
+
+  private
+    def own_record?
+      same_company? && record.id.present? && record.id == user.employee_record&.id
+    end
+
   class Scope < ApplicationPolicy::Scope
     # employees.create is the seeded proxy for "HR/Admin, looks after other
     # people" — the same shape DocumentPolicy::Scope uses for documents. Only
