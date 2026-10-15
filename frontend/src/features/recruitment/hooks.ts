@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { recruitmentApi } from "./api"
 import type { CandidateDetail, CandidateStatus, DuplicateStatus, Job, JobStatus, MatchStatus } from "@/types/recruitment"
@@ -233,14 +234,11 @@ export function useResumeMutations() {
     },
   })
 
+  // Only STARTS the scans — the resume lists are refreshed by
+  // useMailScanRun as each mailbox finishes, not here.
   const scanZohoMailMutation = useMutation({
-    mutationFn: ({ connectionId, from, to }: { connectionId: string; from: string; to: string }) =>
-      recruitmentApi.resumes.scanZohoMail(connectionId, { from, to }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["recruitment", "resumes"] })
-      queryClient.invalidateQueries({ queryKey: ["recruitment", "dashboard"] })
-      queryClient.invalidateQueries({ queryKey: ["recruitment", "candidates"] })
-    },
+    mutationFn: ({ connectionIds, from, to }: { connectionIds: string[]; from: string; to: string }) =>
+      recruitmentApi.resumes.scanZohoMail(connectionIds, { from, to }),
   })
 
   const deleteMutation = useMutation({
@@ -259,6 +257,33 @@ export function useResumeMutations() {
     scanZohoMail: scanZohoMailMutation,
     deleteResume: deleteMutation,
   }
+}
+
+/** Polls a manual Scan Mail run until every mailbox in it has finished,
+ *  refreshing the resume lists whenever another mailbox completes so new
+ *  imports show up without waiting for the slowest mailbox. */
+export function useMailScanRun(scanId: string | null) {
+  const queryClient = useQueryClient()
+  const completedRef = useRef(0)
+
+  const query = useQuery({
+    queryKey: ["recruitment", "mail-scan", scanId],
+    queryFn: () => recruitmentApi.resumes.scanZohoMailStatus(scanId as string),
+    enabled: !!scanId,
+    refetchInterval: (q) => (q.state.data?.finished ? false : 2000),
+  })
+
+  const completed = query.data?.accounts.filter((a) => a.status === "completed").length ?? 0
+  useEffect(() => {
+    if (completed > completedRef.current) {
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "resumes"] })
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "dashboard"] })
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "candidates"] })
+    }
+    completedRef.current = completed
+  }, [completed, queryClient])
+
+  return query
 }
 
 export function useJobs(params?: { status?: JobStatus; search?: string }) {

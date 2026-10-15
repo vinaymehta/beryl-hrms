@@ -31,12 +31,10 @@ class ResumeExtractionJob < ApplicationJob
 
     parsed = Ai::ResumeParser.parse(resume.raw_text, resume: resume)
 
+    # Not a resume: dropped, not kept — only a skip-note of the attachment
+    # stays, so the scan never picks it up again (Recruitment::DropNonResume).
     unless parsed[:is_likely_resume]
-      resume.update!(
-        processing_status: :not_a_resume,
-        extracted_data: parsed[:candidate],
-        ai_metadata: parsed[:ai_metadata]
-      )
+      Recruitment::DropNonResume.call(resume)
       return
     end
 

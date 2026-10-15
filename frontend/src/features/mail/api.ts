@@ -22,7 +22,16 @@ export const mailApi = {
       return apiClient.post<{ authorizationUrl: string }>(`/mail/connections/${slug}`)
     },
 
-    disconnect: (id: string) => apiClient.delete<void>(`/mail/connections/${id}`),
+    // Re-runs OAuth for a connection Zoho stopped accepting; the callback
+    // updates that same row back to active rather than adding a new one.
+    reconnect: (id: string) =>
+      apiClient.post<{ authorizationUrl: string }>(`/mail/connections/${encodeURIComponent(id)}/reconnect`),
+
+    // Switched off but kept in the list (Disconnected, with Reconnect).
+    disconnect: (id: string) =>
+      apiClient.post<MailConnection>(`/mail/connections/${encodeURIComponent(id)}/disconnect`),
+    // Taken off the list for good.
+    remove: (id: string) => apiClient.delete<void>(`/mail/connections/${encodeURIComponent(id)}`),
   },
 
   // range: the Mail page's active date filter — with it, every count

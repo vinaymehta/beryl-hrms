@@ -29,7 +29,7 @@ export function isInInterviewWorkflow(status: CandidateStatus | string | null | 
 
 export type DuplicateStatus = "unique_record" | "potential_duplicate" | "confirmed_duplicate"
 
-export type ProcessingStatus = "pending" | "processing" | "completed" | "failed" | "not_a_resume" | "duplicate"
+export type ProcessingStatus = "pending" | "processing" | "completed" | "failed" | "duplicate"
 
 export type JobStatus = "draft" | "open" | "closed"
 
@@ -270,7 +270,6 @@ export interface RecruitmentDashboardStats {
   needsReviewResumes: number
   shortlistedResumes: number
   rejectedResumes: number
-  otherResumes: number
   // Candidates past Shortlisted — scheduled, completed, and either feedback
   // state. Matches exactly what the Interview Scheduled card opens.
   interviewCandidates: number
@@ -361,4 +360,27 @@ export interface InterviewQuestionSet {
   generatedAt: string | null
   /** The job the questions were written against, when there was one. */
   job: { id: string; title: string } | null
+}
+
+/** One mailbox's part in a manual Scan Mail run. Counts appear once it has
+ *  completed; `waiting` means another scan of that mailbox (e.g. the
+ *  automatic one) was still running, so this one is queued behind it. */
+export interface MailScanAccount {
+  connectionId: string
+  emailAddress: string
+  status: "queued" | "waiting" | "running" | "completed" | "failed"
+  scannedMessages?: number
+  detectedResumes?: number
+  skippedDuplicateAttachments?: number
+  skippedNonResumeAttachments?: number
+  error?: string
+}
+
+/** A manual Scan Mail request: one background scan per chosen mailbox. */
+export interface MailScanRun {
+  scanId: string
+  from: string
+  to: string
+  finished: boolean
+  accounts: MailScanAccount[]
 }

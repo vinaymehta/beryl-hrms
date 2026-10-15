@@ -17,6 +17,7 @@ import type {
   AiSearchResponse,
   FeedbackForm,
   InterviewQuestionSet,
+  MailScanRun,
 } from "@/types/recruitment"
 
 // The candidate-facing feedback form. Public and token-addressed — kept apart
@@ -189,13 +190,17 @@ export const recruitmentApi = {
       contentType?: string
     }) => apiClient.post<CandidateResumeDetail>("/recruitment/resumes/import_from_zoho", params),
 
-    scanZohoMail: (connectionId: string, range: { from: string; to: string }) =>
-      apiClient.post<{
-        scannedMessages: number
-        detectedResumes: number
-        skippedDuplicateAttachments: number
-        skippedNonResumeAttachments: number
-      }>("/recruitment/resumes/scan_zoho_mail", { connectionId, from: range.from, to: range.to }),
+    // Starts one background scan per chosen mailbox (they run in parallel)
+    // and answers straight away; progress comes from scanZohoMailStatus.
+    scanZohoMail: (connectionIds: string[], range: { from: string; to: string }) =>
+      apiClient.post<MailScanRun>("/recruitment/resumes/scan_zoho_mail", {
+        connectionIds,
+        from: range.from,
+        to: range.to,
+      }),
+
+    scanZohoMailStatus: (scanId: string) =>
+      apiClient.get<MailScanRun>(`/recruitment/resumes/scan_zoho_mail/${encodeURIComponent(scanId)}`),
 
     delete: (id: string) => apiClient.delete<void>(`/recruitment/resumes/${id}`),
   },

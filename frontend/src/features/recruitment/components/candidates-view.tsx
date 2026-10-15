@@ -385,7 +385,6 @@ export function CandidatesView({ initialStatus = "" }: CandidatesViewProps) {
                 <option value="processing">Processing</option>
                 <option value="completed">Completed</option>
                 <option value="failed">Failed</option>
-                <option value="not_a_resume">Not a Resume</option>
               </select>
             </div>
           </div>

@@ -221,13 +221,11 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
     processing: "bg-amber-500/10 text-amber-600 border-amber-500/30",
     completed: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
     failed: "bg-red-500/10 text-red-600 border-red-500/30",
-    not_a_resume: "bg-muted text-muted-foreground border-border",
     duplicate: "bg-violet-500/10 text-violet-600 border-violet-500/30",
   }
 
-  // "Not a Resume" isn't a pill here anymore — it now lives behind its own
-  // "Other" Quick Stat card (see recruitment-workspace.tsx), so it isn't
-  // duplicated as a filter option in this general-purpose row too.
+  // Files that aren't resumes aren't kept (Recruitment::DropNonResume on the
+  // server), so there is no "Not a Resume" pill.
   const statusPills = [
     { label: "All Resumes", value: "" },
     { label: "Needs Attention", value: "failed" },
@@ -321,11 +319,9 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
         {/* Status Tabs — active pill uses the same semantic color as its
             status badge on each resume row, instead of a uniform violet.
             Hidden while a candidate-status filter (Needs Review/Rejected,
-            from the Quick Stats cards) is active, or when this view was
-            opened via the "Other" Quick Stat card (initialStatus ===
-            "not_a_resume") — both are already fixed, single-purpose views,
-            not a processing-status switcher. */}
-        {!candidateStatus && initialStatus !== "not_a_resume" && (
+            from the Quick Stats cards) is active — that is already a fixed,
+            single-purpose view, not a processing-status switcher. */}
+        {!candidateStatus && (
           <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b text-xs">
             {statusPills.map((p) => {
               const isActive = status === p.value

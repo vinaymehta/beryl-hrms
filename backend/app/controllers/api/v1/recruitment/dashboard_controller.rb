@@ -9,9 +9,8 @@ module Api
           candidates = policy_scope(Candidate)
           resumes = policy_scope(CandidateResume)
           # "Real" resumes only — same default scope resumes_controller#index
-          # uses (attachments the AI ruled out, and repeat submissions of a
-          # file already on file, don't count as resumes here either).
-          real_resumes = resumes.where.not(processing_status: [ :not_a_resume, :duplicate ])
+          # uses (repeat submissions of a file already on file don't count).
+          real_resumes = resumes.where.not(processing_status: :duplicate)
 
           render json: {
             data: {
@@ -40,7 +39,6 @@ module Api
               # "Other" — attachments the AI determined weren't resumes at
               # all, excluded from every count above; surfaced here so
               # they're not just silently dropped from the Quick Stats.
-              otherResumes: resumes.where(processing_status: :not_a_resume).count,
               # Interview stage. Counts every candidate past Shortlisted — not
               # just interview_scheduled — because that's exactly the list the
               # card opens: a candidate stays on it as they move through

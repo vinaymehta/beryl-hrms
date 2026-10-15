@@ -22,7 +22,6 @@ import {
   XCircleIcon,
   RefreshCwIcon,
   MailSearchIcon,
-  FileQuestionIcon,
   CalendarClockIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -125,16 +124,6 @@ export function RecruitmentWorkspace() {
       wash: "bg-red-500/10 border-red-500/15",
       onClick: () => openResumesByCandidateStatus("rejected"),
     },
-    {
-      key: "other",
-      label: "Other",
-      value: stats?.otherResumes,
-      caption: "Not a resume",
-      icon: FileQuestionIcon,
-      iconTint: "bg-slate-500 text-white",
-      wash: "bg-slate-500/10 border-slate-500/15",
-      onClick: () => navigateTab("resumes", "not_a_resume"),
-    },
     // Hired KPI/action hidden for this rollout — `hiredThisMonth` and the
     // `offered` status stay fully intact in the backend.
   ]
@@ -204,7 +193,7 @@ export function RecruitmentWorkspace() {
       {/* KPI Cards — above the tabs, visible on every tab */}
       <div className="space-y-3">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quick Stats</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {kpis.map((kpi) => (
             <Card
               key={kpi.key}

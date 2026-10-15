@@ -2,7 +2,7 @@ module Api
   module V1
     module Recruitment
       # Extends Mail::BaseController (not the plain BaseController) so
-      # import_from_zoho/scan_zoho_mail get the same proactive token refresh
+      # import_from_zoho gets the same proactive token refresh
       # and Zoho-error-to-HTTP-status mapping (expired/rate-limited/network)
       # the mail workspace itself relies on, instead of a thinner, duplicated
       # version of that handling.
@@ -20,10 +20,10 @@ module Api
             scope = scope.where(processing_status: st)
           else
             # "All Resumes" (no explicit status filter) means all real resumes —
-            # attachments the AI determined aren't resumes, and repeat submissions
-            # of a file already on file, stay out unless their dedicated tab
-            # explicitly asks for them.
-            scope = scope.where.not(processing_status: [ :not_a_resume, :duplicate ])
+            # repeat submissions of a file already on file stay out unless
+            # their dedicated tab asks for them. (Files that aren't resumes
+            # aren't kept at all.)
+            scope = scope.where.not(processing_status: :duplicate)
           end
 
           if params[:search].present?
@@ -154,7 +154,13 @@ module Api
           message_id = params[:messageId] || params[:message_id]
           attachment_id = params[:attachmentId] || params[:attachment_id]
           file_name = params[:fileName] || params[:file_name] || "resume.pdf"
-          content_type = params[:contentType] || params[:content_type] || "application/pdf"
+          content_type = params[:contentType] || params[:content_type]
+
+          if SkippedMailAttachment.attachment?(attachment_id)
+            render json: { errors: [ { code: "not_a_resume", message: "This attachment was already checked and isn't a resume." } ] },
+                   status: :unprocessable_content
+            return
+          end
 
           # Check if already imported
           existing = current_company.candidate_resumes.find_by(source_attachment_id: attachment_id)
@@ -173,9 +179,16 @@ module Api
             attachment_id: attachment_id
           )
 
+          # The caller's own name over Zoho's bare "attachment" placeholder
+          # (see Recruitment::ZohoMailScanner#resume_file_name).
+          resume_name = File.extname(file_data[:filename].to_s).present? ? file_data[:filename] : file_name
+          reported_type = ::Recruitment::ResumeContentType::GENERIC.include?(file_data[:content_type].to_s) ? content_type : file_data[:content_type]
+
           resume = current_company.candidate_resumes.create!(
-            file_name: file_data[:filename] || file_name,
-            content_type: file_data[:content_type] || content_type,
+            file_name: resume_name,
+            content_type: ::Recruitment::ResumeContentType.resolve(
+              filename: resume_name, reported: reported_type, body: file_data[:body]
+            ),
             file_size: file_data[:body].bytesize,
             source: "zoho_mail",
             source_email_id: message_id,
@@ -195,14 +208,20 @@ module Api
         end
 
         # POST /api/v1/recruitment/resumes/scan_zoho_mail
-        # Permission-controlled: scans only the explicitly authorized Zoho
-        # connection, and only within an HR-selected date range — scanning
+        # Params: connectionIds (array of the mailboxes to scan; each must be
+        # one of this user's visible, active connections), from, to
+        # (YYYY-MM-DD).
+        # Permission-controlled: scans only explicitly chosen, authorized Zoho
+        # connections, and only within an HR-selected date range — scanning
         # the whole mailbox is not allowed. This is the on-demand, ad-hoc
-        # counterpart to ZohoAutoScanJob — deliberately separate from it,
-        # and never touches that job's cursor. Both share the same
-        # underlying inbox walk via Recruitment::ZohoMailScanner.
+        # counterpart to ZohoAutoScanJob and never touches that job's cursor.
+        #
+        # Each chosen mailbox gets its own ZohoMailboxScanJob, so several
+        # mailboxes scan in parallel; this answers straight away with a run
+        # id whose progress #scan_zoho_mail_status reports.
         def scan_zoho_mail
           authorize CandidateResume, :create?
+          authorize ZohoConnection, :index?
 
           from_date = parse_scan_date(params[:from])
           to_date = parse_scan_date(params[:to])
@@ -211,34 +230,54 @@ module Api
             return
           end
 
-          connection = resolve_connection!
-          return unless connection
+          # Snake-cased by config/initializers/json_key_transform.rb. The
+          # singular connectionId is the pre-multi-account shape, still
+          # accepted so an already-open page keeps working.
+          ids = Array(params[:connection_ids].presence || params[:connection_id].presence).map(&:to_s).uniq
+          if ids.empty?
+            render json: { errors: [ { message: "Choose at least one mail account to scan." } ] }, status: :unprocessable_entity
+            return
+          end
 
-          result = ::Recruitment::ZohoMailScanner.call(
-            company: current_company,
-            connection: connection,
-            account_id: account_id_for(connection),
-            from: from_date.beginning_of_day,
-            to: to_date.end_of_day,
-            zoho_client: zoho_client
+          connections = policy_scope(ZohoConnection).where(id: ids).order(:id).to_a
+          if connections.size != ids.size
+            render json: { errors: [ { message: "One of the chosen mail accounts no longer exists." } ] }, status: :not_found
+            return
+          end
+
+          inactive = connections.reject(&:active?)
+          if inactive.any?
+            render json: { errors: [ {
+              code: "connection_inactive",
+              message: "Reconnect #{inactive.map(&:email_address).to_sentence} before scanning."
+            } ] }, status: :unprocessable_content
+            return
+          end
+
+          from = from_date.beginning_of_day
+          to = to_date.end_of_day
+          scan_id = ::Recruitment::MailScanRun.start!(company: current_company, connections: connections, from: from, to: to)
+          ActiveJob.perform_all_later(
+            connections.map { |connection| ZohoMailboxScanJob.new(connection.id, from: from, to: to, scan_id: scan_id) }
           )
 
-          render json: {
-            data: {
-              scannedMessages: result.scanned_messages,
-              detectedResumes: result.detected_resumes,
-              skippedDuplicateAttachments: result.skipped_duplicate_attachments,
-              skippedNonResumeAttachments: result.skipped_non_resume_attachments
-            }
-          }
-        rescue ::Zoho::TokenExpiredError, ::Zoho::RateLimitedError, ::Zoho::ApiError,
-               Faraday::ConnectionFailed, Faraday::TimeoutError, Net::OpenTimeout
-          # Let the parent's rescue_from handlers render the proper status/code
-          # (401/429/502) instead of masking every Zoho failure as a 422 here.
-          raise
-        rescue => e
-          Rails.logger.error("scan_zoho_mail error: #{e.message}\n#{e.backtrace.take(5).join("\n")}")
-          render json: { errors: [ { message: "Failed to scan mailbox: #{e.message}" } ] }, status: :unprocessable_entity
+          render json: { data: ::Recruitment::MailScanRun.fetch(scan_id, company: current_company) }, status: :accepted
+        end
+
+        # GET /api/v1/recruitment/resumes/scan_zoho_mail/:scan_id
+        # Per-mailbox progress of a manual scan: each account's status
+        # (queued/waiting/running/completed/failed) and, once completed, its
+        # counts.
+        def scan_zoho_mail_status
+          authorize CandidateResume, :create?
+
+          run = ::Recruitment::MailScanRun.fetch(params[:scan_id], company: current_company)
+          if run.nil?
+            render json: { errors: [ { message: "That scan has expired." } ] }, status: :not_found
+            return
+          end
+
+          render json: { data: run }
         end
 
         # DELETE /api/v1/recruitment/resumes/:id

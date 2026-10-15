@@ -10,9 +10,14 @@ module Zoho
     PURPOSE = :zoho_oauth_state
     EXPIRY = 10.minutes
 
-    def self.encode(connection_type:, company_id:, user_id: nil)
+    # connection_id: set only for a reconnect — the one existing connection
+    # the callback must update, rather than matching or adding one.
+    def self.encode(connection_type:, company_id:, user_id: nil, connection_id: nil)
       verifier.generate(
-        { connection_type: connection_type.to_s, company_id: company_id, user_id: user_id, nonce: SecureRandom.hex(8) },
+        {
+          connection_type: connection_type.to_s, company_id: company_id, user_id: user_id,
+          connection_id: connection_id, nonce: SecureRandom.hex(8)
+        },
         expires_in: EXPIRY, purpose: PURPOSE
       )
     end

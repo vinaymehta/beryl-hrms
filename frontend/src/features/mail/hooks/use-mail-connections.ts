@@ -34,6 +34,18 @@ export function useConnectMailbox() {
   })
 }
 
+/** Same full-page OAuth handoff as connecting, for one existing connection. */
+export function useReconnectMailbox() {
+  return useMutation({
+    mutationFn: (id: string) => mailApi.connections.reconnect(id),
+    onSuccess: ({ authorizationUrl }) => {
+      window.location.href = authorizationUrl
+    },
+    onError: (error) =>
+      toast.error(errorMessage(error, "Couldn't start the reconnection. Please try again.")),
+  })
+}
+
 export function useDisconnectMailbox() {
   const queryClient = useQueryClient()
 
@@ -44,5 +56,18 @@ export function useDisconnectMailbox() {
       toast.success("Mailbox disconnected.")
     },
     onError: (error) => toast.error(errorMessage(error, "Couldn't disconnect that mailbox.")),
+  })
+}
+
+export function useRemoveMailbox() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: mailApi.connections.remove,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: MAIL_CONNECTIONS_QUERY_KEY })
+      toast.success("Mailbox removed.")
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't remove that mailbox.")),
   })
 }

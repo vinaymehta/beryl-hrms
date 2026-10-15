@@ -3,8 +3,9 @@ module Recruitment
   # attachments, and hands each one to the existing resume-processing
   # pipeline (ResumeProcessingJob) — unchanged from how it always worked.
   #
-  # This is the one and only inbox-walking implementation, shared by two
-  # independent callers that each choose `from`/`to` differently:
+  # This is the one and only inbox-walking implementation, run for one
+  # mailbox at a time by ZohoMailboxScanJob on behalf of two independent
+  # callers that each choose `from`/`to` differently:
   #   - the manual "Scan Mail" action (an HR-picked date range)
   #   - ZohoAutoScanJob (continuous, cursor-based: "since the last
   #     successful automatic scan")
@@ -81,6 +82,11 @@ module Recruitment
             end
 
             att_id = att[:id]
+            # Already checked and found not to be a resume — never again.
+            if SkippedMailAttachment.attachment?(att_id)
+              skipped_non_resume_count += 1
+              next
+            end
             if @company.candidate_resumes.exists?(source_attachment_id: att_id)
               skipped_duplicate_count += 1
               next
@@ -93,9 +99,13 @@ module Recruitment
               attachment_id: att_id
             )
 
+            file_name = resume_file_name(file_data[:filename], att[:name])
+
             resume = @company.candidate_resumes.create!(
-              file_name: file_data[:filename] || att["attachmentName"],
-              content_type: file_data[:content_type] || "application/pdf",
+              file_name: file_name,
+              content_type: ResumeContentType.resolve(
+                filename: file_name, reported: file_data[:content_type], body: file_data[:body]
+              ),
               file_size: file_data[:body].bytesize,
               source: "zoho_mail",
               source_email_id: msg["messageId"],
@@ -128,6 +138,17 @@ module Recruitment
     end
 
     private
+
+    # The download's own Content-Disposition name, unless Zoho sent none —
+    # Zoho::Client then reports the placeholder "attachment", which has no
+    # extension and so would hide the file's type from everything
+    # downstream; the name from the message's attachment list is the real
+    # one in that case.
+    def resume_file_name(downloaded_name, listed_name)
+      return downloaded_name if File.extname(downloaded_name.to_s).present?
+
+      listed_name.presence || downloaded_name.presence || "attachment"
+    end
 
     # nil is a safe fallback: Zoho::Client then behaves exactly as it did
     # before, so a folder lookup failure degrades to the old behaviour

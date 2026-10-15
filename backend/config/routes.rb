@@ -189,6 +189,8 @@ Rails.application.routes.draw do
         post "connections/individual", to: "connections#create_individual"
         get "connections/callback", to: "connections#callback"
         get "connections", to: "connections#index"
+        post "connections/:id/reconnect", to: "connections#reconnect"
+        post "connections/:id/disconnect", to: "connections#disconnect"
         delete "connections/:id", to: "connections#destroy"
 
         get "stats", to: "stats#show"
@@ -252,6 +254,7 @@ Rails.application.routes.draw do
           collection do
             post :import_from_zoho
             post :scan_zoho_mail
+            get "scan_zoho_mail/:scan_id", action: :scan_zoho_mail_status, as: :scan_zoho_mail_status
           end
         end
 

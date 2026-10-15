@@ -19,7 +19,16 @@ export function MailSettings() {
 
   useEffect(() => {
     if (searchParams.get("connected") === "true") {
-      toast.success("Mailbox connected.")
+      // outcome comes from the backend callback: a brand-new row, the same
+      // account connected again (its existing row refreshed), or a reconnect.
+      const outcome = searchParams.get("outcome")
+      toast.success(
+        outcome === "reconnected"
+          ? "Mail account reconnected."
+          : outcome === "refreshed"
+            ? "That mail account was already connected — its sign-in has been refreshed."
+            : "Mail account connected."
+      )
       window.history.replaceState(null, "", "/settings/mail")
     } else if (searchParams.get("error")) {
       toast.error(searchParams.get("error") || "Couldn't connect that mailbox.")
@@ -32,7 +41,7 @@ export function MailSettings() {
       <CardHeader>
         <CardTitle>Zoho Mail</CardTitle>
         <CardDescription>
-          Connect your Zoho Mail mailbox to send and receive email from this workspace.
+          Connect the Zoho Mail accounts this workspace sends from and scans for incoming resumes.
         </CardDescription>
       </CardHeader>
       <CardContent>

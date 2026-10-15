@@ -16,7 +16,7 @@ class ZohoConnection < ApplicationRecord
   enum :status, { active: 0, revoked: 1, error: 2 }, default: :active
 
   # `last_synced_at`: the cursor for automatic new-mail scanning (see
-  # ZohoAutoScanJob) — the point in time up to which this mailbox's inbox
+  # ZohoAutoScanJob / ZohoMailboxScanJob) — the point in time up to which this mailbox's inbox
   # has already been incrementally, successfully scanned. It is a
   # forward-moving cursor, NOT a historical range: no date range is stored
   # per connection at all any more (the Mail page's own date filter is the
@@ -30,6 +30,12 @@ class ZohoConnection < ApplicationRecord
   encrypts :refresh_token
 
   validates :email_address, presence: true
+
+  # A company can connect any number of company-managed mailboxes; the
+  # address is what tells them apart (connecting the same Zoho account again
+  # refreshes its row instead of adding a second one). Compared
+  # case-insensitively because Zoho doesn't promise a stable case.
+  scope :with_email, ->(address) { where("LOWER(email_address) = ?", address.to_s.strip.downcase) }
 
   private
 

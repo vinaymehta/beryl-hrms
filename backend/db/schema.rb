@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_09_150000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_15_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -918,6 +918,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_150000) do
     t.index ["user_id"], name: "index_sessions_on_user_id"
   end
 
+  create_table "skipped_mail_attachments", force: :cascade do |t|
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.string "file_hash"
+    t.string "source_attachment_id"
+    t.index ["company_id", "file_hash"], name: "index_skipped_mail_attachments_on_company_id_and_file_hash"
+    t.index ["company_id", "source_attachment_id"], name: "idx_on_company_id_source_attachment_id_6c69eeba8f", unique: true, where: "(source_attachment_id IS NOT NULL)"
+    t.index ["company_id"], name: "index_skipped_mail_attachments_on_company_id"
+  end
+
   create_table "user_roles", force: :cascade do |t|
     t.bigint "company_id", null: false
     t.datetime "created_at", null: false
@@ -1092,6 +1102,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_150000) do
   add_foreign_key "role_permissions", "roles"
   add_foreign_key "roles", "companies"
   add_foreign_key "sessions", "users"
+  add_foreign_key "skipped_mail_attachments", "companies"
   add_foreign_key "user_roles", "companies"
   add_foreign_key "user_roles", "roles"
   add_foreign_key "user_roles", "users"

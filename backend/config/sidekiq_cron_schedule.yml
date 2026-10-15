@@ -13,9 +13,10 @@ zoho_token_refresh:
 
 zoho_auto_scan:
   # Every 2 minutes: this is the worst-case delay between a mail arriving
-  # and its resumes being picked up. Overlapping ticks are safe — the job
-  # takes a per-connection Redis lock and a tick that finds one held just
-  # skips that connection.
+  # and its resumes being picked up. Each tick enqueues one
+  # ZohoMailboxScanJob per connected mailbox, so mailboxes scan in parallel.
+  # Overlapping ticks are safe — that job takes a per-mailbox Redis lock and
+  # a tick that finds one held just skips that mailbox.
   cron: "*/2 * * * *"
   class: "ZohoAutoScanJob"
 

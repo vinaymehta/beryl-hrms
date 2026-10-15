@@ -8,9 +8,13 @@ import { PdfPages } from "@/components/ui/pdf-pages"
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"]
 
 /** What a stored file can be shown as. Storage often records PDFs as
- * application/octet-stream, so the file name is the more reliable signal. */
+ * application/octet-stream, so the file name is the more reliable signal —
+ * and it wins over the stored type when it clearly names a Word document,
+ * which older mail imports stored as application/pdf; drawing one of those
+ * as a PDF just fails. */
 export function fileKind(name: string | null | undefined, contentType?: string | null) {
   const lower = (name ?? "").toLowerCase()
+  if (lower.endsWith(".docx") || lower.endsWith(".doc")) return "other" as const
   if (contentType === "application/pdf" || lower.endsWith(".pdf")) return "pdf" as const
   if (contentType?.startsWith("image/") || IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext))) {
     return "image" as const

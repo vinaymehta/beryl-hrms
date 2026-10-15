@@ -13,7 +13,7 @@ class CandidateResume < ApplicationRecord
     processing: 1,
     completed: 2,
     failed: 3,
-    not_a_resume: 4,
+    # 4 was not_a_resume: those files are now dropped (Recruitment::DropNonResume).
     duplicate: 5
   }, default: :pending
 

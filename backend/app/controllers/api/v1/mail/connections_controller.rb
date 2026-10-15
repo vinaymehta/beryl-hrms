@@ -11,7 +11,7 @@ module Api
 
         def index
           authorize ZohoConnection
-          render_data(Api::V1::ZohoConnectionSerializer.new(policy_scope(ZohoConnection).order(:connection_type)).as_json)
+          render_data(Api::V1::ZohoConnectionSerializer.new(policy_scope(ZohoConnection).order(:connection_type, :id)).as_json)
         end
 
         # POST /api/v1/mail/connections/company
@@ -26,6 +26,22 @@ module Api
           authorize ZohoConnection, :create_individual?
           state = ::Zoho::ConnectionState.encode(
             connection_type: :individual, company_id: current_company.id, user_id: Current.user.id
+          )
+          render_data({ authorizationUrl: zoho_client.authorization_url(state: state) })
+        end
+
+        # POST /api/v1/mail/connections/:id/reconnect
+        # For a connection whose sign-in Zoho stopped accepting (status
+        # error/revoked): re-runs OAuth and, in the callback, updates that same
+        # row back to active — keeping its id, cursor and history — instead of
+        # adding a new one.
+        def reconnect
+          connection = policy_scope(ZohoConnection).find(params[:id])
+          authorize connection, :reconnect?
+
+          state = ::Zoho::ConnectionState.encode(
+            connection_type: connection.connection_type, company_id: current_company.id,
+            user_id: connection.individual? ? Current.user.id : nil, connection_id: connection.id
           )
           render_data({ authorizationUrl: zoho_client.authorization_url(state: state) })
         end
@@ -51,24 +67,43 @@ module Api
             return redirect_to_frontend(error: e.message)
           end
 
+          email = account_info["Email"] || account_info["email"]
+          outcome = nil
+
           ActsAsTenant.with_tenant(company) do
             user = payload[:user_id].present? ? company.users.find_by(id: payload[:user_id]) : nil
 
-            connection = company.zoho_connections.find_or_initialize_by(
-              connection_type: payload[:connection_type], user: user
-            )
+            connection = connection_for_callback(company, payload, user, email)
+            return redirect_to_frontend(error: "That mail account was removed. Add it again instead.") if connection.nil?
+
+            # A reconnect has to come back signed in as the same account —
+            # Zoho signs in whoever is logged in to Zoho in this browser, and
+            # silently pointing this row at a different mailbox would mix two
+            # mailboxes' cursor and history.
+            if payload[:connection_id].present? && email.present? && !email.casecmp?(connection.email_address)
+              return redirect_to_frontend(
+                error: "You signed in to Zoho as #{email}, not #{connection.email_address}. " \
+                       "Sign out of Zoho (or use a private window) and reconnect as #{connection.email_address}."
+              )
+            end
+
+            outcome = if payload[:connection_id].present? then "reconnected"
+            elsif connection.new_record? then "connected"
+            else "refreshed"
+            end
+
             connection.assign_attributes(
               access_token: tokens[:access_token],
               refresh_token: tokens[:refresh_token].presence || connection.refresh_token,
               token_expires_at: tokens[:expires_in].to_i.seconds.from_now,
               status: :active,
-              email_address: account_info["Email"] || account_info["email"] || connection.email_address || user&.email_address || "mailbox@zoho.com"
+              email_address: email || connection.email_address || user&.email_address || "mailbox@zoho.com"
             )
             connection.save!
 
             ::Audit::Record.call(
-              action: "zoho.connection_created", actor: user || Current.user, company: company,
-              auditable: connection, request: request
+              action: outcome == "reconnected" ? "zoho.connection_reconnected" : "zoho.connection_created",
+              actor: user || Current.user, company: company, auditable: connection, request: request
             )
 
             # No date range is asked for or stored at connect time — the
@@ -77,16 +112,32 @@ module Api
             # for new mail without needing any trigger here.
           end
 
-          redirect_to_frontend(connected: true)
+          redirect_to_frontend(connected: true, outcome: outcome)
         end
 
         # DELETE /api/v1/mail/connections/:id
+        # Switches a mailbox off but keeps it in the list, marked Disconnected,
+        # so it can be reconnected later: it stops being scanned and its
+        # Zoho tokens are thrown away. Taking it off the list is #destroy.
+        def disconnect
+          connection = policy_scope(ZohoConnection).find(params[:id])
+          authorize connection, :destroy?
+
+          connection.update!(status: :revoked, access_token: nil, refresh_token: nil, token_expires_at: nil)
+          ::Audit::Record.call(
+            action: "zoho.connection_revoked", actor: Current.user, company: Current.company,
+            auditable: connection, request: request
+          )
+          render_data(Api::V1::ZohoConnectionSerializer.new(connection).as_json)
+        end
+
+        # Removes a mailbox from the list for good.
         def destroy
           connection = policy_scope(ZohoConnection).find(params[:id])
           authorize connection, :destroy?
 
           ::Audit::Record.call(
-            action: "zoho.connection_revoked", actor: Current.user, company: Current.company,
+            action: "zoho.connection_removed", actor: Current.user, company: Current.company,
             auditable: connection, request: request
           )
           connection.destroy!
@@ -94,6 +145,27 @@ module Api
         end
 
         private
+          # Which row this OAuth round-trip writes to:
+          #   - a reconnect: exactly the connection it was started for;
+          #   - a company mailbox: the one already connected under this
+          #     address if any (connecting the same account again refreshes
+          #     it), otherwise a new row — a company can connect several;
+          #   - a personal mailbox: unchanged — one per user, replaced by
+          #     whichever account they connect.
+          # nil only when a reconnect's connection has since been removed.
+          def connection_for_callback(company, payload, user, email)
+            if payload[:connection_id].present?
+              company.zoho_connections.find_by(
+                id: payload[:connection_id], connection_type: payload[:connection_type], user: user
+              )
+            elsif payload[:connection_type] == "company_managed"
+              (email.present? && company.zoho_connections.company_managed.with_email(email).order(:id).first) ||
+                company.zoho_connections.new(connection_type: :company_managed)
+            else
+              company.zoho_connections.find_or_initialize_by(connection_type: payload[:connection_type], user: user)
+            end
+          end
+
           def zoho_client
             @zoho_client ||= ::Zoho::Client.new
           end

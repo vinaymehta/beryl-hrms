@@ -117,7 +117,6 @@ const RESUME_STATUS_BADGE: Record<string, string> = {
   processing: "bg-cyan-500/10 text-cyan-600",
   completed: "bg-emerald-500/10 text-emerald-600",
   failed: "bg-red-500/10 text-red-600",
-  not_a_resume: "bg-muted text-muted-foreground",
   duplicate: "bg-violet-500/10 text-violet-600",
 }
 
@@ -126,7 +125,6 @@ const RESUME_STATUS_ICON_TINT: Record<string, string> = {
   processing: "bg-cyan-500 text-white",
   completed: "bg-emerald-500 text-white",
   failed: "bg-red-500 text-white",
-  not_a_resume: "bg-muted-foreground text-white",
   duplicate: "bg-violet-500 text-white",
 }
 
@@ -135,7 +133,6 @@ const RESUME_STATUS_ICON: Record<string, LucideIcon> = {
   processing: Loader2Icon,
   completed: CheckCircle2Icon,
   failed: AlertCircleIcon,
-  not_a_resume: XCircleIcon,
   duplicate: CopyIcon,
 }
 
@@ -144,11 +141,10 @@ const RESUME_STATUS_LABEL: Record<string, string> = {
   processing: "Processing",
   completed: "Completed",
   failed: "Needs Retry / Failed",
-  not_a_resume: "Not a Resume",
   duplicate: "Duplicate",
 }
 
-const RESUME_STATUS_ORDER = ["completed", "processing", "pending", "failed", "not_a_resume", "duplicate"]
+const RESUME_STATUS_ORDER = ["completed", "processing", "pending", "failed", "duplicate"]
 
 const CHART_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"]
 
