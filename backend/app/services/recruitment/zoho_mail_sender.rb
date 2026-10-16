@@ -50,9 +50,16 @@ module Recruitment
 
     private
 
+      # The account picked on the Mail page, or — with none picked, or that
+      # one disconnected — the oldest connected one (Company#effective_…).
       def active_connection
         ActsAsTenant.with_tenant(@company) do
-          @company.zoho_connections.where(status: :active).order(created_at: :asc).first
+          connection = @company.effective_recruitment_mail_connection
+          chosen = @company.recruitment_mail_connection
+          if chosen && connection && chosen != connection
+            Rails.logger.warn("[RecruitmentMail] #{chosen.email_address} isn't connected — sending from #{connection.email_address}")
+          end
+          connection
         end
       end
 

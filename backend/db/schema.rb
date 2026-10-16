@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_15_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_16_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -567,6 +567,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_15_100000) do
     t.string "employee_code_initial"
     t.string "legal_name"
     t.string "name", null: false
+    t.bigint "recruitment_mail_connection_id"
     t.jsonb "salary_structure_rules", default: {}, null: false
     t.string "slug", null: false
     t.integer "status", default: 0, null: false
@@ -574,6 +575,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_15_100000) do
     t.datetime "updated_at", null: false
     t.string "work_email_domain"
     t.boolean "work_email_domain_enforced", default: true, null: false
+    t.index ["recruitment_mail_connection_id"], name: "index_companies_on_recruitment_mail_connection_id"
     t.index ["slug"], name: "index_companies_on_slug", unique: true
   end
 
@@ -1053,6 +1055,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_15_100000) do
   add_foreign_key "candidates", "companies"
   add_foreign_key "candidates", "employees", column: "interviewer_id"
   add_foreign_key "candidates", "jobs", column: "interview_questions_job_id"
+  add_foreign_key "companies", "zoho_connections", column: "recruitment_mail_connection_id", on_delete: :nullify
   add_foreign_key "departments", "companies"
   add_foreign_key "designations", "companies"
   add_foreign_key "designations", "departments"

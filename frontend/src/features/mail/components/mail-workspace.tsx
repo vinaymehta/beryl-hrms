@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
@@ -23,7 +24,15 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useMailConnections, useConnectMailbox } from "@/features/mail/hooks/use-mail-connections"
+import {
+  useMailConnections,
+  useReconnectMailbox,
+  useSetRecruitmentSender,
+} from "@/features/mail/hooks/use-mail-connections"
+import { usePermission } from "@/features/auth/hooks/use-permission"
+import { errorMessage } from "@/lib/errors"
+import { PERMISSIONS } from "@/constants/permissions"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useMailMessages, useMailSearch, useMailStats, useMarkMailRead, useDeleteMailMessage } from "@/features/mail/hooks/use-mail-messages"
 import { isMailReauthError, isMailRateLimitError, mailApi } from "@/features/mail/api"
 import { ConnectMailboxEmptyState } from "@/features/mail/components/connect-mailbox-empty-state"
@@ -86,8 +95,17 @@ function todayIso() {
 
 export function MailWorkspace() {
   const { data: connections, isLoading: connectionsLoading } = useMailConnections()
-  const connectMailbox = useConnectMailbox()
+  const reconnectMailbox = useReconnectMailbox()
   const queryClient = useQueryClient()
+
+  // Which connected account is open. null until one is picked — then the
+  // account recruitment email is sent from, or the first working one.
+  const [connectionId, setConnectionId] = useState<string | null>(null)
+  // The account picked here is also the one every recruitment email is sent
+  // from (Recruitment::ZohoMailSender) — for whoever may manage the company
+  // mailboxes. Anyone else just switches what they're looking at.
+  const setRecruitmentSender = useSetRecruitmentSender()
+  const canChooseSender = usePermission(PERMISSIONS.zohoConnectionsManage)
 
   const [folder, setFolder] = useState<MailFolder>("inbox")
   const [folderId, setFolderId] = useState<string | undefined>(undefined)
@@ -97,6 +115,7 @@ export function MailWorkspace() {
   const [selectedSummary, setSelectedSummary] = useState<MailMessageSummary | undefined>(undefined)
 
   const [composeOpen, setComposeOpen] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
 
   // The single source of truth for how much mail history is fetched from
@@ -130,7 +149,11 @@ export function MailWorkspace() {
       ? `${dateFilter.from} – ${dateFilter.to}`
       : (MAIL_DATE_RANGE_PRESETS.find((p) => p.value === datePreset)?.label ?? "Date range")
 
-  const connection = connections?.[0]
+  const connection =
+    connections?.find((c) => c.id === connectionId) ??
+    connections?.find((c) => c.recruitmentSender && c.status === "active") ??
+    connections?.find((c) => c.status === "active") ??
+    connections?.[0]
   const isSearching = searchQuery !== undefined
   const { data: stats, isLoading: statsLoading, isFetching: statsFetching, refetch: refetchStats } = useMailStats(
     connection?.id,
@@ -155,11 +178,81 @@ export function MailWorkspace() {
   if (connectionsLoading) return <WorkspaceSkeleton />
   if (!connection) return <ConnectMailboxEmptyState />
 
-  if (connection.status === "error") {
+  // Re-reads the mailbox for the range on screen: the counts are recounted
+  // (the server's short cache for this range is dropped) and the list and
+  // folders reloaded. Refreshing without the range used to recount the whole
+  // mailbox — seconds of work the page then never showed.
+  async function syncNow() {
+    if (!connection) return
+    setSyncing(true)
+    try {
+      await mailApi.stats(connection.id, true, dateFilter)
+      await Promise.all([
+        refetchStats(),
+        queryClient.invalidateQueries({ queryKey: ["mail", "messages"] }),
+        queryClient.invalidateQueries({ queryKey: ["mail", "folders"] }),
+      ])
+      toast.success("Mailbox synced.")
+    } catch (error) {
+      toast.error(errorMessage(error, "Couldn't sync the mailbox. Try again."))
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  // Switching account starts the mailbox afresh: its own folders, page 1,
+  // nothing open or ticked.
+  function switchAccount(id: string) {
+    const picked = connections?.find((c) => c.id === id)
+    if (canChooseSender && picked?.status === "active" && picked.connectionType === "company_managed") {
+      setRecruitmentSender.mutate(id)
+    }
+    setConnectionId(id)
+    setFolder("inbox")
+    setFolderId(undefined)
+    setSearchQuery(undefined)
+    setPage(1)
+    setSelectedId(undefined)
+    setSelectedSummary(undefined)
+    setCheckedIds(new Set())
+  }
+
+  // Only when there is more than one account to choose between.
+  const accountPicker =
+    connections && connections.length > 1 ? (
+      <div className="grid gap-1">
+        <Select
+          items={connections.map((c) => ({ value: c.id, label: c.emailAddress }))}
+          value={connection.id}
+          onValueChange={(next) => next && switchAccount(next)}
+        >
+          <SelectTrigger aria-label="Mail account" className="h-8 w-full max-w-72 text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {connections.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.emailAddress}
+                {c.status !== "active" && " (needs reconnect)"}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {canChooseSender && (
+          <p className="text-xs text-muted-foreground">Recruitment emails are sent from the selected account.</p>
+        )}
+      </div>
+    ) : null
+
+  if (connection.status !== "active") {
     return (
       <div className="flex min-h-[50vh] items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <MailReauthAlert onReconnect={() => connectMailbox.mutate("individual")} pending={connectMailbox.isPending} />
+        <div className="grid w-full max-w-md gap-3">
+          {accountPicker}
+          <MailReauthAlert
+            onReconnect={() => reconnectMailbox.mutate(connection.id)}
+            pending={reconnectMailbox.isPending}
+          />
         </div>
       </div>
     )
@@ -313,7 +406,9 @@ export function MailWorkspace() {
                 <CheckCircle2Icon className="size-3" /> Connected
               </Badge>
             </div>
-            <p className="text-sm text-muted-foreground">{stats?.emailAddress || connection.emailAddress}</p>
+            {accountPicker ?? (
+              <p className="text-sm text-muted-foreground">{stats?.emailAddress || connection.emailAddress}</p>
+            )}
           </div>
         </div>
 
@@ -362,17 +457,12 @@ export function MailWorkspace() {
           </FilterPanel>
           <Button
             variant="outline"
-            onClick={async () => {
-              await mailApi.stats(connection.id, true)
-              await refetchStats()
-              queryClient.invalidateQueries({ queryKey: ["mail", "messages"] })
-              queryClient.invalidateQueries({ queryKey: ["mail", "folders"] })
-            }}
-            disabled={statsFetching}
+            onClick={syncNow}
+            disabled={syncing || statsFetching}
             className="gap-1.5 cursor-pointer"
           >
-            <RefreshCwIcon className={`size-4 ${statsFetching ? "animate-spin" : ""}`} />
-            Sync Now
+            <RefreshCwIcon className={`size-4 ${syncing || statsFetching ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing…" : "Sync Now"}
           </Button>
           <Button onClick={() => setComposeOpen(true)} className="gap-1.5 shadow-xs cursor-pointer">
             <PenSquareIcon className="size-4" />
@@ -503,7 +593,10 @@ export function MailWorkspace() {
             <MessageListSkeleton />
           ) : active.isError && isMailReauthError(active.error) ? (
             <div className="p-4">
-              <MailReauthAlert onReconnect={() => connectMailbox.mutate("individual")} pending={connectMailbox.isPending} />
+              <MailReauthAlert
+                onReconnect={() => reconnectMailbox.mutate(connection.id)}
+                pending={reconnectMailbox.isPending}
+              />
             </div>
           ) : active.isError && isMailRateLimitError(active.error) ? (
             <div className="p-4">

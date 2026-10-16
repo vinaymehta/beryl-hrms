@@ -191,6 +191,7 @@ Rails.application.routes.draw do
         get "connections", to: "connections#index"
         post "connections/:id/reconnect", to: "connections#reconnect"
         post "connections/:id/disconnect", to: "connections#disconnect"
+        post "connections/:id/recruitment_sender", to: "connections#recruitment_sender"
         delete "connections/:id", to: "connections#destroy"
 
         get "stats", to: "stats#show"

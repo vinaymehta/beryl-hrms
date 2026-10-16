@@ -234,20 +234,6 @@ module Api
           @candidate = policy_scope(Candidate).find(params[:id])
         end
 
-        # Mail to an outside recipient must never take down the request that
-        # triggered it: a candidate with no email on file, or a transient SMTP
-        # problem, should not roll back an interview that is already booked.
-        def deliver_candidate_mail(mailer_action)
-          if @candidate.email.blank?
-            Rails.logger.warn("[CandidateMailer] #{mailer_action} skipped — candidate #{@candidate.id} has no email")
-            return
-          end
-
-          CandidateMailer.public_send(mailer_action, @candidate).deliver_later
-        rescue => e
-          Rails.logger.error("[CandidateMailer] #{mailer_action} failed for candidate #{@candidate.id}: #{e.class}: #{e.message}")
-        end
-
         # Own address only — never the linked login account. See the note in
         # InterviewerMailer#interviewer_email.
         def interviewer_email(interviewer)

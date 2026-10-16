@@ -131,6 +131,24 @@ module Api
           render_data(Api::V1::ZohoConnectionSerializer.new(connection).as_json)
         end
 
+        # Makes this company mailbox the one every recruitment email is sent
+        # from (Recruitment::ZohoMailSender). It must be connected right now.
+        def recruitment_sender
+          connection = policy_scope(ZohoConnection).find(params[:id])
+          authorize connection, :make_recruitment_sender?
+          unless connection.active?
+            return render json: { errors: [ { code: "connection_inactive", message: "Reconnect #{connection.email_address} before sending from it." } ] },
+                          status: :unprocessable_content
+          end
+
+          current_company.update!(recruitment_mail_connection: connection)
+          ::Audit::Record.call(
+            action: "zoho.recruitment_sender_changed", actor: Current.user, company: Current.company,
+            auditable: connection, request: request
+          )
+          render_data(Api::V1::ZohoConnectionSerializer.new(policy_scope(ZohoConnection).order(:connection_type)).as_json)
+        end
+
         # Removes a mailbox from the list for good.
         def destroy
           connection = policy_scope(ZohoConnection).find(params[:id])

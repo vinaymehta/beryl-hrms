@@ -59,6 +59,19 @@ export function useDisconnectMailbox() {
   })
 }
 
+export function useSetRecruitmentSender() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: mailApi.connections.setRecruitmentSender,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: MAIL_CONNECTIONS_QUERY_KEY })
+      toast.success("Recruitment emails will now be sent from this account.")
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't change the sending account.")),
+  })
+}
+
 export function useRemoveMailbox() {
   const queryClient = useQueryClient()
 
