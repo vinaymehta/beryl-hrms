@@ -127,7 +127,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: "other",
     label: "Salary structure & letter",
     description:
-      "The legal name appraisal letters are issued for, and the rules that split a monthly gross into the letter's compensation table.",
+      "The legal name, address and phone on appraisal letters and salary slips, and the rules that split a monthly gross into the letter's compensation table.",
     href: "/all-settings?section=salary_letter",
     icon: ReceiptIndianRupeeIcon,
     // Saved through the same company settings endpoint as Company.

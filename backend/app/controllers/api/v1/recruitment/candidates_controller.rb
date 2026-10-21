@@ -240,11 +240,11 @@ module Api
           interviewer&.personal_email.presence
         end
 
-        # Sent from the company's connected Zoho mailbox, like every other
-        # recruitment email. A delivery problem must never roll back a state
-        # change that already succeeded.
+        # Ordinary app mail (Resend), like every other email the app sends. A
+        # delivery problem must never roll back a state change that already
+        # succeeded.
         def deliver_interviewer_mail(mailer_action)
-          RecruitmentMailJob.perform_later("InterviewerMailer", mailer_action.to_s, @candidate.id)
+          InterviewerMailer.public_send(mailer_action, @candidate).deliver_later
         rescue => e
           Rails.logger.error("[RecruitmentMail] #{mailer_action} failed for candidate #{@candidate.id}: #{e.class}: #{e.message}")
         end

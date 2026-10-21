@@ -41,7 +41,8 @@ export function MailSettings() {
       <CardHeader>
         <CardTitle>Zoho Mail</CardTitle>
         <CardDescription>
-          Connect the Zoho Mail accounts this workspace sends from and scans for incoming resumes.
+          Connect the Zoho Mail accounts this workspace reads and scans for incoming resumes. Replies and new mail
+          written on the Mail page are sent from them.
         </CardDescription>
       </CardHeader>
       <CardContent>

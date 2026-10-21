@@ -30,9 +30,9 @@ module Api
             end
 
             # Refreshing a nearly-expired token, and resolving Zoho's accountId,
-            # both live in Zoho::Mailbox — outgoing transactional mail needs the
-            # same preparation from a Sidekiq job, where there is no controller,
-            # and a second copy of the refresh rule is one too many.
+            # both live in Zoho::Mailbox — the scan jobs need the same
+            # preparation from Sidekiq, where there is no controller, and a
+            # second copy of the refresh rule is one too many.
             mailbox_for(connection).access_token
 
             connection

@@ -8,8 +8,6 @@ class Company < ApplicationRecord
   has_many :employment_types, dependent: :destroy
   has_many :roles, dependent: :destroy
   has_many :zoho_connections, dependent: :destroy
-  # Where recruitment email is sent from — picked on the Mail page.
-  belongs_to :recruitment_mail_connection, class_name: "ZohoConnection", optional: true
   has_many :calendly_connections, dependent: :destroy
   has_many :audit_logs, dependent: :nullify
   has_many :leave_requests, dependent: :destroy
@@ -56,17 +54,6 @@ class Company < ApplicationRecord
   # column holds only what Settings changed.
   def salary_rules
     ::Appraisals::SalaryStructure.normalize_rules(salary_structure_rules)
-  end
-
-  # The mailbox recruitment email actually goes out from: the one picked on
-  # the Mail page while it is connected, otherwise the oldest connected one.
-  # Read by Recruitment::ZohoMailSender to send, and by the connections list
-  # to show which account that is — so the two can never disagree.
-  def effective_recruitment_mail_connection
-    chosen = recruitment_mail_connection
-    return chosen if chosen&.active?
-
-    zoho_connections.where(status: :active).order(:created_at).first
   end
 
   private

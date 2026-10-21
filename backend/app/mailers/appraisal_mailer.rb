@@ -37,12 +37,7 @@ class AppraisalMailer < ApplicationMailer
 
     # Skipped rather than raising when the file is missing: the message still
     # says where to find the letter in the app, which is better than no mail.
-    #
-    # Not attempted on the Zoho transport, which posts only the HTML body to
-    # Zoho's API (Zoho::MailDelivery) — the file would be dropped on the way
-    # and the message would claim an attachment that never arrives.
     def attach_letter(attachment, filename)
-      return if delivery_method == :zoho
       return unless attachment.attached?
 
       attachments[filename] = { mime_type: "application/pdf", content: attachment.download }

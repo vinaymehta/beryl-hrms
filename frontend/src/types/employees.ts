@@ -235,5 +235,8 @@ export interface CompanySettings {
   workEmailDomainEnforced: boolean
   /** The name appraisal letters are signed off for. Falls back to companyName. */
   legalName: string
+  /** Printed under the legal name on the salary slip; one line per line. */
+  address: string | null
+  phone: string | null
   salaryStructureRules: SalaryStructureRules
 }

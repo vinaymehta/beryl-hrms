@@ -172,6 +172,13 @@ Rails.application.routes.draw do
 
       resources :leaves, only: %i[ index create update ]
 
+      # The Salary page's monthly pay run: generate, review and send each
+      # employee's slip — see Api::V1::SalaryController.
+      get "salary/run", to: "salary#run"
+      post "salary/slips/generate", to: "salary#generate"
+      post "salary/slips/send", to: "salary#send_slips"
+      get "salary/slips/:id/pdf", to: "salary#pdf", as: :salary_slip_pdf
+
       get "attendance", to: "attendance#index"
       get "attendance/today", to: "attendance#today"
       post "attendance/check_in", to: "attendance#check_in"
@@ -191,7 +198,6 @@ Rails.application.routes.draw do
         get "connections", to: "connections#index"
         post "connections/:id/reconnect", to: "connections#reconnect"
         post "connections/:id/disconnect", to: "connections#disconnect"
-        post "connections/:id/recruitment_sender", to: "connections#recruitment_sender"
         delete "connections/:id", to: "connections#destroy"
 
         get "stats", to: "stats#show"

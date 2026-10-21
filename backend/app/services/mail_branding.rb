@@ -9,18 +9,4 @@ module MailBranding
   LOGO_FILE = "beryl-logo.png"
 
   def self.logo_path = Rails.root.join("app/assets/images", LOGO_FILE)
-
-  # The same image, served by the frontend (public/brand/). Only reachable by a
-  # mail client when FRONTEND_ORIGINS is a public address.
-  def self.logo_url = "#{FrontendOrigins.primary.chomp('/')}/brand/#{LOGO_FILE}"
-
-  # The logo travels INSIDE the message as an inline (cid:) attachment, which
-  # works for SMTP/Resend. The Zoho senders post only the HTML to an API, so an
-  # inline part never arrives and the image would break — point those at the
-  # hosted copy instead.
-  def self.with_hosted_images(message, html)
-    message.attachments.select(&:inline?).reduce(html.to_s) do |body, part|
-      body.gsub("cid:#{part.cid}", logo_url)
-    end
-  end
 end

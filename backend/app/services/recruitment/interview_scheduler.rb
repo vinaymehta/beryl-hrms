@@ -28,10 +28,6 @@ module Recruitment
         return failure("#{@interviewer.full_name} has no email address on file, so they can't be notified when the candidate books. Add one to their employee record first.")
       end
 
-      if @candidate.company.zoho_connections.where(status: :active).none?
-        return failure("Connect a company mailbox in Settings — the booking link is sent from it.")
-      end
-
       connection = @candidate.company.calendly_connections.find_by(status: :active)
       return failure("Connect a Calendly account in Settings before scheduling interviews.") if connection.nil?
       return failure("Pick which Calendly event type interviews are booked against, in Settings.") if connection.default_event_type_uri.blank?
@@ -107,11 +103,11 @@ module Recruitment
         url
       end
 
-      # Sent FROM the company's connected Zoho mailbox, not SMTP — a candidate
-      # should receive this from an address they recognise and can reply to.
-      # Mail must never take down a scheduling action that already succeeded.
+      # Ordinary app mail (Resend), from MAIL_FROM like every other email the
+      # app sends. Mail must never take down a scheduling action that already
+      # succeeded — `deliver_later` only enqueues, but enqueuing can raise.
       def deliver_link
-        RecruitmentMailJob.perform_later("CandidateMailer", "interview_booking_link", @candidate.id)
+        CandidateMailer.interview_booking_link(@candidate).deliver_later
       rescue => e
         Rails.logger.error("[RecruitmentMail] booking link failed for candidate #{@candidate.id}: #{e.class}: #{e.message}")
       end

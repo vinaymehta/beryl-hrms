@@ -51,14 +51,16 @@ export function useSubmitSelfAppraisal(id: string) {
  * Saving a step is background housekeeping, not an event worth a toast on every
  * click — the wizard shows the saved time instead. A FAILED save still speaks
  * up, because silently losing someone's half-written appraisal is the one
- * outcome that matters here.
+ * outcome that matters here — but the toast is raised by the wizard
+ * (AppraisalWorkspace#persist), not here: it also saves on its own while the
+ * person types, and a server that keeps refusing should say so once per run of
+ * failures rather than on every pause in their typing.
  */
 export function useSaveSelfAppraisalDraft(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (values: unknown) => appraisalsApi.saveDraft(id, values),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["appraisals", String(id)] }),
-    onError: (error) => toast.error(errorMessage(error, "Couldn't save your draft.")),
   })
 }
 
@@ -79,7 +81,6 @@ export function useSaveReviewDraft(id: string) {
   return useMutation({
     mutationFn: (values: unknown) => appraisalsApi.saveReviewDraft(id, values),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["appraisals", String(id)] }),
-    onError: (error) => toast.error(errorMessage(error, "Couldn't save your review draft.")),
   })
 }
 

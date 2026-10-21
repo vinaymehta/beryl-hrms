@@ -66,6 +66,8 @@ export const PERMISSIONS = {
   appraisalFeedbackManage: "appraisal_feedback.manage",
   payrollView: "payroll.view",
   payrollManage: "payroll.manage",
+  /** The Salary page — every active employee's monthly gross, and emailing them their slip. Admin by default. */
+  salarySend: "salary.send",
   expensesView: "expenses.view",
   expensesCreate: "expenses.create",
   expensesApprove: "expenses.approve",

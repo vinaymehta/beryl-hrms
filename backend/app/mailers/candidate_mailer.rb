@@ -9,6 +9,8 @@ class CandidateMailer < ApplicationMailer
   # and naming the interviewer would leak an employee's identity to an outside
   # recipient. (Calendly sends the candidate its own confirmation once booked.)
   def interview_booking_link(candidate)
+    return if missing_recipient?(candidate.email, "candidate #{candidate.id}")
+
     @candidate = candidate
     @booking_url = candidate.calendly_scheduling_url
 

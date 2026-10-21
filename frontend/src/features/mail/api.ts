@@ -30,9 +30,6 @@ export const mailApi = {
     // Switched off but kept in the list (Disconnected, with Reconnect).
     disconnect: (id: string) =>
       apiClient.post<MailConnection>(`/mail/connections/${encodeURIComponent(id)}/disconnect`),
-    // Every recruitment email is sent from this mailbox from now on.
-    setRecruitmentSender: (id: string) =>
-      apiClient.post<MailConnection[]>(`/mail/connections/${encodeURIComponent(id)}/recruitment_sender`),
     // Taken off the list for good.
     remove: (id: string) => apiClient.delete<void>(`/mail/connections/${encodeURIComponent(id)}`),
   },

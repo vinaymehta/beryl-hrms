@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
@@ -25,6 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "cn"
+import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -82,6 +83,7 @@ import {
   useSubmitSelfAppraisal,
   useSubmitReview,
 } from "@/features/appraisals/hooks/use-appraisal-mutations"
+import { errorMessage } from "@/lib/errors"
 import type {
   AppraisalDetail,
   ImportPreviewResponse,
@@ -500,13 +502,124 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
   const current = steps[stepIndex]
   const isLast = stepIndex === steps.length - 1
 
-  function persist(nextStep = stepIndex) {
-    if (!saveDraft) return
+  // --- saving the draft ------------------------------------------------------
+
+  /**
+   * The draft as it stands, and a string of it to compare against what was
+   * last saved. The step is kept apart: moving between steps saves on its own
+   * (goTo), and only a change to what was WRITTEN should start the timer.
+   */
+  const draftContent = useMemo(
+    () => ({ answers: answerPayload, responses, ...narrative }),
+    [answerPayload, responses, narrative]
+  )
+  const draftKey = useMemo(() => JSON.stringify(draftContent), [draftContent])
+
+  // What the server holds, starting from the draft the form was seeded with —
+  // so opening the page doesn't save straight back what it just loaded. A ref
+  // for the save logic, which runs from timers and callbacks; state for the
+  // status line, which has to re-render.
+  const saveState = useRef({
+    savedKey: draftKey,
+    savedStep: stepIndex,
+    inFlight: false,
+    again: false,
+    failing: false,
+    stopped: false,
+  })
+  const [savedKey, setSavedKey] = useState(draftKey)
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle")
+  const dirty = draftKey !== savedKey
+  // The latest persist(), for the timers, listeners and save callbacks below,
+  // which outlive the render they were made in and would otherwise send the
+  // text as it stood then.
+  const latestPersist = useRef<(nextStep?: number, auto?: boolean) => void>(() => {})
+
+  /**
+   * Save the draft — on Save, on every step change, and by itself ~2s after
+   * the person stops typing.
+   *
+   * One save at a time: one asked for while another is still out is queued,
+   * and goes once that returns, with whatever is on screen THEN (through
+   * latestPersist). An automatic save with nothing new to send doesn't go.
+   *
+   * A failure always toasts when the person asked for the save; an automatic
+   * one toasts only the first time in a run of failures, so a server that
+   * keeps refusing doesn't toast at every pause in their typing.
+   */
+  function persist(nextStep: number = stepIndex, auto = false) {
+    const state = saveState.current
+    if (!saveDraft || state.stopped) return
+    if (auto && draftKey === state.savedKey && nextStep === state.savedStep) return
+    if (state.inFlight) {
+      state.again = true
+      return
+    }
+
+    const key = draftKey
+    state.inFlight = true
+    setSaveStatus("saving")
     saveDraft.mutate(
-      { step: nextStep + 1, answers: answerPayload, responses, ...narrative },
-      { onSuccess: () => setSavedAt(new Date().toISOString()) }
+      { step: nextStep + 1, ...draftContent },
+      {
+        onSuccess: () => {
+          state.savedKey = key
+          state.savedStep = nextStep
+          state.failing = false
+          setSavedKey(key)
+          setSavedAt(new Date().toISOString())
+          setSaveStatus("saved")
+        },
+        onError: (error) => {
+          if (!auto || !state.failing) {
+            toast.error(
+              errorMessage(
+                error,
+                viewer.canSaveReviewDraft
+                  ? "Couldn't save your review draft."
+                  : "Couldn't save your draft."
+              )
+            )
+          }
+          state.failing = true
+          setSaveStatus("failed")
+        },
+        onSettled: () => {
+          state.inFlight = false
+          if (state.again) {
+            state.again = false
+            latestPersist.current(undefined, true)
+          }
+        },
+      }
     )
   }
+  useEffect(() => {
+    latestPersist.current = persist
+  })
+
+  // The automatic save: restarted by every change, so it goes once the
+  // person has paused for two seconds.
+  useEffect(() => {
+    if (!dirty) return
+    const timer = setTimeout(() => latestPersist.current(undefined, true), 2000)
+    return () => clearTimeout(timer)
+  }, [draftKey, dirty])
+
+  // Best effort on the way out: when the tab is hidden or closed, or the
+  // person navigates elsewhere in the app before the timer has run, send what
+  // hasn't been saved yet. (A request started as the page unloads may not
+  // finish; switching tabs, the common case, it does.)
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") latestPersist.current(undefined, true)
+    }
+    document.addEventListener("visibilitychange", onHide)
+    return () => {
+      document.removeEventListener("visibilitychange", onHide)
+      latestPersist.current(undefined, true)
+    }
+  }, [])
 
   function goTo(next: number) {
     const target = Math.max(0, Math.min(steps.length - 1, next))
@@ -517,9 +630,16 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
   }
 
   function submit() {
-    const payload = { answers: answerPayload, responses, ...narrative }
-    if (viewer.canSubmitReview) submitReview.mutate(payload)
-    else submitSelf.mutate(payload)
+    // Submitting ends the draft: no automatic save may follow it in. Should
+    // the submit be refused, the person is still editing, so saving resumes.
+    saveState.current.stopped = true
+    const resume = {
+      onError: () => {
+        saveState.current.stopped = false
+      },
+    }
+    if (viewer.canSubmitReview) submitReview.mutate(draftContent, resume)
+    else submitSelf.mutate(draftContent, resume)
   }
 
   // The Tools menu's side panel, and the workbook importer it drives.
@@ -709,9 +829,27 @@ export function AppraisalWorkspace({ appraisal }: { appraisal: AppraisalDetail }
                 {primaryAction}
               </div>
             </div>
-            <p className="text-right text-[11px] text-muted-foreground">
-              Your progress is saved automatically
-            </p>
+            {saveDraft && (
+              <p
+                className={cn(
+                  "text-right text-[11px] text-muted-foreground",
+                  saveStatus === "failed" && "text-destructive"
+                )}
+                aria-live="polite"
+              >
+                {/* A failure outranks "unsaved changes": it is what explains
+                    them, and the next change (or Save) tries again. */}
+                {saveStatus === "saving"
+                  ? "Saving…"
+                  : saveStatus === "failed"
+                    ? "Couldn't save your latest changes — keep editing or press Save to retry"
+                    : dirty
+                      ? "Unsaved changes — saving shortly"
+                      : saveStatus === "saved"
+                        ? "All changes saved"
+                        : "Your progress is saved automatically"}
+              </p>
+            )}
           </div>
         </div>
 

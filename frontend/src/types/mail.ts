@@ -16,8 +16,6 @@ export interface MailConnection {
    *  the single source of truth for historical fetching, and it never
    *  touches this cursor. */
   lastSyncedAt: string | null
-  /** The mailbox every recruitment email is sent from (Settings → Zoho Mail). */
-  recruitmentSender?: boolean
 }
 
 export interface MailAttachment {

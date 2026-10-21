@@ -99,18 +99,15 @@ Rails.application.configure do
   # left the box. Credentials come from ENV rather than encrypted credentials
   # to match how every other secret in this app is provisioned.
   #
-  # MAIL_TRANSPORT=zoho sends through the Zoho Mail API instead, using the
-  # OAuth mailbox connected under Settings → Mail — see Zoho::MailDelivery.
-  # Offered here and not only in development because a deployment that uses
-  # Zoho for mail should not have to also provision SMTP credentials for the
-  # same mailbox; leaving this branch out of production would mean the
-  # feature worked locally and silently fell back to SMTP once shipped.
+  # Every email the app sends goes this way, recruitment mail included. Zoho
+  # is only for the Mail page (reading, and replies/compose sent by hand) and
+  # is not a transport.
   #
   # MAIL_TRANSPORT=resend sends through Resend (resend.com) over its SMTP
   # relay — the same :smtp delivery as below, with Resend's host and the API
   # key as the password, so only RESEND_API_KEY and MAIL_FROM need setting.
   # MAIL_FROM must be on a domain verified in the Resend dashboard.
-  config.action_mailer.delivery_method = ENV["MAIL_TRANSPORT"] == "zoho" ? :zoho : :smtp
+  config.action_mailer.delivery_method = :smtp
   config.action_mailer.perform_deliveries = true
   # Deliberately loud. These are transactional mails a candidate is waiting on,
   # so a failure should surface as a retrying Sidekiq job rather than being

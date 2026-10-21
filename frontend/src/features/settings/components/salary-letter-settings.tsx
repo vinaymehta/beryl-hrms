@@ -102,7 +102,7 @@ function ruleError(value: string, unit: "%" | "₹") {
 
 /**
  * Salary structure & letter: the legal name the appraisal letter is issued
- * for, and the company's rules for splitting a monthly gross into the letter's
+ * for, the address and phone the salary slip prints under it, and the company's rules for splitting a monthly gross into the letter's
  * compensation table. The Discussion step fills the table from these rules
  * whenever the new gross changes; Admin/HR can still edit any row there.
  */
@@ -128,7 +128,7 @@ export function SalaryLetterSettings() {
   const d = settings.data
   return (
     <SalaryLetterForm
-      key={`${d.legalName}|${JSON.stringify(d.salaryStructureRules ?? null)}`}
+      key={`${d.legalName}|${d.address}|${d.phone}|${JSON.stringify(d.salaryStructureRules ?? null)}`}
       data={d}
     />
   )
@@ -138,7 +138,11 @@ function SalaryLetterForm({ data }: { data: CompanySettings }) {
   const queryClient = useQueryClient()
   const initialRules = rulesFrom(data.salaryStructureRules)
   const initialName = data.legalName ?? data.companyName
+  const initialAddress = data.address ?? ""
+  const initialPhone = data.phone ?? ""
   const [legalName, setLegalName] = useState(initialName)
+  const [address, setAddress] = useState(initialAddress)
+  const [phone, setPhone] = useState(initialPhone)
   const [rules, setRules] = useState<RuleValues>(initialRules)
 
   const errors = Object.fromEntries(
@@ -147,6 +151,8 @@ function SalaryLetterForm({ data }: { data: CompanySettings }) {
   const valid = Object.values(errors).every((error) => error === null)
   const dirty =
     legalName.trim() !== initialName ||
+    address.trim() !== initialAddress ||
+    phone.trim() !== initialPhone ||
     RULE_FIELDS.some((field) => Number(rules[field.key]) !== Number(initialRules[field.key]))
 
   const example = valid ? breakdownFromRules(EXAMPLE_GROSS, numericRules(rules)) : null
@@ -155,13 +161,15 @@ function SalaryLetterForm({ data }: { data: CompanySettings }) {
     mutationFn: () =>
       companySettingsApi.update({
         legalName: legalName.trim(),
+        address: address.trim(),
+        phone: phone.trim(),
         salaryStructureRules: numericRules(rules),
       }),
     onSuccess: (next) => {
       queryClient.setQueryData(COMPANY_SETTINGS_QUERY_KEY, next)
       // An open Discussion re-fills its table from the rules it was sent.
       queryClient.invalidateQueries({ queryKey: ["appraisals"] })
-      toast.success("Saved. New appraisal letters use these settings.")
+      toast.success("Saved. New appraisal letters and salary slips use these settings.")
     },
     onError: (error) => toast.error(errorMessage(error, "Couldn't save these settings.")),
   })
@@ -174,7 +182,7 @@ function SalaryLetterForm({ data }: { data: CompanySettings }) {
         if (dirty && valid) save.mutate()
       }}
     >
-      <PanelSection title="Letter">
+      <PanelSection title="Letter & salary slip">
         <div className="grid max-w-md gap-1.5">
           <div className="flex items-center gap-1">
             <Label htmlFor="legal-name">Legal name</Label>
@@ -189,6 +197,41 @@ function SalaryLetterForm({ data }: { data: CompanySettings }) {
             placeholder={data.companyName}
             disabled={save.isPending}
             onChange={(event) => setLegalName(event.target.value)}
+          />
+        </div>
+
+        <div className="grid max-w-md gap-1.5">
+          <div className="flex items-center gap-1">
+            <Label htmlFor="company-address">Company address</Label>
+            <InfoTip label="Company address">
+              Printed under the legal name at the top of the salary slip, line for line. Left blank,
+              the slip has no address.
+            </InfoTip>
+          </div>
+          <textarea
+            id="company-address"
+            rows={3}
+            value={address}
+            disabled={save.isPending}
+            onChange={(event) => setAddress(event.target.value)}
+            className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+          />
+        </div>
+
+        <div className="grid max-w-md gap-1.5">
+          <div className="flex items-center gap-1">
+            <Label htmlFor="company-phone">Company phone</Label>
+            <InfoTip label="Company phone">
+              Printed under the address on the salary slip. Left blank, the slip has no phone
+              number.
+            </InfoTip>
+          </div>
+          <Input
+            id="company-phone"
+            type="tel"
+            value={phone}
+            disabled={save.isPending}
+            onChange={(event) => setPhone(event.target.value)}
           />
         </div>
       </PanelSection>
@@ -267,6 +310,8 @@ function SalaryLetterForm({ data }: { data: CompanySettings }) {
             disabled={save.isPending}
             onClick={() => {
               setLegalName(initialName)
+              setAddress(initialAddress)
+              setPhone(initialPhone)
               setRules(initialRules)
             }}
           >

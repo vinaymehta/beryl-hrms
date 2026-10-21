@@ -33,6 +33,13 @@ module Api
         # The appraisal letter's legal name. Blank goes back to the company
         # name (Company#letter_legal_name) rather than to an empty sign-off.
         changes[:legal_name] = params[:legal_name].to_s.strip.presence if params.key?(:legal_name)
+        # Printed under the legal name at the head of the salary slip. The
+        # address keeps its line breaks — each line is a line on the slip —
+        # with blank lines and stray spaces dropped; blank clears either.
+        if params.key?(:address)
+          changes[:address] = params[:address].to_s.lines.map(&:strip).compact_blank.join("\n").presence
+        end
+        changes[:phone] = params[:phone].to_s.strip.presence if params.key?(:phone)
         if params.key?(:salary_structure_rules)
           # Merged over what is stored, so the form may send only the fields
           # it changed; stored complete and as plain numbers.
@@ -74,6 +81,9 @@ module Api
             # The appraisal letter: who it is written for, and the rules that
             # pre-fill its compensation table at the Discussion step.
             legalName: current_company.letter_legal_name,
+            # The salary slip's header, under the legal name. Null when unset.
+            address: current_company.address,
+            phone: current_company.phone,
             salaryStructureRules: current_company.salary_rules.to_h do |key, value|
               [ key.camelize(:lower), ::Appraisals::SalaryStructure.storable(value) ]
             end

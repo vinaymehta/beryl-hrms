@@ -94,7 +94,7 @@ module Recruitment
         return if candidate.interviewer_notified_invitee_uri.present? &&
                   candidate.interviewer_notified_invitee_uri == candidate.calendly_invitee_uri
 
-        RecruitmentMailJob.perform_later("InterviewerMailer", "interview_booked", candidate.id)
+        InterviewerMailer.interview_booked(candidate).deliver_later
         # Marked on enqueue rather than on delivery: the job has its own retry
         # policy, so re-sending here on a later webhook replay would duplicate
         # a mail that is still in flight rather than rescue a lost one.

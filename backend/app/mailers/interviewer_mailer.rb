@@ -9,6 +9,8 @@ class InterviewerMailer < ApplicationMailer
   def interview_booked(candidate)
     @candidate = candidate
     @interviewer = candidate.interviewer
+    return if missing_recipient?(interviewer_email(@interviewer), "candidate #{candidate.id}")
+
     @interview_at = candidate.interview_at
     @when_text = formatted_when
     @join_url = candidate.calendly_join_url
@@ -34,6 +36,8 @@ class InterviewerMailer < ApplicationMailer
   def feedback_request(candidate)
     @candidate = candidate
     @interviewer = candidate.interviewer
+    return if missing_recipient?(interviewer_email(@interviewer), "candidate #{candidate.id}")
+
     @interview_at = candidate.interview_at
     @when_text = formatted_when
     @feedback_url = "#{frontend_base_url}/feedback/#{candidate.ensure_feedback_token!}"

@@ -114,6 +114,7 @@ class Employee < ApplicationRecord
            class_name: "PerformanceImprovementPlan", dependent: :destroy, inverse_of: :employee
 
   has_many :appraisals, dependent: :destroy
+  has_many :salary_slips, dependent: :destroy
   has_many :appraisals_as_primary_manager,
            class_name: "Appraisal", foreign_key: :primary_manager_id, dependent: :nullify, inverse_of: :primary_manager
   has_many :appraisals_as_secondary_manager,

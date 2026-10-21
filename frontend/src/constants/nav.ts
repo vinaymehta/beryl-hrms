@@ -7,6 +7,7 @@ import {
   FileTextIcon,
   MailIcon,
   BriefcaseIcon,
+  BanknoteIcon,
   TrendingUpIcon,
   CircleUserIcon,
   SettingsIcon,
@@ -92,6 +93,9 @@ const ALL_NAV_ITEMS: (NavItem & { hidden?: boolean })[] = [
   // The connected Zoho mailboxes (one picker for several). Connecting and
   // disconnecting them is Settings → Mail.
   { label: "Mail", href: "/mail", icon: MailIcon, permission: PERMISSIONS.mailView },
+  // The monthly pay run: generate, review and email salary slips. Its own key
+  // rather than payroll.*: the page shows everyone's pay at once.
+  { label: "Salary", href: "/salary", icon: BanknoteIcon, permission: PERMISSIONS.salarySend },
   { label: "Settings", href: "/settings", icon: SettingsIcon },
 ]
 

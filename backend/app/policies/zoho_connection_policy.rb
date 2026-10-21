@@ -4,9 +4,6 @@ class ZohoConnectionPolicy < ApplicationPolicy
 
   def create_company? = permission?("zoho_connections.manage")
 
-  # Choosing which company mailbox sends recruitment email.
-  def make_recruitment_sender? = same_company? && record.company_managed? && permission?("zoho_connections.manage")
-
   # Any user with mail.view can connect their own individual mailbox.
   def create_individual? = permission?("mail.view")
 

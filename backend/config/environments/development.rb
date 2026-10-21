@@ -38,10 +38,10 @@ Rails.application.configure do
   # reach, so photos silently failed to load.
   config.active_storage.resolve_model_to_route = :rails_storage_proxy
 
-  # Outgoing mail. Four modes, in precedence order:
+  # Outgoing mail — everything the app sends, recruitment mail included. Zoho
+  # is only for the Mail page (reading, and replies/compose sent by hand), never
+  # a transport here. Three modes, in precedence order:
   #
-  #   MAIL_TRANSPORT=zoho  — the Zoho Mail API, through the OAuth connection
-  #                          the app already holds. No SMTP credentials needed.
   #   MAIL_TRANSPORT=resend — Resend's SMTP relay; needs RESEND_API_KEY and a
   #                          MAIL_FROM on a domain verified in Resend.
   #   SMTP_ADDRESS set     — ordinary SMTP.
@@ -58,13 +58,7 @@ Rails.application.configure do
   # submitted, never queued, and, because errors were swallowed, the job
   # reported success. Mail simply evaporated, silently, for every invitation,
   # password reset, interview invite and candidate feedback link.
-  if ENV.fetch("MAIL_TRANSPORT", nil) == "zoho"
-    # Out through the Zoho mailbox the app is already connected to — the same
-    # OAuth connection the Mail feature reads and sends with. No second set of
-    # credentials to provision. See Zoho::MailDelivery.
-    config.action_mailer.delivery_method = :zoho
-    config.action_mailer.raise_delivery_errors = true
-  elsif ENV.fetch("MAIL_TRANSPORT", nil) == "resend"
+  if ENV.fetch("MAIL_TRANSPORT", nil) == "resend"
     # Same settings as production — see the note there.
     config.action_mailer.delivery_method = :smtp
     config.action_mailer.smtp_settings = {

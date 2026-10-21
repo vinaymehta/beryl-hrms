@@ -109,6 +109,8 @@ export const companySettingsApi = {
     workEmailDomain?: string
     workEmailDomainEnforced?: boolean
     legalName?: string
+    address?: string
+    phone?: string
     salaryStructureRules?: SalaryStructureRules
   }) => apiClient.patch<CompanySettings>("/company_settings", values),
 }

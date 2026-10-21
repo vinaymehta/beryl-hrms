@@ -18,6 +18,18 @@ class ApplicationMailer < ActionMailer::Base
       attachments.inline[MailBranding::LOGO_FILE] = File.binread(MailBranding.logo_path)
     end
 
+    # True — and logged — when there is nobody to send to. An action that
+    # returns without calling `mail` delivers nothing, so this lets a mail with
+    # no recipient (an interviewer with no address on file, say) be skipped
+    # rather than fail in the job; the log line is what tells that apart from
+    # a successful send.
+    def missing_recipient?(address, about)
+      return false if address.present?
+
+      Rails.logger.error("[#{self.class.name}] #{action_name} not sent for #{about}: no recipient address")
+      true
+    end
+
     # Where links in mail templates point. The app's own frontend, never this
     # API host — a recipient clicking through must land on the UI.
     def frontend_base_url

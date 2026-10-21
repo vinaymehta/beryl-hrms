@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_16_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_17_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -563,11 +563,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_16_100000) do
   end
 
   create_table "companies", force: :cascade do |t|
+    t.text "address"
     t.datetime "created_at", null: false
     t.string "employee_code_initial"
     t.string "legal_name"
     t.string "name", null: false
-    t.bigint "recruitment_mail_connection_id"
+    t.string "phone"
     t.jsonb "salary_structure_rules", default: {}, null: false
     t.string "slug", null: false
     t.integer "status", default: 0, null: false
@@ -575,7 +576,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_16_100000) do
     t.datetime "updated_at", null: false
     t.string "work_email_domain"
     t.boolean "work_email_domain_enforced", default: true, null: false
-    t.index ["recruitment_mail_connection_id"], name: "index_companies_on_recruitment_mail_connection_id"
     t.index ["slug"], name: "index_companies_on_slug", unique: true
   end
 
@@ -910,6 +910,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_16_100000) do
     t.index ["company_id"], name: "index_roles_on_company_id"
   end
 
+  create_table "salary_slips", force: :cascade do |t|
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.decimal "deductions", precision: 12, scale: 2, null: false
+    t.bigint "employee_id", null: false
+    t.datetime "generated_at", null: false
+    t.bigint "generated_by_id"
+    t.decimal "gross", precision: 12, scale: 2, null: false
+    t.date "month", null: false
+    t.decimal "net", precision: 12, scale: 2, null: false
+    t.datetime "sent_at"
+    t.bigint "sent_by_id"
+    t.string "sent_to"
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "employee_id", "month"], name: "index_salary_slips_on_company_id_and_employee_id_and_month", unique: true
+    t.index ["company_id", "month"], name: "index_salary_slips_on_company_id_and_month"
+    t.index ["employee_id"], name: "index_salary_slips_on_employee_id"
+    t.index ["generated_by_id"], name: "index_salary_slips_on_generated_by_id"
+    t.index ["sent_by_id"], name: "index_salary_slips_on_sent_by_id"
+  end
+
   create_table "sessions", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.datetime "expires_at"
@@ -1055,7 +1077,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_16_100000) do
   add_foreign_key "candidates", "companies"
   add_foreign_key "candidates", "employees", column: "interviewer_id"
   add_foreign_key "candidates", "jobs", column: "interview_questions_job_id"
-  add_foreign_key "companies", "zoho_connections", column: "recruitment_mail_connection_id", on_delete: :nullify
   add_foreign_key "departments", "companies"
   add_foreign_key "designations", "companies"
   add_foreign_key "designations", "departments"
@@ -1104,6 +1125,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_16_100000) do
   add_foreign_key "role_permissions", "permissions"
   add_foreign_key "role_permissions", "roles"
   add_foreign_key "roles", "companies"
+  add_foreign_key "salary_slips", "companies"
+  add_foreign_key "salary_slips", "employees"
+  add_foreign_key "salary_slips", "users", column: "generated_by_id"
+  add_foreign_key "salary_slips", "users", column: "sent_by_id"
   add_foreign_key "sessions", "users"
   add_foreign_key "skipped_mail_attachments", "companies"
   add_foreign_key "user_roles", "companies"
