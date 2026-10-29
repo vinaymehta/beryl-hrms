@@ -35,7 +35,8 @@ class CandidateResume < ApplicationRecord
   #   - nil match%   -> not yet evaluated (still pending/processing, or
   #                     failed before evaluation ran) -> needs_review
   #   - 100% match   -> shortlisted
-  #   - 0-99% match  -> rejected (evaluated, didn't confirm all 4 criteria)
+  #   - 0-99% match  -> rejected (evaluated, failed at least one criterion;
+  #                     an unreadable one counts as passed)
   # Shortlisted is a TO-DO list: resumes that passed all four criteria and are
   # waiting for someone to act on them. Once a candidate has actually been
   # actioned — an interview booked, held, or feedback chased — they belong to

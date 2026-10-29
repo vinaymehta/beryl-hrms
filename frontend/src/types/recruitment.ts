@@ -113,6 +113,38 @@ export interface CandidateResumeSummary {
   aiMetadata?: AiMetadata
 }
 
+/** Where a candidate has got to in the interview workflow, read off its timestamps (ResumesController::INTERVIEW_STATUS_SQL). */
+export type ResumeInterviewStatus = "none" | "scheduled" | "feedback_requested" | "feedback_received"
+
+/** Query params for the Resumes list. Every filter is optional; blank means "any". */
+export interface ResumeListParams {
+  status?: string
+  candidateStatus?: string
+  search?: string
+  page?: number
+  dateFrom?: string
+  dateTo?: string
+  sortBy?: string
+  city?: string
+  currentRole?: string
+  qualification?: string
+  experienceMin?: number
+  experienceMax?: number
+  graduationYear?: number
+  interviewStatus?: ResumeInterviewStatus
+  atsScoreMin?: number
+  atsScoreMax?: number
+  matchMin?: number
+  matchMax?: number
+}
+
+/** The choices the Resumes filter panel offers — only values present on this company's resumes. */
+export interface ResumeFilterOptions {
+  cities: string[]
+  roles: string[]
+  graduationYears: number[]
+}
+
 /**
  * What the AI parser pulls out of a resume. Every field is optional because
  * the model returns what it found, not a fixed schema — and the index
@@ -383,4 +415,59 @@ export interface MailScanRun {
   to: string
   finished: boolean
   accounts: MailScanAccount[]
+}
+
+/** One mailbox searched for a candidate's Emails timeline. A mailbox that
+ *  needs reconnecting (or failed) is reported here rather than dropped, so
+ *  the tab can say its messages are missing. */
+export interface CandidateEmailAccount {
+  connectionId: string
+  email: string
+  status: "ok" | "reconnect_required" | "error"
+  error?: string
+}
+
+/** One entry in a candidate's Emails timeline: either a message from a
+ *  connected Zoho mailbox, or recruitment mail the app itself sent (which is
+ *  in no Zoho mailbox). */
+export interface CandidateEmailItem {
+  source: "zoho" | "app"
+  id: string
+  direction: "received" | "sent"
+  from: string
+  to: string
+  subject: string
+  date: string
+  snippet: string
+  hasAttachments: boolean
+  /** The email one of the candidate's resumes arrived in. */
+  isOriginalApplication: boolean
+  // Zoho only — needed to open the full message.
+  connectionId?: string
+  accountEmail?: string
+  folderId?: string
+  folder?: string | null
+  // App only — the full plain-text body ships inline.
+  mailer?: string
+  body?: string
+  attachmentNames?: string[]
+}
+
+export interface CandidateEmailTimeline {
+  candidateEmail: string | null
+  accounts: CandidateEmailAccount[]
+  items: CandidateEmailItem[]
+}
+
+/** A Zoho message in full; `body` is HTML already sanitized server-side, or
+ *  plain text. */
+export interface CandidateEmailMessage {
+  id: string
+  from: string
+  to: string
+  subject: string
+  body: string
+  receivedAt: string
+  hasAttachment?: boolean
+  attachments?: { id: string; name: string; size: number }[]
 }

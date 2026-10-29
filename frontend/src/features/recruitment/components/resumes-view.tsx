@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useResumes, useResumeMutations } from "../hooks"
+import { useResumeFilterOptions, useResumes, useResumeMutations } from "../hooks"
 import { ResumeDetailPanel } from "./resume-detail-panel"
 import { DATE_RANGE_PRESETS, resolveDateRangePreset, type DateRangePreset } from "../lib/date-range-presets"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FilterPanel } from "@/components/ui/filter-panel"
 import { Label } from "@/components/ui/label"
 import { DatePicker } from "@/components/ui/date-picker"
+import { SearchSelect } from "@/components/ui/search-select"
 import { PanelOptionList, PanelSection } from "@/components/ui/panel"
 import {
   Dialog,
@@ -45,7 +46,7 @@ import {
 import { recruitmentApi } from "../api"
 import { InterviewQuestionsDialog } from "./interview-questions-dialog"
 import { ResumePreviewModal } from "./resume-preview-modal"
-import type { CandidateResumeSummary } from "@/types/recruitment"
+import type { CandidateResumeSummary, ResumeInterviewStatus } from "@/types/recruitment"
 import { isInInterviewWorkflow } from "@/types/recruitment"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
@@ -85,6 +86,51 @@ const SORT_OPTIONS = [
   { value: "status", label: "Status" },
 ]
 
+const INTERVIEW_STATUS_OPTIONS: { value: ResumeInterviewStatus; label: string }[] = [
+  { value: "none", label: "No interview yet" },
+  { value: "scheduled", label: "Interview scheduled" },
+  { value: "feedback_requested", label: "Feedback requested" },
+  { value: "feedback_received", label: "Feedback received" },
+]
+
+// The candidate-profile and score filters, held as typed text (a half-typed
+// "1." is a valid in-progress number) and converted only when sent.
+const EMPTY_PROFILE_FILTERS = {
+  eligibility: "",
+  interviewStatus: "" as ResumeInterviewStatus | "",
+  city: "",
+  currentRole: "",
+  qualification: "",
+  graduationYear: "",
+  experienceMin: "",
+  experienceMax: "",
+  atsScoreMin: "",
+  atsScoreMax: "",
+  matchMin: "",
+  matchMax: "",
+}
+type ProfileFilters = typeof EMPTY_PROFILE_FILTERS
+
+// Each min/max pair counts as one filter on the trigger's badge.
+const PROFILE_FILTER_GROUPS: (keyof ProfileFilters)[][] = [
+  ["eligibility"],
+  ["interviewStatus"],
+  ["city"],
+  ["currentRole"],
+  ["qualification"],
+  ["graduationYear"],
+  ["experienceMin", "experienceMax"],
+  ["atsScoreMin", "atsScoreMax"],
+  ["matchMin", "matchMax"],
+]
+
+/** Blank or not a number means "no bound". */
+function toNumber(value: string): number | undefined {
+  if (!value.trim()) return undefined
+  const n = Number(value)
+  return Number.isFinite(n) ? n : undefined
+}
+
 export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandidateStatus = "" }: ResumesViewProps) {
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState<string>(initialStatus)
@@ -97,6 +143,7 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
   const [customTo, setCustomTo] = useState("")
   const [dateRange, setDateRange] = useState<{ from: string; to: string } | null>(null)
   const [sortBy, setSortBy] = useState("")
+  const [profileFilters, setProfileFilters] = useState<ProfileFilters>(EMPTY_PROFILE_FILTERS)
   const [page, setPage] = useState(1)
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null)
   const [previewResume, setPreviewResume] = useState<CandidateResumeSummary | null>(null)
@@ -110,7 +157,17 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
   const canProcess = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.resumesProcess])
   const canManage = usePermission(PERMISSIONS.recruitmentManage)
 
-  const activeFilterCount = (dateRange ? 1 : 0) + (sortBy ? 1 : 0)
+  const { data: filterOptions } = useResumeFilterOptions()
+
+  const activeFilterCount =
+    (dateRange ? 1 : 0) +
+    (sortBy ? 1 : 0) +
+    PROFILE_FILTER_GROUPS.filter((keys) => keys.some((k) => profileFilters[k].trim() !== "")).length
+
+  function setProfileFilter<K extends keyof ProfileFilters>(key: K, value: ProfileFilters[K]) {
+    setProfileFilters((prev) => ({ ...prev, [key]: value }))
+    setPage(1)
+  }
 
   function resetFilters() {
     setDatePreset("")
@@ -118,16 +175,30 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
     setCustomTo("")
     setDateRange(null)
     setSortBy("")
+    setProfileFilters(EMPTY_PROFILE_FILTERS)
     setPage(1)
   }
 
   const { data: response, isLoading } = useResumes({
     search: search.trim() || undefined,
     status: status || undefined,
-    candidateStatus: candidateStatus || undefined,
+    // The Quick Stats card's fixed status wins; the panel's own eligibility
+    // choice is only offered when no card opened this view.
+    candidateStatus: candidateStatus || profileFilters.eligibility || undefined,
     dateFrom: dateRange?.from,
     dateTo: dateRange?.to,
     sortBy: sortBy || undefined,
+    interviewStatus: profileFilters.interviewStatus || undefined,
+    city: profileFilters.city || undefined,
+    currentRole: profileFilters.currentRole || undefined,
+    qualification: profileFilters.qualification.trim() || undefined,
+    graduationYear: toNumber(profileFilters.graduationYear),
+    experienceMin: toNumber(profileFilters.experienceMin),
+    experienceMax: toNumber(profileFilters.experienceMax),
+    atsScoreMin: toNumber(profileFilters.atsScoreMin),
+    atsScoreMax: toNumber(profileFilters.atsScoreMax),
+    matchMin: toNumber(profileFilters.matchMin),
+    matchMax: toNumber(profileFilters.matchMax),
     page,
   })
 
@@ -299,6 +370,116 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
                   ))}
                 </div>
               )}
+            </PanelSection>
+
+            {!candidateStatus && (
+              <PanelSection title="Eligibility" flush>
+                <PanelOptionList
+                  label="Eligibility"
+                  options={Object.entries(CANDIDATE_STATUS_META).map(([value, meta]) => ({ value, label: meta.label }))}
+                  allLabel="Any"
+                  value={profileFilters.eligibility || undefined}
+                  onChange={(next) => setProfileFilter("eligibility", next ?? "")}
+                />
+              </PanelSection>
+            )}
+
+            <PanelSection title="Interview" flush>
+              <PanelOptionList
+                label="Interview"
+                options={INTERVIEW_STATUS_OPTIONS}
+                allLabel="Any"
+                value={profileFilters.interviewStatus || undefined}
+                onChange={(next) => setProfileFilter("interviewStatus", next ?? "")}
+              />
+            </PanelSection>
+
+            <PanelSection title="Candidate">
+              <div className="grid gap-1.5">
+                <Label htmlFor="resumes-city" className="text-xs font-normal text-muted-foreground">
+                  Current city
+                </Label>
+                <SearchSelect
+                  id="resumes-city"
+                  options={(filterOptions?.cities ?? []).map((c) => ({ value: c, label: c }))}
+                  value={profileFilters.city || null}
+                  onChange={(next) => setProfileFilter("city", next ?? "")}
+                  placeholder="Any city"
+                  searchPlaceholder="Search cities…"
+                  emptyMessage="No matching city."
+                  clearable
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="resumes-role" className="text-xs font-normal text-muted-foreground">
+                  Position / current role
+                </Label>
+                <SearchSelect
+                  id="resumes-role"
+                  options={(filterOptions?.roles ?? []).map((r) => ({ value: r, label: r }))}
+                  value={profileFilters.currentRole || null}
+                  onChange={(next) => setProfileFilter("currentRole", next ?? "")}
+                  placeholder="Any role"
+                  searchPlaceholder="Search roles…"
+                  emptyMessage="No matching role."
+                  clearable
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="resumes-qualification" className="text-xs font-normal text-muted-foreground">
+                  Qualification contains
+                </Label>
+                <Input
+                  id="resumes-qualification"
+                  value={profileFilters.qualification}
+                  onChange={(e) => setProfileFilter("qualification", e.target.value)}
+                  placeholder="e.g. B.Tech, MCA, computer science"
+                  className="h-9 text-xs"
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="resumes-graduation-year" className="text-xs font-normal text-muted-foreground">
+                  Graduation year
+                </Label>
+                <SearchSelect
+                  id="resumes-graduation-year"
+                  options={(filterOptions?.graduationYears ?? []).map((y) => ({ value: String(y), label: String(y) }))}
+                  value={profileFilters.graduationYear || null}
+                  onChange={(next) => setProfileFilter("graduationYear", next ?? "")}
+                  placeholder="Any year"
+                  searchPlaceholder="Search years…"
+                  emptyMessage="No matching year."
+                  clearable
+                />
+              </div>
+              <RangeInputs
+                id="resumes-experience"
+                label="Experience (years)"
+                min={profileFilters.experienceMin}
+                max={profileFilters.experienceMax}
+                step="0.5"
+                onMinChange={(v) => setProfileFilter("experienceMin", v)}
+                onMaxChange={(v) => setProfileFilter("experienceMax", v)}
+              />
+            </PanelSection>
+
+            <PanelSection title="Scores">
+              <RangeInputs
+                id="resumes-ats"
+                label="Rank (ATS score)"
+                min={profileFilters.atsScoreMin}
+                max={profileFilters.atsScoreMax}
+                onMinChange={(v) => setProfileFilter("atsScoreMin", v)}
+                onMaxChange={(v) => setProfileFilter("atsScoreMax", v)}
+              />
+              <RangeInputs
+                id="resumes-match"
+                label="Criteria match %"
+                min={profileFilters.matchMin}
+                max={profileFilters.matchMax}
+                onMinChange={(v) => setProfileFilter("matchMin", v)}
+                onMaxChange={(v) => setProfileFilter("matchMax", v)}
+              />
             </PanelSection>
 
             <PanelSection title="Sort by" flush>
@@ -710,6 +891,58 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+/** A min/max pair of number inputs; either end may be left blank. */
+function RangeInputs({
+  id,
+  label,
+  min,
+  max,
+  step = "1",
+  onMinChange,
+  onMaxChange,
+}: {
+  id: string
+  label: string
+  min: string
+  max: string
+  step?: string
+  onMinChange: (value: string) => void
+  onMaxChange: (value: string) => void
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <Label htmlFor={`${id}-min`} className="text-xs font-normal text-muted-foreground">
+        {label}
+      </Label>
+      <div className="grid grid-cols-2 gap-3">
+        <Input
+          id={`${id}-min`}
+          type="number"
+          inputMode="decimal"
+          min={0}
+          step={step}
+          value={min}
+          onChange={(e) => onMinChange(e.target.value)}
+          placeholder="Min"
+          aria-label={`${label} minimum`}
+          className="h-9 text-xs"
+        />
+        <Input
+          type="number"
+          inputMode="decimal"
+          min={0}
+          step={step}
+          value={max}
+          onChange={(e) => onMaxChange(e.target.value)}
+          placeholder="Max"
+          aria-label={`${label} maximum`}
+          className="h-9 text-xs"
+        />
+      </div>
     </div>
   )
 }

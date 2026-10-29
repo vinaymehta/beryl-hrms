@@ -3,7 +3,15 @@
 import { useEffect, useRef } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { recruitmentApi } from "./api"
-import type { CandidateDetail, CandidateStatus, DuplicateStatus, Job, JobStatus, MatchStatus } from "@/types/recruitment"
+import type {
+  CandidateDetail,
+  CandidateStatus,
+  DuplicateStatus,
+  Job,
+  JobStatus,
+  MatchStatus,
+  ResumeListParams,
+} from "@/types/recruitment"
 
 export function useRecruitmentStats() {
   return useQuery({
@@ -171,16 +179,7 @@ export function useCandidateMutations() {
   }
 }
 
-export function useResumes(params?: {
-  status?: string
-  candidateStatus?: string
-  search?: string
-  page?: number
-  dateFrom?: string
-  dateTo?: string
-  sortBy?: string
-  enabled?: boolean
-}) {
+export function useResumes(params?: ResumeListParams & { enabled?: boolean }) {
   const { enabled, ...queryParams } = params ?? {}
   return useQuery({
     queryKey: ["recruitment", "resumes", queryParams],
@@ -197,11 +196,45 @@ export function useResumes(params?: {
   })
 }
 
+/**
+ * Choices for the Resumes filter panel (cities, roles, graduation years). They
+ * only change as resumes are imported, so a few minutes' staleness is fine.
+ */
+export function useResumeFilterOptions() {
+  return useQuery({
+    queryKey: ["recruitment", "resumes", "filter-options"],
+    queryFn: recruitmentApi.resumes.filterOptions,
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
 export function useResume(id: string) {
   return useQuery({
     queryKey: ["recruitment", "resumes", id],
     queryFn: () => recruitmentApi.resumes.get(id),
     enabled: !!id,
+  })
+}
+
+// The resume panel's Emails tab — used only by the tab itself, so it is fetched
+// only while the tab is open: it searches every connected mailbox live
+// (cached ~60s on the backend).
+export function useResumeEmails(id: string) {
+  return useQuery({
+    queryKey: ["recruitment", "resumes", id, "emails"],
+    queryFn: () => recruitmentApi.resumes.emails(id),
+    enabled: !!id,
+  })
+}
+
+// One Zoho message from that timeline, loaded when its entry is expanded. A
+// message never changes, so it is never refetched.
+export function useResumeEmailMessage(id: string, messageId: string, connectionId: string | undefined) {
+  return useQuery({
+    queryKey: ["recruitment", "resumes", id, "emails", connectionId, messageId],
+    queryFn: () => recruitmentApi.resumes.email(id, messageId, connectionId!),
+    enabled: !!id && !!messageId && !!connectionId,
+    staleTime: Infinity,
   })
 }
 

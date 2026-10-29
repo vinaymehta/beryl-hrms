@@ -3,6 +3,9 @@
 # one may carry internal detail and the candidate's resume, none of which
 # belongs in anything CandidateMailer sends.
 class InterviewerMailer < ApplicationMailer
+  # Every delivered mail is logged for the candidate's Emails timeline.
+  include RecruitmentEmailLogging
+
   # Fired automatically once Calendly confirms a booking. Carries everything the
   # interviewer needs to prepare without opening the app: who, when, how to
   # reach them, and the resume itself.
@@ -50,16 +53,12 @@ class InterviewerMailer < ApplicationMailer
 
   private
 
-    # The interviewer's OWN address, and nothing else.
-    #
-    # This deliberately does NOT fall back to interviewer.user.email_address.
-    # A login is an authentication identity, frequently a shared role account
-    # (admin@, hr@, accounts@) — falling back to it sent candidate details and
-    # CVs to whoever owned that account rather than to the interviewer. Blank
-    # is returned when there is no address, so nothing is sent at all; that is
-    # strictly better than delivering an interview packet to the wrong inbox.
+    # The interviewer's WORK email — the address their login account uses —
+    # since interview packets are company business; personal email only for
+    # an interviewer with no login account (see Employee#work_email). Blank
+    # when they have neither, so nothing is sent at all.
     def interviewer_email(interviewer)
-      interviewer&.personal_email.presence
+      interviewer&.work_email
     end
 
     # The candidate's current resume, attached as the real file. Skipped rather

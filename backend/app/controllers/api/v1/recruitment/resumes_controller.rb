@@ -43,6 +43,8 @@ module Api
             scope = scope.by_eligibility(params[:candidateStatus])
           end
 
+          scope = apply_profile_filters(scope)
+
           if params[:dateFrom].present?
             scope = scope.where("candidate_resumes.created_at >= ?", Date.parse(params[:dateFrom]).beginning_of_day)
           end
@@ -76,6 +78,28 @@ module Api
               perPage: per_page,
               totalCount: total_count,
               totalPages: (total_count.to_f / per_page).ceil
+            }
+          }
+        end
+
+        # GET /api/v1/recruitment/resumes/filter_options
+        # The choices the Resumes filter panel offers, drawn from the
+        # candidates behind this company's resumes only — so every option
+        # matches at least one row. Uses the same city/graduation-year
+        # expressions #apply_profile_filters filters on, so a picked value
+        # always matches what it was read from.
+        def filter_options
+          authorize CandidateResume, :index?
+
+          candidates = Candidate.where(id: policy_scope(CandidateResume).where.not(candidate_id: nil).select(:candidate_id))
+
+          render json: {
+            data: {
+              # Case-insensitively de-duplicated: the AI writes "Delhi" on one
+              # resume and "delhi" on another.
+              cities: candidates.distinct.pluck(Arel.sql(CITY_SQL)).compact.uniq(&:downcase).sort_by(&:downcase),
+              roles: candidates.where.not(current_role: [ nil, "" ]).distinct.pluck(:current_role).uniq(&:downcase).sort_by(&:downcase),
+              graduationYears: candidates.distinct.pluck(Arel.sql(GRADUATION_YEAR_SQL)).compact.sort.reverse
             }
           }
         end
@@ -288,6 +312,99 @@ module Api
         end
 
         private
+
+        # The candidate's current city. The AI fills `city` on some resumes
+        # and only `current_location` ("Bangalore, Karnataka") on others, so
+        # the city part of the location stands in when `city` is blank.
+        CITY_SQL = "NULLIF(TRIM(COALESCE(NULLIF(TRIM(candidates.city), ''), " \
+                   "SPLIT_PART(candidates.current_location, ',', 1))), '')".freeze
+
+        # candidates.graduation_year is rarely set by extraction; the year the
+        # latest structured qualification was completed is where the
+        # graduation year actually lives (the eligibility evaluator reads it
+        # from there too).
+        GRADUATION_YEAR_SQL = "COALESCE(candidates.graduation_year, " \
+                              "(SELECT MAX(cq.year_completed) FROM candidate_qualifications cq " \
+                              "WHERE cq.candidate_id = candidates.id))".freeze
+
+        # Where the candidate has got to in the interview workflow, read off
+        # the interview timestamps rather than the status enum (which a human
+        # decision can move independently of them).
+        INTERVIEW_STATUS_SQL = {
+          "none" => "candidates.interview_at IS NULL AND candidates.feedback_requested_at IS NULL " \
+                    "AND candidates.feedback_submitted_at IS NULL",
+          "scheduled" => "candidates.interview_at IS NOT NULL AND candidates.feedback_requested_at IS NULL " \
+                         "AND candidates.feedback_submitted_at IS NULL",
+          "feedback_requested" => "candidates.feedback_requested_at IS NOT NULL AND candidates.feedback_submitted_at IS NULL",
+          "feedback_received" => "candidates.feedback_submitted_at IS NOT NULL"
+        }.freeze
+
+        # The Resumes filter panel's candidate-profile and score filters. Each
+        # is skipped when its param is blank; the candidate ones go through a
+        # LEFT JOIN, so a filter on them drops resumes with no candidate yet
+        # (still processing) — which can't match a city or a role anyway.
+        def apply_profile_filters(scope)
+          if params[:city].present?
+            scope = scope.left_joins(:candidate).where("LOWER(#{CITY_SQL}) = ?", params[:city].to_s.strip.downcase)
+          end
+
+          if params[:currentRole].present?
+            scope = scope.left_joins(:candidate).where("LOWER(candidates.current_role) LIKE ?", contains(params[:currentRole]))
+          end
+
+          # Either the flattened highest qualification or any structured one
+          # (degree + field, so "computer science" finds "B.Tech" + "CSE").
+          if params[:qualification].present?
+            scope = scope.left_joins(:candidate).where(
+              "LOWER(candidates.highest_qualification) LIKE :q OR EXISTS (
+                 SELECT 1 FROM candidate_qualifications cq
+                 WHERE cq.candidate_id = candidates.id
+                   AND LOWER(CONCAT_WS(' ', cq.degree, cq.field_of_study)) LIKE :q)",
+              q: contains(params[:qualification])
+            )
+          end
+
+          if (min = number_param(:experienceMin))
+            scope = scope.left_joins(:candidate).where("candidates.experience_years >= ?", min)
+          end
+          if (max = number_param(:experienceMax))
+            scope = scope.left_joins(:candidate).where("candidates.experience_years <= ?", max)
+          end
+
+          if (year = number_param(:graduationYear))
+            scope = scope.left_joins(:candidate).where("#{GRADUATION_YEAR_SQL} = ?", year.to_i)
+          end
+
+          if (condition = INTERVIEW_STATUS_SQL[params[:interviewStatus].to_s])
+            scope = scope.left_joins(:candidate).where.not(candidates: { id: nil }).where(condition)
+          end
+
+          if (min = number_param(:atsScoreMin))
+            scope = scope.where("candidate_resumes.ats_score >= ?", min)
+          end
+          if (max = number_param(:atsScoreMax))
+            scope = scope.where("candidate_resumes.ats_score <= ?", max)
+          end
+          if (min = number_param(:matchMin))
+            scope = scope.where("candidate_resumes.criteria_match_percentage >= ?", min)
+          end
+          if (max = number_param(:matchMax))
+            scope = scope.where("candidate_resumes.criteria_match_percentage <= ?", max)
+          end
+
+          scope
+        end
+
+        def contains(value)
+          "%#{CandidateResume.sanitize_sql_like(value.to_s.strip.downcase)}%"
+        end
+
+        # A blank or non-numeric value is "no filter", not an error.
+        def number_param(key)
+          Float(params[key].to_s.strip)
+        rescue ArgumentError
+          nil
+        end
 
         def set_resume
           @resume = policy_scope(CandidateResume).find(params[:id])

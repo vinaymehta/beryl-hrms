@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_17_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_29_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -888,6 +888,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_120000) do
     t.index ["key"], name: "index_permissions_on_key", unique: true
   end
 
+  create_table "recruitment_emails", force: :cascade do |t|
+    t.string "attachment_names", default: [], null: false, array: true
+    t.text "body_text"
+    t.bigint "candidate_id", null: false
+    t.bigint "candidate_resume_id"
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.string "direction", default: "outbound", null: false
+    t.string "from_address"
+    t.string "mailer", null: false
+    t.string "mailer_action", null: false
+    t.string "message_id"
+    t.datetime "sent_at", null: false
+    t.string "subject"
+    t.string "to_address"
+    t.datetime "updated_at", null: false
+    t.index ["candidate_id"], name: "index_recruitment_emails_on_candidate_id"
+    t.index ["candidate_resume_id"], name: "index_recruitment_emails_on_candidate_resume_id"
+    t.index ["company_id", "candidate_id", "sent_at"], name: "idx_on_company_id_candidate_id_sent_at_d1fc47c4f2"
+  end
+
   create_table "role_permissions", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.bigint "permission_id", null: false
@@ -1122,6 +1143,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_120000) do
   add_foreign_key "performance_improvement_plans", "companies"
   add_foreign_key "performance_improvement_plans", "employees"
   add_foreign_key "performance_improvement_plans", "users", column: "opened_by_id"
+  add_foreign_key "recruitment_emails", "candidate_resumes", on_delete: :nullify
+  add_foreign_key "recruitment_emails", "candidates", on_delete: :cascade
+  add_foreign_key "recruitment_emails", "companies"
   add_foreign_key "role_permissions", "permissions"
   add_foreign_key "role_permissions", "roles"
   add_foreign_key "roles", "companies"

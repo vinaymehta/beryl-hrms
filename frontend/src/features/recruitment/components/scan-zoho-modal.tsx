@@ -23,7 +23,6 @@ import {
   LockIcon,
   SettingsIcon,
   ArrowRightIcon,
-  FilterIcon,
   XCircleIcon,
 } from "lucide-react"
 import { cn } from "cn"
@@ -53,7 +52,6 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
   const [customFrom, setCustomFrom] = useState("")
   const [customTo, setCustomTo] = useState("")
   const [resolvedRange, setResolvedRange] = useState<{ from: string; to: string } | null>(null)
-  const [showDateFilter, setShowDateFilter] = useState(false)
   const { scanZohoMail } = useResumeMutations()
   const { data: scanRun } = useMailScanRun(scanId)
 
@@ -133,8 +131,7 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
         />
 
         <PanelBody>
-          {/* What to scan — the mail accounts and the date range, both tucked
-              behind one Filters toggle (same pattern as the Resumes list). */}
+          {/* What to scan — the mail accounts and the date range, always shown. */}
           <div className="space-y-3 rounded-lg border bg-card p-4">
             {/* The shared panel label strip (see ui/panel.tsx), drawn edge to edge. */}
             <div className="-mx-4 -mt-4 flex items-center justify-between gap-2 border-b px-4 py-3">
@@ -142,34 +139,9 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
                 <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">What to Scan</h3>
                 <p className="mt-0.5 text-xs text-muted-foreground">Choose the mail accounts and the time period to look for resumes.</p>
               </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowDateFilter(!showDateFilter)}
-                  className={cn(
-                    "relative h-8 gap-1.5 rounded-full text-xs",
-                    (showDateFilter || resolvedRange) && "border-role-recruitment text-role-recruitment bg-role-recruitment/5"
-                  )}
-                >
-                  <FilterIcon className="size-3.5" />
-                  Filters
-                  {resolvedRange && (
-                    <span className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-role-recruitment text-[10px] font-bold text-role-recruitment-foreground">
-                      1
-                    </span>
-                  )}
-                </Button>
-                {resolvedRange && (
-                  <Button type="button" variant="outline" size="sm" onClick={resetDateRange} className="h-8 rounded-full text-xs">
-                    Reset
-                  </Button>
-                )}
-              </div>
             </div>
 
-            <div hidden={!showDateFilter} className="space-y-4">
+            <div className="space-y-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-semibold text-foreground">Mail accounts</p>
@@ -251,7 +223,14 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
                 </p>
               </div>
 
-              <p className="text-xs font-semibold text-foreground">Date range</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-foreground">Date range</p>
+                {resolvedRange && (
+                  <Button type="button" variant="outline" size="sm" onClick={resetDateRange} className="h-7 rounded-full text-xs">
+                    Reset
+                  </Button>
+                )}
+              </div>
               <DateRangePills
                 preset={datePreset}
                 customFrom={customFrom}
@@ -267,24 +246,6 @@ export function ScanZohoModal({ open, onOpenChange }: ScanZohoModalProps) {
                 Only messages received in this window are scanned — the mailbox isn&apos;t scanned outside it.
               </p>
             </div>
-
-            {!showDateFilter && (
-              <div className="grid gap-1 text-xs">
-                <p className={selectedIds.length ? "text-foreground" : "text-muted-foreground"}>
-                  <span className="text-muted-foreground">Accounts: </span>
-                  {selectedIds.length
-                    ? activeConnections
-                        .filter((c) => selectedIds.includes(c.id))
-                        .map((c) => c.emailAddress)
-                        .join(", ")
-                    : "none selected"}
-                </p>
-                <p className={resolvedRange ? "text-foreground" : "text-muted-foreground"}>
-                  <span className="text-muted-foreground">Dates: </span>
-                  {resolvedRange ? `${resolvedRange.from} → ${resolvedRange.to}` : "not chosen yet — click Filters"}
-                </p>
-              </div>
-            )}
           </div>
 
           {scanRun && <ScanProgress accounts={scanRun.accounts} finished={scanRun.finished} />}

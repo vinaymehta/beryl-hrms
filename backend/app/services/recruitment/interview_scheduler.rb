@@ -24,8 +24,8 @@ module Recruitment
       # Caught here rather than at send time: the interviewer notification is
       # only built once the candidate books, so a missing address would
       # otherwise surface as a silent failure hours later.
-      if @interviewer.personal_email.blank?
-        return failure("#{@interviewer.full_name} has no email address on file, so they can't be notified when the candidate books. Add one to their employee record first.")
+      if @interviewer.work_email.blank?
+        return failure("#{@interviewer.full_name} has no login account or personal email, so they can't be notified when the candidate books. Give them a login account first.")
       end
 
       connection = @candidate.company.calendly_connections.find_by(status: :active)
@@ -96,7 +96,8 @@ module Recruitment
         # Without this the event's only host is the connected Calendly account
         # (the admin), and the person actually conducting the interview has no
         # calendar entry and no way in.
-        params << [ "guests", @interviewer.personal_email.to_s ] if @interviewer.personal_email.present?
+        # Their work email, the same address InterviewerMailer writes to.
+        params << [ "guests", @interviewer.work_email.to_s ] if @interviewer.work_email.present?
         uri.query = URI.encode_www_form(params)
         uri.to_s
       rescue URI::InvalidURIError

@@ -186,7 +186,7 @@ module Api
           end
 
           if interviewer_email(interviewer).blank?
-            return render json: { errors: [ { message: "#{interviewer.full_name} has no email address on file, so the feedback form can't be sent." } ] },
+            return render json: { errors: [ { message: "#{interviewer.full_name} has no login account or personal email, so the feedback form can't be sent." } ] },
                           status: :unprocessable_entity
           end
 
@@ -234,10 +234,10 @@ module Api
           @candidate = policy_scope(Candidate).find(params[:id])
         end
 
-        # Own address only — never the linked login account. See the note in
-        # InterviewerMailer#interviewer_email.
+        # Must agree with InterviewerMailer#interviewer_email: the work (login)
+        # address, else personal email.
         def interviewer_email(interviewer)
-          interviewer&.personal_email.presence
+          interviewer&.work_email
         end
 
         # Ordinary app mail (Resend), like every other email the app sends. A

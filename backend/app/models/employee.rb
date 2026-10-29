@@ -337,6 +337,13 @@ class Employee < ApplicationRecord
     "#{first_name} #{last_name}".strip
   end
 
+  # Where work mail for this person goes: the email they log in with, which is
+  # their company address. Employees with no login account fall back to their
+  # personal email; nil when they have neither.
+  def work_email
+    user&.email_address.presence || personal_email.presence
+  end
+
   def sync_account_name
     return if user.nil? || (user.first_name == first_name && user.last_name == last_name)
 

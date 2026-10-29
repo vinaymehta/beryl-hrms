@@ -11,12 +11,17 @@ module Recruitment
   #
   # Three of the criteria are tri-state: true (positively confirmed pass),
   # false (positively confirmed fail), nil (missing/unreadable — never
-  # guessed into a pass or a fail). Backlogs are the deliberate exception:
+  # guessed into a confirmed pass or fail). Backlogs are the deliberate exception:
   # resumes almost never say "no backlogs", so silence there means "none"
   # (see #backlog_pass).
   #
-  # The automatic pipeline shortlists only when all four are true; anything
-  # else is rejected.
+  # Only a positively failed criterion (false) rejects: an unreadable one
+  # (nil) is given the benefit of the doubt and counts as a pass, for all
+  # four criteria, both for the verdict and for match_percentage. A resume
+  # the AI simply couldn't read a field off shouldn't be auto-rejected for
+  # it. The tri-state values themselves are still what gets stored in
+  # eligibility_breakdown, so the resume panel keeps showing "Unreadable"
+  # rather than pretending the criterion was confirmed.
   class EligibilityEvaluator
     Result = Struct.new(:qualification, :marks, :graduation_year, :backlog, :match_percentage, :status, keyword_init: true)
 
@@ -92,9 +97,10 @@ module Recruitment
         graduation_year: graduation_year_pass,
         backlog: backlog_pass
       }
-      confirmed_count = criteria.values.count { |v| v == true }
-      match_percentage = (confirmed_count / 4.0 * 100).round
-      status = criteria.values.all? { |v| v == true } ? :shortlisted : :rejected
+      # Anything but an explicit false passes — nil (unreadable) included.
+      passed_count = criteria.values.count { |v| v != false }
+      match_percentage = (passed_count / 4.0 * 100).round
+      status = passed_count == criteria.size ? :shortlisted : :rejected
 
       Result.new(**criteria, match_percentage: match_percentage, status: status)
     end

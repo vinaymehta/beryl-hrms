@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ResumePreviewModal } from "./resume-preview-modal"
 import { InterviewSchedulerDialog } from "./interview-scheduler-dialog"
 import { CandidatePersonalInfo } from "./candidate-personal-info"
+import { ResumeEmailsTab } from "./resume-emails-tab"
 import { isInInterviewWorkflow } from "@/types/recruitment"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -109,7 +110,7 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
   const canManage = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.candidatesManage])
   const [previewOpen, setPreviewOpen] = useState(false)
   const [schedulerOpen, setSchedulerOpen] = useState(false)
-  const [tab, setTab] = useState<"summary" | "personal">("summary")
+  const [tab, setTab] = useState<"summary" | "personal" | "emails">("summary")
 
   if (!resumeId) return null
 
@@ -344,6 +345,7 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
                 {([
                   { id: "summary", label: "AI Summary" },
                   { id: "personal", label: "Personal Info" },
+                  { id: "emails", label: "Emails" },
                 ] as const).map((t) => (
                   <button
                     key={t.id}
@@ -372,7 +374,9 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 text-xs">
-              {tab === "personal" ? (
+              {tab === "emails" ? (
+                <ResumeEmailsTab resumeId={resume.id} />
+              ) : tab === "personal" ? (
                 resume.candidate ? (
                   <CandidatePersonalInfo candidateId={resume.candidate.id} canManage={canManage} />
                 ) : (

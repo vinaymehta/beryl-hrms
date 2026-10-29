@@ -18,6 +18,10 @@ import type {
   FeedbackForm,
   InterviewQuestionSet,
   MailScanRun,
+  ResumeFilterOptions,
+  ResumeListParams,
+  CandidateEmailTimeline,
+  CandidateEmailMessage,
 } from "@/types/recruitment"
 
 // The candidate-facing feedback form. Public and token-addressed — kept apart
@@ -133,29 +137,21 @@ export const recruitmentApi = {
   },
 
   resumes: {
-    list: (params?: {
-      status?: string
-      candidateStatus?: string
-      search?: string
-      page?: number
-      dateFrom?: string
-      dateTo?: string
-      sortBy?: string
-    }) => {
+    list: (params?: ResumeListParams) => {
       const q = new URLSearchParams()
-      if (params?.status) q.set("status", params.status)
-      if (params?.candidateStatus) q.set("candidateStatus", params.candidateStatus)
-      if (params?.search) q.set("search", params.search)
-      if (params?.page) q.set("page", String(params.page))
-      if (params?.dateFrom) q.set("dateFrom", params.dateFrom)
-      if (params?.dateTo) q.set("dateTo", params.dateTo)
-      if (params?.sortBy) q.set("sortBy", params.sortBy)
+      // Every param is a plain string or number with the same name on the
+      // server, so they are copied across as-is; blanks are left off.
+      for (const [key, value] of Object.entries(params ?? {})) {
+        if (value !== undefined && value !== null && value !== "") q.set(key, String(value))
+      }
 
       const queryStr = q.toString()
       return apiClient.getPaginated<PaginatedResponse<CandidateResumeSummary>>(
         `/recruitment/resumes${queryStr ? `?${queryStr}` : ""}`
       )
     },
+
+    filterOptions: () => apiClient.get<ResumeFilterOptions>("/recruitment/resumes/filter_options"),
 
     get: (id: string) => apiClient.get<CandidateResumeDetail>(`/recruitment/resumes/${id}`),
 
@@ -203,6 +199,16 @@ export const recruitmentApi = {
       apiClient.get<MailScanRun>(`/recruitment/resumes/scan_zoho_mail/${encodeURIComponent(scanId)}`),
 
     delete: (id: string) => apiClient.delete<void>(`/recruitment/resumes/${id}`),
+
+    // The candidate's email timeline: their conversation in the connected
+    // Zoho mailboxes plus the recruitment mail the app sent them.
+    emails: (id: string) => apiClient.get<CandidateEmailTimeline>(`/recruitment/resumes/${id}/emails`),
+
+    // One Zoho message from that timeline, in full.
+    email: (id: string, messageId: string, connectionId: string) =>
+      apiClient.get<CandidateEmailMessage>(
+        `/recruitment/resumes/${id}/emails/${encodeURIComponent(messageId)}?connectionId=${encodeURIComponent(connectionId)}`
+      ),
   },
 
   jobs: {

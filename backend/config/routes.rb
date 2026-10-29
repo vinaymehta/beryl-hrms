@@ -261,8 +261,11 @@ Rails.application.routes.draw do
           collection do
             post :import_from_zoho
             post :scan_zoho_mail
+            get :filter_options
             get "scan_zoho_mail/:scan_id", action: :scan_zoho_mail_status, as: :scan_zoho_mail_status
           end
+          # The candidate's email timeline (Zoho conversation + app-sent mail).
+          resources :emails, only: %i[ index show ], controller: "resume_emails"
         end
 
         resources :jobs do
