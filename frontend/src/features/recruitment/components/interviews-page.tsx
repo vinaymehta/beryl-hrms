@@ -21,14 +21,14 @@ const TABS: { id: Tab; label: string }[] = [
  * dashboard, anyone with an Employee record gets the interviews they were
  * picked for, and someone with both switches between them.
  */
-export function InterviewsTabs({ initialTab }: { initialTab: Tab }) {
+export function InterviewsTabs({ initialTab, initialCandidateId }: { initialTab: Tab; initialCandidateId?: string }) {
   const { user } = useCurrentUser()
   const canSeeAll = usePermission([PERMISSIONS.recruitmentView, PERMISSIONS.candidatesView])
   const [tab, setTab] = useState<Tab>(initialTab)
 
   if (!user) return null
   if (!canSeeAll) return <MyInterviewsView />
-  if (!user.employeeId) return <InterviewsDashboard />
+  if (!user.employeeId) return <InterviewsDashboard initialCandidateId={initialCandidateId} />
 
   // Sits under whichever view's header, so the switch reads as page tabs.
   const tabs = (
@@ -53,5 +53,9 @@ export function InterviewsTabs({ initialTab }: { initialTab: Tab }) {
     </div>
   )
 
-  return tab === "all" ? <InterviewsDashboard tabs={tabs} /> : <MyInterviewsView tabs={tabs} />
+  return tab === "all" ? (
+    <InterviewsDashboard tabs={tabs} initialCandidateId={initialCandidateId} />
+  ) : (
+    <MyInterviewsView tabs={tabs} />
+  )
 }

@@ -24,6 +24,7 @@ import {
 import { recruitmentApi } from "../api"
 import { useCandidateMutations, useInterviewStats, useInterviews, useJobs } from "../hooks"
 import { InterviewFeedbackDetails } from "./interview-feedback"
+import { MarkOfferedButton, canMarkOffered } from "./interview-summary"
 import {
   CandidateProfileFacts,
   Fact,
@@ -43,11 +44,16 @@ import { SearchSelect } from "@/components/ui/search-select"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { PERMISSIONS } from "@/constants/permissions"
+import { usePermission } from "@/features/auth/hooks/use-permission"
 import { useDebounced } from "@/hooks/use-debounced"
 import type { InterviewListParams, InterviewRow, InterviewTab, InterviewTabCounts } from "@/types/recruitment"
 import { cn } from "cn"
 
 const DAY_MS = 24 * 60 * 60 * 1000
+// InterviewFeedbackRequestsJob::LOOKBACK — older interviews never get the
+// automatic request, so only someone pressing the button will send one.
+const AUTO_REQUEST_LOOKBACK_MS = 7 * DAY_MS
 
 const QUICK_TABS: { id: InterviewTab; label: string; count: keyof InterviewTabCounts }[] = [
   { id: "all", label: "All", count: "all" },
@@ -57,7 +63,7 @@ const QUICK_TABS: { id: InterviewTab; label: string; count: keyof InterviewTabCo
   { id: "awaiting_feedback", label: "Awaiting feedback", count: "awaitingFeedback" },
 ]
 
-type FeedbackInfo = { label: string; date: string | null; className: string; overdue: boolean }
+type FeedbackInfo = { label: string; date: string | null; className: string; overdue: boolean; hint?: string }
 
 /** Where the write-up stands. Mirrors InterviewDashboard#overdue for the flag. */
 function feedbackInfo(row: InterviewRow, now: number): FeedbackInfo | null {
@@ -77,11 +83,22 @@ function feedbackInfo(row: InterviewRow, now: number): FeedbackInfo | null {
   if (row.feedbackRequestedAt) {
     return { label: "Requested", date: row.feedbackRequestedAt, className: "text-foreground", overdue }
   }
+  // Past the automatic request's reach: not late, just waiting on a person.
+  if (interviewAt != null && now - interviewAt > AUTO_REQUEST_LOOKBACK_MS) {
+    return { label: "Not requested", date: null, className: "text-muted-foreground", overdue: false, hint: "Request from the panel" }
+  }
   return { label: "Not requested", date: null, className: "text-muted-foreground", overdue }
 }
 
-function canRequestFeedback(row: InterviewRow) {
-  return !row.feedback.submittedAt && !!row.interviewerId
+/** Only once the interview is over — the server refuses it any earlier. */
+function canRequestFeedback(row: InterviewRow, now: number) {
+  if (row.feedback.submittedAt || !row.interviewerId || !row.interviewAt) return false
+  return new Date(row.interviewAt).getTime() <= now
+}
+
+/** "Not linked", muted, when the interview isn't tied to a job. */
+function AppliedFor({ title }: { title: string | null }) {
+  return title ? <>{title}</> : <span className="text-muted-foreground">Not linked</span>
 }
 
 function StatCard({
@@ -115,15 +132,25 @@ function StatCard({
   )
 }
 
+function OfferedBadge() {
+  return (
+    <span className="inline-flex rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-success">
+      Offered
+    </span>
+  )
+}
+
 function ResultCell({ row }: { row: InterviewRow }) {
   const decision = row.feedback.decision ? DECISION_META[row.feedback.decision] : null
   const rating = row.feedback.overallRating
-  if (rating == null && !decision && row.feedback.wouldRecommend == null) {
+  const offered = row.candidateStatus === "offered"
+  if (rating == null && !decision && row.feedback.wouldRecommend == null && !offered) {
     return <span className="text-xs text-muted-foreground">—</span>
   }
 
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5">
+      {offered && <OfferedBadge />}
       {rating != null && (
         <span className="inline-flex items-center gap-1 text-xs text-foreground">
           <StarIcon className="size-3.5 fill-warning text-warning" />
@@ -155,6 +182,7 @@ function FeedbackCell({ info }: { info: FeedbackInfo | null }) {
         {info.date && <span className="font-normal text-muted-foreground"> {formatIst(info.date, "date")}</span>}
       </p>
       {info.overdue && <p className="text-[11px] font-medium text-warning">Overdue</p>}
+      {info.hint && <p className="text-[11px] text-muted-foreground">{info.hint}</p>}
     </div>
   )
 }
@@ -204,13 +232,19 @@ function RequestFeedbackButton({
  */
 function InterviewOverview({
   row,
+  now,
   pending,
   onRequest,
+  canOffer,
 }: {
   row: InterviewRow
+  now: number
   pending: boolean
   onRequest: (row: InterviewRow) => void
+  canOffer: boolean
 }) {
+  const showOffer = canOffer && canMarkOffered(row.candidateStatus, row.feedback.submittedAt)
+
   const timeline = [
     { label: "Booking link sent", at: row.interviewLinkSentAt },
     { label: "Interview", at: row.interviewAt },
@@ -221,7 +255,7 @@ function InterviewOverview({
 
   return (
     <div className="space-y-6 px-4 pb-6">
-      {(row.resumeId || row.joinUrl) && (
+      {(row.resumeId || row.joinUrl || showOffer) && (
         <div className="flex flex-wrap gap-2">
           {row.resumeId && (
             <Button
@@ -247,6 +281,11 @@ function InterviewOverview({
               Join
             </Button>
           )}
+          {showOffer && (
+            <span className="ml-auto">
+              <MarkOfferedButton candidateId={row.id} candidateName={row.candidateName} />
+            </span>
+          )}
         </div>
       )}
 
@@ -267,7 +306,9 @@ function InterviewOverview({
 
       <OverviewSection title="Interview">
         <dl className="space-y-1.5">
-          <Fact label="Applied for">{row.jobTitle || "—"}</Fact>
+          <Fact label="Applied for">
+            <AppliedFor title={row.jobTitle} />
+          </Fact>
           <Fact label="When">
             {row.interviewAt ? `${formatIst(row.interviewAt)} IST · ${relativeTime(row.interviewAt)}` : "Not booked yet"}
           </Fact>
@@ -304,11 +345,13 @@ function InterviewOverview({
                   ? `Requested ${formatIst(row.feedbackRequestedAt)} IST${
                       row.feedbackReminderSentAt ? `, reminded ${formatIst(row.feedbackReminderSentAt)} IST` : ""
                     } — nothing back yet.`
-                  : row.interviewStage === "completed"
-                    ? "No feedback request has gone out yet."
-                    : "The request goes to the interviewer automatically an hour after the interview."}
+                  : !row.interviewAt
+                    ? "Feedback can be requested once the interview is booked and over."
+                    : canRequestFeedback(row, now)
+                      ? "No feedback request has gone out yet."
+                      : "The request goes to the interviewer automatically an hour after the interview."}
             </p>
-            {canRequestFeedback(row) && <RequestFeedbackButton row={row} pending={pending} onRequest={onRequest} />}
+            {canRequestFeedback(row, now) && <RequestFeedbackButton row={row} pending={pending} onRequest={onRequest} />}
           </div>
         )}
       </OverviewSection>
@@ -321,12 +364,12 @@ function InterviewOverview({
  * the feedback chase stands and what was decided. One interview per
  * candidate, so a row is a candidate; clicking one opens the full overview.
  */
-export function InterviewsDashboard({ tabs }: { tabs?: ReactNode }) {
+export function InterviewsDashboard({ tabs, initialCandidateId }: { tabs?: ReactNode; initialCandidateId?: string }) {
   const [filters, setFilters] = useState<InterviewListParams>({})
   const [tab, setTab] = useState<InterviewTab>("all")
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(initialCandidateId ?? null)
   const [requestingId, setRequestingId] = useState<string | null>(null)
   const q = useDebounced(search.trim(), 300)
 
@@ -334,11 +377,16 @@ export function InterviewsDashboard({ tabs }: { tabs?: ReactNode }) {
   const { data: response, isLoading, refetch, dataUpdatedAt } = useInterviews({ ...filters, tab, q: q || undefined, page })
   const { data: jobs } = useJobs()
   const { requestFeedback } = useCandidateMutations()
+  const canOffer = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.candidatesManage])
 
   const rows = response?.data ?? []
   const meta = response?.meta
   // Read off the list so the panel picks up a refetch (e.g. after a request).
-  const selected = rows.find((r) => r.id === selectedId) ?? null
+  // A linked interview (?candidate=) needn't be on this page of the list, so
+  // that one is fetched on its own until it is.
+  const listed = rows.find((r) => r.id === selectedId) ?? null
+  const { data: single } = useInterviews({ candidateId: selectedId ?? undefined }, { enabled: !!selectedId && !isLoading && !listed })
+  const selected = listed ?? single?.data.find((r) => r.id === selectedId) ?? null
   // "Overdue" is judged as of the fetch — the render itself has to stay pure.
   const now = dataUpdatedAt
 
@@ -538,7 +586,9 @@ export function InterviewsDashboard({ tabs }: { tabs?: ReactNode }) {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-foreground">{row.candidateName}</p>
-                      <p className="truncate text-xs text-muted-foreground">{row.jobTitle || "—"}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        <AppliedFor title={row.jobTitle} />
+                      </p>
                     </div>
                     <StageBadge stage={row.interviewStage} />
                   </div>
@@ -578,7 +628,9 @@ export function InterviewsDashboard({ tabs }: { tabs?: ReactNode }) {
                         <p className="truncate text-xs font-medium text-foreground">{row.candidateName}</p>
                         <p className="truncate text-[11px] text-muted-foreground">{experienceLine(row.profile)}</p>
                       </TableCell>
-                      <TableCell className="max-w-48 truncate text-xs text-foreground">{row.jobTitle || "—"}</TableCell>
+                      <TableCell className="max-w-48 truncate text-xs text-foreground">
+                        <AppliedFor title={row.jobTitle} />
+                      </TableCell>
                       <TableCell className="text-xs">
                         {row.interviewerName ? (
                           <span className="text-foreground">{row.interviewerName}</span>
@@ -637,9 +689,10 @@ export function InterviewsDashboard({ tabs }: { tabs?: ReactNode }) {
                 <div className="flex flex-wrap items-center gap-2">
                   <SheetTitle>{selected.candidateName}</SheetTitle>
                   <StageBadge stage={selected.interviewStage} />
+                  {selected.candidateStatus === "offered" && <OfferedBadge />}
                 </div>
                 <SheetDescription>
-                  {selected.jobTitle ? `Applied for ${selected.jobTitle}` : "No role recorded"}
+                  Applied for <AppliedFor title={selected.jobTitle} />
                 </SheetDescription>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-[11px] text-muted-foreground">
                   <span className="inline-flex items-center gap-1.5">
@@ -653,7 +706,13 @@ export function InterviewsDashboard({ tabs }: { tabs?: ReactNode }) {
                 </div>
               </SheetHeader>
               <div className="pt-4">
-                <InterviewOverview row={selected} pending={requestingId === selected.id} onRequest={handleRequest} />
+                <InterviewOverview
+                  row={selected}
+                  now={now}
+                  pending={requestingId === selected.id}
+                  onRequest={handleRequest}
+                  canOffer={canOffer}
+                />
               </div>
             </>
           )}

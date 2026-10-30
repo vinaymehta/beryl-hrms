@@ -42,11 +42,11 @@ class Candidate < ApplicationRecord
   }, default: :needs_review
 
   # Statuses that mean "this candidate has moved past the automatic
-  # eligibility decision into the human-run interview workflow". Resume
-  # reprocessing must not drag them back to shortlisted/rejected — see
-  # ResumeExtractionJob.
+  # eligibility decision into the human-run interview workflow" — including
+  # `offered`, where that workflow ends. Resume reprocessing must not drag
+  # them back to shortlisted/rejected — see ResumeExtractionJob.
   INTERVIEW_WORKFLOW_STATUSES = %w[
-    interview_scheduled interview_completed feedback_received feedback_not_received
+    interview_scheduled interview_completed feedback_received feedback_not_received offered
   ].freeze
 
   def in_interview_workflow?

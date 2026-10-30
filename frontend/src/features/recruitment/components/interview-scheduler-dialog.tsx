@@ -1,15 +1,18 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import Link from "next/link"
+import { useQuery } from "@tanstack/react-query"
 import { useCandidateMutations } from "../hooks"
+import { calendlyApi } from "../calendly-api"
 import { useEmployees } from "@/features/employees/hooks/use-employees"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { SearchSelect } from "@/components/ui/search-select"
+import { useDebounced } from "@/hooks/use-debounced"
 import { toast } from "sonner"
-import { CalendarClockIcon, Loader2Icon, MailIcon, SearchIcon, EyeOffIcon, SendIcon } from "lucide-react"
+import { AlertTriangleIcon, CalendarClockIcon, Loader2Icon, MailIcon, EyeOffIcon, SendIcon } from "lucide-react"
 
 interface InterviewSchedulerDialogProps {
   open: boolean
@@ -50,14 +53,38 @@ export function InterviewSchedulerDialog({
   // initializers run fresh each time — no reset effect needed.
   const [selectedInterviewer, setSelectedInterviewer] = useState(interviewerId != null ? String(interviewerId) : "")
   const [employeeSearch, setEmployeeSearch] = useState("")
+  const debouncedSearch = useDebounced(employeeSearch.trim(), 300)
+
+  // Same query (and key) the Calendly settings page uses. Scheduling refuses
+  // to run without a ready connection, so say so before anyone picks
+  // anything. A failed check (no permission to read it, say) warns about
+  // nothing and leaves the server to have the final word.
+  const { data: calendly, isSuccess: calendlyChecked } = useQuery({
+    queryKey: ["calendly", "connection"],
+    queryFn: calendlyApi.get,
+    enabled: open,
+  })
+  const calendlyProblem = !calendlyChecked
+    ? null
+    : !calendly || calendly.status !== "active"
+      ? "Calendly isn't connected, so no booking link can be created."
+      : !calendly.ready
+        ? "Calendly is connected, but no event type is chosen for interviews yet."
+        : null
 
   // Interviewers are real Employee records, never free text. Active only —
-  // someone who has left shouldn't be bookable.
-  const { data: employeesPage, isLoading: employeesLoading } = useEmployees({
+  // someone who has left shouldn't be bookable. The first 100 are filtered
+  // here by name or email as you type; past that the server searches (by
+  // name or employee ID).
+  const { data: firstPage, isLoading: employeesLoading } = useEmployees({ status: "active", perPage: 100 })
+  const totalEmployees = firstPage?.meta?.totalCount ?? 0
+  const searchServer = totalEmployees > (firstPage?.data.length ?? 0)
+  const { data: searchPage, isFetching: searching } = useEmployees({
     status: "active",
     perPage: 100,
-    q: employeeSearch.trim() || undefined,
+    q: searchServer && debouncedSearch ? debouncedSearch : undefined,
   })
+  const employeesPage = searchServer ? searchPage : firstPage
 
   // The employees endpoint serializes `id` as a number while the candidate's
   // interviewerId arrives as a string; coerce both so the "already listed?"
@@ -66,20 +93,19 @@ export function InterviewSchedulerDialog({
     () =>
       (employeesPage?.data ?? []).map((e) => ({
         value: String(e.id),
-        label: [`${e.firstName} ${e.lastName}`.trim(), e.designation?.title].filter(Boolean).join(" — "),
+        label: `${e.firstName} ${e.lastName}`.trim(),
+        description: [e.user?.email ?? e.personalEmail, e.designation?.title].filter(Boolean).join(" · ") || undefined,
       })),
     [employeesPage]
   )
-
-  const totalEmployees = employeesPage?.meta?.totalCount ?? 0
-  const hasMoreEmployees = totalEmployees > interviewerItems.length
 
   const items = useMemo(() => {
     if (!selectedInterviewer || interviewerItems.some((i) => i.value === selectedInterviewer)) return interviewerItems
     return [{ value: selectedInterviewer, label: interviewerName || "Currently selected" }, ...interviewerItems]
   }, [interviewerItems, selectedInterviewer, interviewerName])
 
-  const canSubmit = Boolean(selectedInterviewer) && Boolean(candidateEmail) && !scheduleInterview.isPending
+  const canSubmit =
+    Boolean(selectedInterviewer) && Boolean(candidateEmail) && !calendlyProblem && !scheduleInterview.isPending
 
   const handleSubmit = async () => {
     if (!canSubmit) return
@@ -110,40 +136,33 @@ export function InterviewSchedulerDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {calendlyProblem && (
+            <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-2.5 text-xs text-warning">
+              <AlertTriangleIcon className="size-3.5 shrink-0 mt-0.5" />
+              <p>
+                {calendlyProblem} Set it up in{" "}
+                <Link href="/all-settings?section=calendly" className="font-medium underline underline-offset-2">
+                  Settings → Integration → Calendly
+                </Link>{" "}
+                first.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label htmlFor="interviewer">Interviewer</Label>
-            {hasMoreEmployees || employeeSearch ? (
-              <div className="relative">
-                <SearchIcon className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                <Input
-                  value={employeeSearch}
-                  onChange={(e) => setEmployeeSearch(e.target.value)}
-                  placeholder={`Search ${totalEmployees} employees…`}
-                  className="pl-8"
-                />
-              </div>
-            ) : null}
-            <Select
-              items={items}
-              value={selectedInterviewer}
-              onValueChange={(v) => setSelectedInterviewer(v == null ? "" : String(v))}
-            >
-              <SelectTrigger id="interviewer" aria-label="Select interviewer" className="w-full">
-                <SelectValue placeholder={employeesLoading ? "Loading employees…" : "Select an employee"} />
-              </SelectTrigger>
-              <SelectContent>
-                {items.map((i) => (
-                  <SelectItem key={i.value} value={i.value}>
-                    {i.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {!employeesLoading && items.length === 0 && (
-              <p className="text-xs text-muted-foreground">
-                {employeeSearch ? "No employees match that search." : "No active employees to assign."}
-              </p>
-            )}
+            <SearchSelect
+              id="interviewer"
+              aria-label="Select interviewer"
+              options={items}
+              value={selectedInterviewer || null}
+              onChange={(v) => setSelectedInterviewer(v ?? "")}
+              onSearchChange={searchServer ? setEmployeeSearch : undefined}
+              isLoading={employeesLoading || (searchServer && searching)}
+              placeholder={employeesLoading ? "Loading employees…" : "Select an employee"}
+              searchPlaceholder={searchServer ? `Search ${totalEmployees} employees by name…` : "Search by name or email…"}
+              emptyMessage={items.length === 0 && !employeeSearch ? "No active employees to assign." : "No employees match that search."}
+            />
           </div>
 
           {/* Explains where the date actually comes from, so nobody goes

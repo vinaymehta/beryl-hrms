@@ -255,6 +255,7 @@ Rails.application.routes.draw do
             # single-use), so there is no separate reschedule action.
             patch :schedule_interview
             patch :request_feedback
+            patch :offer
             patch :confirm_duplicate
             patch :dismiss_duplicate
             # AI-written interview questions. GET reads what is stored; POST

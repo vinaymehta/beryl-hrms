@@ -16,12 +16,12 @@ module Recruitment
 
     module_function
 
-    # The job the questions were written for, else the best job match, else
-    # the role on the candidate's own resume.
+    # The job the questions were written for, else the best job match. nil
+    # when no job is linked — never the candidate's own current role, which
+    # would read as the role they applied for.
     def job_title(candidate)
       candidate.interview_questions_job&.title ||
-        candidate.candidate_job_matches.max_by(&:match_score)&.job&.title ||
-        candidate.current_role
+        candidate.candidate_job_matches.max_by(&:match_score)&.job&.title
     end
 
     # Where the interview itself stands (the feedback has its own timestamps):

@@ -8,7 +8,7 @@ module Api
         rescue_from ::Ai::Error, with: :render_unprocessable
         before_action :set_candidate,
                       only: %i[show update destroy shortlist reject status confirm_duplicate dismiss_duplicate
-                               schedule_interview request_feedback
+                               schedule_interview request_feedback offer
                                interview_questions generate_interview_questions]
 
         # GET /api/v1/recruitment/candidates
@@ -164,8 +164,9 @@ module Api
         end
 
         # PATCH /api/v1/recruitment/candidates/:id/request_feedback
-        # Asks the INTERVIEWER to assess this candidate, ahead of (or again
-        # after) the automatic request InterviewFeedbackRequestsJob sends. Moves
+        # Asks the INTERVIEWER to assess this candidate, once the interview is
+        # over — sooner than (or again after) the automatic request
+        # InterviewFeedbackRequestsJob sends. Moves
         # the candidate to "feedback not received" — the ask is out, nothing is
         # back yet.
         def request_feedback
@@ -191,6 +192,16 @@ module Api
                           status: :unprocessable_entity
           end
 
+          # Nothing to assess until the interview has actually happened.
+          if @candidate.interview_at.nil?
+            return render json: { errors: [ { message: "#{@candidate.name}'s interview hasn't been booked yet, so there is nothing to give feedback on." } ] },
+                          status: :unprocessable_entity
+          end
+          if @candidate.interview_at.future?
+            return render json: { errors: [ { message: "#{@candidate.name}'s interview hasn't happened yet. Feedback can be requested once it is over." } ] },
+                          status: :unprocessable_entity
+          end
+
           # Minted before the mail is built so the link in the email and the
           # token stored on the row can never disagree.
           @candidate.ensure_feedback_token!
@@ -199,6 +210,27 @@ module Api
           @candidate.update!(feedback_requested_at: Time.current, feedback_reminder_sent_at: nil,
                              status: :feedback_not_received)
           deliver_interviewer_mail(:feedback_request)
+          render json: { data: candidate_detail(@candidate) }
+        end
+
+        # PATCH /api/v1/recruitment/candidates/:id/offer
+        # Records that the candidate is being made an offer. Status only — no
+        # mail goes out from here. Only after the interviewer's feedback is in,
+        # so the decision always has an assessment behind it.
+        def offer
+          authorize @candidate
+
+          if @candidate.offered? || @candidate.rejected?
+            return render json: { errors: [ { message: "#{@candidate.name} is already #{@candidate.status}." } ] },
+                          status: :unprocessable_entity
+          end
+
+          unless @candidate.feedback_submitted?
+            return render json: { errors: [ { message: "#{@candidate.name} can be marked as offered once the interviewer's feedback is in." } ] },
+                          status: :unprocessable_entity
+          end
+
+          @candidate.update!(status: :offered)
           render json: { data: candidate_detail(@candidate) }
         end
 

@@ -29,7 +29,6 @@ import {
   RefreshCwIcon,
   DownloadIcon,
   AlertCircleIcon,
-  CheckCircle2Icon,
   Loader2Icon,
   Trash2Icon,
   ChevronLeftIcon,
@@ -74,6 +73,48 @@ const INTERVIEW_BADGE: Record<string, string> = {
   interview_completed: "bg-teal-500/10 text-teal-600",
   feedback_received: "bg-emerald-500/10 text-emerald-600",
   feedback_not_received: "bg-orange-500/10 text-orange-600",
+  offered: "bg-success/10 text-success",
+}
+
+const INTERVIEW_OUTCOME_LABELS: Record<string, string> = {
+  interview_scheduled: "Interview scheduled",
+  interview_completed: "Interview completed",
+  feedback_not_received: "Feedback requested",
+  feedback_received: "Feedback received",
+  offered: "Offered",
+}
+
+/**
+ * Where a processed resume landed — the same partition as the server's
+ * eligibility filter (CandidateResume.by_eligibility): a human decision or
+ * interview stage on the candidate wins, otherwise the resume's own verdict.
+ */
+function resumeOutcome(resume: CandidateResumeSummary): { label: string; className: string } {
+  const status = resume.candidateStatus ?? ""
+  if (INTERVIEW_OUTCOME_LABELS[status]) {
+    return { label: INTERVIEW_OUTCOME_LABELS[status], className: "border-role-recruitment/30 bg-role-recruitment/10 text-role-recruitment" }
+  }
+  if (status === "shortlisted" || (status !== "rejected" && resume.criteriaMatchPercentage === 100)) {
+    return { label: "Shortlisted", className: "border-success/30 bg-success/10 text-success" }
+  }
+  if (status === "rejected" || resume.criteriaMatchPercentage != null) {
+    return { label: "Rejected", className: "border-destructive/30 bg-destructive/10 text-destructive" }
+  }
+  return { label: "Needs review", className: "border-warning/30 bg-warning/10 text-warning" }
+}
+
+function OutcomeBadge({ resume }: { resume: CandidateResumeSummary }) {
+  const outcome = resumeOutcome(resume)
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap",
+        outcome.className
+      )}
+    >
+      {outcome.label}
+    </span>
+  )
 }
 
 const SORT_OPTIONS = [
@@ -672,22 +713,21 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
                   </TableCell>
                   {!candidateStatus && (
                     <TableCell>
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${
-                          statusColors[resume.processingStatus] || "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {resume.processingStatus === "processing" && (
-                          <Loader2Icon className="size-2.5 animate-spin" />
-                        )}
-                        {resume.processingStatus === "completed" && (
-                          <CheckCircle2Icon className="size-2.5 text-emerald-500" />
-                        )}
-                        {resume.processingStatus === "failed" && (
-                          <AlertCircleIcon className="size-2.5 text-red-500" />
-                        )}
-                        {resume.processingStatus.replace(/_/g, " ")}
-                      </span>
+                      {/* Processing state until it's done; then the outcome,
+                          which is what the column is read for. */}
+                      {resume.processingStatus === "completed" ? (
+                        <OutcomeBadge resume={resume} />
+                      ) : (
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${
+                            statusColors[resume.processingStatus] || "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {resume.processingStatus === "processing" && <Loader2Icon className="size-2.5 animate-spin" />}
+                          {resume.processingStatus === "failed" && <AlertCircleIcon className="size-2.5 text-red-500" />}
+                          {resume.processingStatus.replace(/_/g, " ")}
+                        </span>
+                      )}
                     </TableCell>
                   )}
                   <TableCell className="text-muted-foreground">

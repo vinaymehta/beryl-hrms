@@ -108,7 +108,8 @@ export function InterviewFeedbackSummary({ candidate }: { candidate: CandidateSu
   )
 }
 
-function feedbackFromCandidate(candidate: CandidateSummary): InterviewFeedback {
+/** A candidate's feedback columns, in the shape InterviewFeedbackDetails reads. */
+export function feedbackFromCandidate(candidate: Omit<CandidateSummary, "skills">): InterviewFeedback {
   return {
     submittedAt: candidate.feedbackSubmittedAt,
     technicalRating: candidate.feedbackTechnicalRating,

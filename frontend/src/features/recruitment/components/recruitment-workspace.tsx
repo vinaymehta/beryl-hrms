@@ -9,9 +9,11 @@ import { InterviewsView } from "./interviews-view"
 import { JobsMatchingView } from "./jobs-matching-view"
 import { ScanZohoModal } from "./scan-zoho-modal"
 import { useRecruitmentStats, useRecruitmentAnalytics } from "../hooks"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useCurrentUser } from "@/features/auth/hooks/use-current-user"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
 import type { CandidateStatus, RecruitmentTab } from "@/types/recruitment"
@@ -37,7 +39,28 @@ interface Kpi {
   onClick?: () => void
 }
 
+/**
+ * The sidebar hides Recruitment from anyone without access; this covers a
+ * typed-in URL, which would otherwise render an empty shell full of 403s.
+ */
 export function RecruitmentWorkspace() {
+  const { user, isLoading } = useCurrentUser()
+  const canSee = usePermission([PERMISSIONS.recruitmentView, PERMISSIONS.candidatesView, PERMISSIONS.resumesView])
+
+  if (isLoading || !user) return null
+  if (!canSee) {
+    return (
+      <Alert className="max-w-md">
+        <AlertTitle>You don&apos;t have access to Recruitment</AlertTitle>
+        <AlertDescription>Ask an administrator for recruitment access if you need it.</AlertDescription>
+      </Alert>
+    )
+  }
+
+  return <Workspace />
+}
+
+function Workspace() {
   const [activeTab, setActiveTab] = useState<RecruitmentTab>("resumes")
   const [scanModalOpen, setScanModalOpen] = useState(false)
   const [dashboardDetail, setDashboardDetail] = useState<DashboardDetail | null>(null)

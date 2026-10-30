@@ -46,7 +46,7 @@ function InterviewCard({ interview, onOpen }: { interview: MyInterview; onOpen: 
       <div className="min-w-0 space-y-1">
         <p className="truncate text-sm font-semibold text-foreground">{interview.candidateName}</p>
         <p className="truncate text-xs text-foreground/80">
-          {interview.jobTitle ? `Applied for ${interview.jobTitle}` : "Role not recorded"}
+          Applied for {interview.jobTitle ?? <span className="text-muted-foreground">Not linked</span>}
         </p>
         <p className="truncate text-xs text-muted-foreground">{experienceLine(interview.profile)}</p>
         <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
@@ -179,7 +179,9 @@ export function MyInterviewsView({ tabs }: { tabs?: ReactNode }) {
             <>
               <SheetHeader className="space-y-1 border-b pr-12">
                 <SheetTitle>{open.candidateName}</SheetTitle>
-                <SheetDescription>{open.jobTitle ? `Applied for ${open.jobTitle}` : "Role not recorded"}</SheetDescription>
+                <SheetDescription>
+                  Applied for {open.jobTitle ?? <span className="text-muted-foreground">Not linked</span>}
+                </SheetDescription>
                 <p className="flex flex-wrap items-center gap-x-1.5 pt-1 text-[11px] text-muted-foreground">
                   <CalendarClockIcon className="size-3.5" />
                   {open.interviewAt ? `${formatIst(open.interviewAt)} IST · ${relativeTime(open.interviewAt)}` : "Time not set"}

@@ -105,15 +105,19 @@ class ResumeExtractionJob < ApplicationJob
   end
 
   # Identity resolution, in order of trust:
-  #  1. Email or phone match -> the same real person, confidently. Attach this
-  #     resume to that existing candidate and make it the current one; no
-  #     human review needed.
-  #  2. No email/phone match, but the resume is already attached to someone ->
-  #     keep that link. A reprocess is not new evidence about who sent it.
-  #  3. Only a normalized-name match (common names collide) -> too weak to
-  #     auto-merge. A new candidate record is created instead, flagged
-  #     potential_duplicate so HR can manually confirm/merge.
-  #  4. No signal matches anything -> brand new, unique candidate.
+  #  1. Email or phone match AND the same name -> the same real person,
+  #     confidently. Attach this resume to that existing candidate and make it
+  #     the current one; no human review needed.
+  #  2. The resume is already attached to someone -> keep that link. A
+  #     reprocess is not new evidence about who sent it.
+  #  3. Email or phone match but a DIFFERENT name (a shared family inbox, a
+  #     placement agency's phone, a recycled number) -> not safe to merge:
+  #     merging would overwrite the other person's profile with this resume.
+  #     A new candidate record is created instead, flagged potential_duplicate
+  #     so HR can confirm or dismiss it.
+  #  4. Only a normalized-name match (common names collide) -> too weak to
+  #     auto-merge either; also a new candidate flagged potential_duplicate.
+  #  5. No signal matches anything -> brand new, unique candidate.
   # Resumes are never deleted or reassigned automatically here — exact
   # file-duplicate detection already short-circuited in ResumeProcessingJob
   # before this job ever runs.
@@ -123,19 +127,20 @@ class ResumeExtractionJob < ApplicationJob
     normalized_name = normalize_name(data[:full_name])
     full_name = data[:full_name].to_s.strip.presence || "Candidate #{Time.current.strftime('%Y%m%d%H%M')}"
 
-    candidate = nil
-    candidate = resume.company.candidates.where("LOWER(email) = ?", email).first if email
-    candidate ||= resume.company.candidates.where(phone: phone).first if phone
+    contact_matches = []
+    contact_matches += resume.company.candidates.where("LOWER(email) = ?", email).to_a if email
+    contact_matches += resume.company.candidates.where(phone: phone).to_a if phone
+    contact_matches.uniq!
 
-    # Still nothing, but this resume is ALREADY attributed to someone —
-    # keep it there. Re-running extraction is not new evidence about who sent
+    # No same-named contact match, but this resume is ALREADY attributed to
+    # someone — keep it there. Re-running extraction is not new evidence about who sent
     # it, so a reprocess must not re-attribute a resume that was already
     # resolved. Without this, any resume yielding neither email nor phone (a
     # PDF whose font mangles its own contact line, say) creates a brand-new
     # candidate on every single run and silently strands the previous one —
     # along with its interview, interviewer and feedback history, which live on
     # the candidate rather than the resume.
-    candidate ||= resume.candidate
+    candidate = contact_matches.find { |c| same_person_name?(c, data) } || resume.candidate
 
     if candidate
       mark_resume_current!(resume, candidate)
@@ -152,7 +157,7 @@ class ResumeExtractionJob < ApplicationJob
       phone: phone,
       status: :needs_review, # Human review required
       source: resume.source_email_id.present? ? "zoho_mail" : "manual_upload",
-      duplicate_status: weak_match ? :potential_duplicate : :unique_record
+      duplicate_status: contact_matches.any? || weak_match ? :potential_duplicate : :unique_record
     )
     mark_resume_current!(resume, candidate)
     candidate
@@ -160,6 +165,24 @@ class ResumeExtractionJob < ApplicationJob
 
   def normalize_name(name)
     name.to_s.strip.downcase.gsub(/\s+/, " ").presence
+  end
+
+  # Whether the name on this resume is the existing candidate's. Case,
+  # spacing and punctuation don't count, nor does word order ("Sharma Rahul")
+  # or a middle name on only one side ("Rahul K Sharma" vs "Rahul Sharma") —
+  # first and last name matching is enough. A resume with no readable name
+  # never matches: there is nothing to confirm it is the same person.
+  def same_person_name?(candidate, data)
+    incoming = name_words(data[:full_name].presence || [ data[:first_name], data[:last_name] ].compact_blank.join(" "))
+    existing = name_words(candidate.full_name.presence || [ candidate.first_name, candidate.last_name ].compact_blank.join(" "))
+    return false if incoming.empty? || existing.empty?
+    return true if incoming.sort == existing.sort
+
+    incoming.size > 1 && existing.size > 1 && incoming.first == existing.first && incoming.last == existing.last
+  end
+
+  def name_words(name)
+    name.to_s.downcase.scan(/[[:alnum:]]+/)
   end
 
   # Only one resume is ever "current" per candidate — the most recently

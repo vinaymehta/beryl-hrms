@@ -48,6 +48,10 @@ class CandidatePolicy < ApplicationPolicy
     update?
   end
 
+  def offer?
+    update?
+  end
+
   class Scope < Scope
     def resolve
       if user.present?

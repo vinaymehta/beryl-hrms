@@ -21,6 +21,16 @@ module Recruitment
     # Per mailbox and per direction. A candidate conversation is a handful of
     # messages; this is a ceiling, not a page size.
     SEARCH_LIMIT = 50
+    # The app's own account mail (UserMailer). An address shared between a
+    # candidate and a user — or a mailbox that is also the app's sender —
+    # would otherwise put sign-in details, with a temporary password, on a
+    # resume's timeline. Recruitment mail the app sent is shown from the
+    # RecruitmentEmail log instead, so nothing wanted is lost.
+    SYSTEM_SUBJECTS = [
+      /\A(?:(?:re|fwd?):\s*)*reset your password\b/i,
+      /\A(?:(?:re|fwd?):\s*)*your sign-in details for\b/i,
+      /\A(?:(?:re|fwd?):\s*)*verify your email address\b/i
+    ].freeze
 
     Result = Struct.new(:accounts, :items, keyword_init: true)
 
@@ -86,8 +96,21 @@ module Recruitment
           found = address_messages(connection)
           known = found.map { |raw| raw["messageId"].to_s }
           missing = @original_email_ids - known
-          found + missing.filter_map { |id| original_message(connection, id) }
+          (found + missing.filter_map { |id| original_message(connection, id) }).reject { |raw| system_mail?(raw) }
         end
+      end
+
+      # Sent by the app itself (MAIL_FROM), or one of its account mails.
+      def system_mail?(raw)
+        summary = ::Zoho::MessagePresenter.summary(raw)
+        (system_sender.present? && summary[:from].downcase.include?(system_sender)) ||
+          SYSTEM_SUBJECTS.any? { |pattern| pattern.match?(summary[:subject]) }
+      end
+
+      # The bare address out of MAIL_FROM, which may carry a display name
+      # ("Beryl Systems HRMS <hrms@…>").
+      def system_sender
+        @system_sender ||= ::Mail::Address.new(ENV.fetch("MAIL_FROM")).address.to_s.downcase
       end
 
       # Two searches rather than one OR'd query: `sender:` and `to:` are the

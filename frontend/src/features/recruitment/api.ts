@@ -157,10 +157,14 @@ export const recruitmentApi = {
         jobId ? { jobId } : {}
       ),
 
-    // Sends now; InterviewFeedbackRequestsJob otherwise sends it an hour after
-    // the interview.
+    // Sends now (once the interview is over); InterviewFeedbackRequestsJob
+    // otherwise sends it an hour after the interview.
     requestFeedback: (id: string) =>
       apiClient.patch<CandidateDetail>(`/recruitment/candidates/${id}/request_feedback`),
+
+    // Status only — no email goes to the candidate.
+    offer: (id: string) =>
+      apiClient.patch<CandidateDetail>(`/recruitment/candidates/${id}/offer`),
 
     confirmDuplicate: (id: string) =>
       apiClient.patch<CandidateDetail>(`/recruitment/candidates/${id}/confirm_duplicate`),

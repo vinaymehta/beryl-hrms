@@ -18,7 +18,8 @@ module Recruitment
       @now = now
     end
 
-    # filters: tab, q, interviewerId, jobId, from, to (YYYY-MM-DD, IST days).
+    # filters: tab, q, interviewerId, jobId, from, to (YYYY-MM-DD, IST days),
+    # candidateId (one interview, for a link that opens its panel).
     # meta.counts are per tab under the other filters, for the tab badges.
     def list(filters, page: 1)
       base = filter(filters)
@@ -61,6 +62,7 @@ module Recruitment
         relation = @scope
         relation = search(relation, filters[:q]) if filters[:q].present?
         relation = relation.where(interviewer_id: filters[:interviewerId]) if filters[:interviewerId].present?
+        relation = relation.where(id: filters[:candidateId]) if filters[:candidateId].present?
         relation = for_job(relation, filters[:jobId]) if filters[:jobId].present?
 
         from = parse_day(filters[:from])
@@ -170,6 +172,7 @@ module Recruitment
           candidateName: candidate.name,
           candidateEmail: candidate.email,
           candidatePhone: candidate.phone,
+          candidateStatus: candidate.status,
           jobTitle: InterviewDetails.job_title(candidate),
           interviewerId: candidate.interviewer_id&.to_s,
           interviewerName: candidate.interviewer&.full_name,

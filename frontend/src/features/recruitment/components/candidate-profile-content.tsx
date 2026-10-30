@@ -3,7 +3,9 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useCandidate, useCandidateMutations } from "../hooks"
-import type { CandidateSkill } from "@/types/recruitment"
+import { isInInterviewWorkflow, type CandidateSkill } from "@/types/recruitment"
+import { feedbackFromCandidate } from "./interview-feedback"
+import { InterviewFeedbackSection, InterviewSummary, MarkOfferedButton, canMarkOffered } from "./interview-summary"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -34,6 +36,7 @@ import {
   AlertTriangleIcon,
   CheckIcon,
   XIcon,
+  CalendarClockIcon,
   BuildingIcon,
   Trash2Icon,
 } from "lucide-react"
@@ -173,6 +176,10 @@ export function CandidateProfileContent({ candidateId }: { candidateId: string }
 
           {/* Actions */}
           <div className="flex items-center gap-1.5 shrink-0">
+            {canManage && canMarkOffered(candidate.status, candidate.feedbackSubmittedAt) && (
+              <MarkOfferedButton candidateId={candidate.id} candidateName={candidate.fullName} />
+            )}
+
             {/* Shortlist appears ONLY for a rejected candidate, as the
                 reverse of Reject. Not offered otherwise: shortlisting is
                 decided automatically by Recruitment::EligibilityEvaluator, and
@@ -265,6 +272,29 @@ export function CandidateProfileContent({ candidateId }: { candidateId: string }
 
       {/* Body */}
       <div className="p-5 space-y-5 text-xs">
+        {/* Interview — read-only here; it is actioned on the Interviews page. */}
+        {(isInInterviewWorkflow(candidate.status) || candidate.interviewerId) && (
+          <div className="space-y-2.5">
+            <h4 className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
+              <CalendarClockIcon className="size-3.5 text-role-recruitment" />
+              Interview
+            </h4>
+            <div className="space-y-3 rounded-lg border bg-card p-3.5 shadow-2xs">
+              <InterviewSummary
+                candidateId={candidate.id}
+                interviewAt={candidate.interviewAt}
+                interviewerName={candidate.interviewerName}
+                feedbackRequestedAt={candidate.feedbackRequestedAt}
+                feedback={feedbackFromCandidate(candidate)}
+              />
+              <InterviewFeedbackSection
+                feedback={feedbackFromCandidate(candidate)}
+                feedbackRequestedAt={candidate.feedbackRequestedAt}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Location & Preferences */}
         {(candidate.state || candidate.country || candidate.currentLocation || candidate.preferredLocation) && (
           <div className="space-y-2">

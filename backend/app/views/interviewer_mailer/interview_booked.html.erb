@@ -4,18 +4,13 @@
 
 <table cellpadding="6" style="border-collapse:collapse;font-size:14px;">
   <tr><td style="color:#666;">Candidate</td><td><strong><%= @candidate.name %></strong></td></tr>
-  <tr><td style="color:#666;">Email</td><td><%= @candidate.email.presence || "not on file" %></td></tr>
   <tr><td style="color:#666;">When</td><td><strong><%= @when_text %></strong></td></tr>
-  <% if @candidate.phone.present? %>
-    <tr><td style="color:#666;">Phone</td><td><%= @candidate.phone %></td></tr>
-  <% end %>
 </table>
 
 <% if @join_url.present? %>
   <%= mail_button "Join the interview", @join_url %>
-  <p style="color:#666;font-size:12px;">You&rsquo;ve also been added as a guest on the calendar invitation.</p>
 <% else %>
-  <p style="color:#666;font-size:13px;">You&rsquo;ve been added as a guest on the calendar invitation &mdash; the joining details are on that invite.</p>
+  <p style="color:#666;font-size:13px;">This booking has no joining link yet &mdash; the hiring team will send you the meeting details.</p>
 <% end %>
 
 <p><%= @resume_attached ? "Their resume is attached to this email." : "No resume file was available to attach." %></p>

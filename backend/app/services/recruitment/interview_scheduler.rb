@@ -91,13 +91,9 @@ module Recruitment
         params << [ "utm_source", token ]
         params << [ "name", @candidate.name.to_s ] if @candidate.name.present?
         params << [ "email", @candidate.email.to_s ] if @candidate.email.present?
-        # Puts the interviewer ON the Calendly event as a guest, so they get a
-        # real calendar invite and the conferencing link from Calendly itself.
-        # Without this the event's only host is the connected Calendly account
-        # (the admin), and the person actually conducting the interview has no
-        # calendar entry and no way in.
-        # Their work email, the same address InterviewerMailer writes to.
-        params << [ "guests", @interviewer.work_email.to_s ] if @interviewer.work_email.present?
+        # No `guests=` for the interviewer: this URL goes to the CANDIDATE, so
+        # anything in it is theirs to read. The interviewer hears about the
+        # booking (with the join link) from InterviewerMailer#interview_booked.
         uri.query = URI.encode_www_form(params)
         uri.to_s
       rescue URI::InvalidURIError

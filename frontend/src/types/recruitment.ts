@@ -15,14 +15,16 @@ export type CandidateStatus =
   | "feedback_received"
   | "feedback_not_received"
 
-// The stages after Shortlisted. A candidate in any of these is out of the
-// eligibility stage — reprocessing a resume no longer rewrites their status
-// (see ResumeExtractionJob / Candidate#in_interview_workflow?).
+// The stages after Shortlisted, through to the offer. A candidate in any of
+// these is out of the eligibility stage — reprocessing a resume no longer
+// rewrites their status (see ResumeExtractionJob /
+// Candidate#in_interview_workflow?).
 export const INTERVIEW_WORKFLOW_STATUSES: CandidateStatus[] = [
   "interview_scheduled",
   "interview_completed",
   "feedback_received",
   "feedback_not_received",
+  "offered",
 ]
 
 export function isInInterviewWorkflow(status: CandidateStatus | string | null | undefined): boolean {
@@ -188,6 +190,8 @@ export interface CandidateResumeDetail extends CandidateResumeSummary {
     feedbackRequestedAt: string | null
     feedbackSubmittedAt: string | null
     interviewLinkSentAt: string | null
+    duplicateStatus: DuplicateStatus
+    feedback: InterviewFeedback
   } | null
 }
 
@@ -420,6 +424,8 @@ export interface InterviewRow {
   candidateName: string
   candidateEmail: string | null
   candidatePhone: string | null
+  candidateStatus: CandidateStatus
+  /** The job the interview is for; null when none is linked. */
   jobTitle: string | null
   interviewerId: string | null
   interviewerName: string | null
@@ -449,6 +455,8 @@ export interface InterviewListParams {
   /** YYYY-MM-DD, IST days. */
   from?: string
   to?: string
+  /** Narrows to one candidate's interview — for a link that opens its panel. */
+  candidateId?: string
   page?: number
 }
 

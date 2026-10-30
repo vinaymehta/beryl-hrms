@@ -9,7 +9,7 @@ module Api
 
         # GET /api/v1/recruitment/interviews
         def index
-          render json: dashboard.list(params.permit(:tab, :q, :interviewerId, :jobId, :from, :to), page: params[:page])
+          render json: dashboard.list(params.permit(:tab, :q, :interviewerId, :jobId, :from, :to, :candidateId), page: params[:page])
         end
 
         # GET /api/v1/recruitment/interviews/stats

@@ -3,13 +3,14 @@ module Recruitment
   # token form, the in-app My interviews page and the admin Interviews
   # dashboard so all three read and write exactly the same fields.
   module InterviewFeedbackFields
-    # camelCase request key => candidate column.
+    # Request key => candidate column. The client sends camelCase, but
+    # config/initializers/json_key_transform.rb has already snake_cased it.
     PARAMS = {
-      technicalRating: :feedback_technical_rating,
-      communicationRating: :feedback_communication_rating,
-      problemSolvingRating: :feedback_problem_solving_rating,
-      cultureFitRating: :feedback_culture_fit_rating,
-      overallRating: :feedback_rating,
+      technical_rating: :feedback_technical_rating,
+      communication_rating: :feedback_communication_rating,
+      problem_solving_rating: :feedback_problem_solving_rating,
+      culture_fit_rating: :feedback_culture_fit_rating,
+      overall_rating: :feedback_rating,
       decision: :feedback_decision
     }.freeze
 

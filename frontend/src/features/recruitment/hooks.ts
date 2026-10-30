@@ -38,11 +38,12 @@ export function useRecruitmentInsights() {
   })
 }
 
-export function useInterviews(params: InterviewListParams) {
+export function useInterviews(params: InterviewListParams, { enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ["recruitment", "interviews", params],
     queryFn: () => recruitmentApi.interviews.list(params),
     placeholderData: (previousData) => previousData,
+    enabled,
   })
 }
 
@@ -167,6 +168,16 @@ export function useCandidateMutations() {
     },
   })
 
+  const offerMutation = useMutation({
+    mutationFn: (id: string) => recruitmentApi.candidates.offer(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "interviews"] })
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "candidates"] })
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "dashboard"] })
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "resumes"] })
+    },
+  })
+
   // Lets an admin fill in or correct the profile the AI produced — the only
   // way to supply something extraction couldn't recover (a resume whose PDF
   // mangles its own contact line, say). Invalidates resumes too, since the
@@ -210,6 +221,7 @@ export function useCandidateMutations() {
     updateCandidate: updateMutation,
     scheduleInterview: scheduleInterviewMutation,
     requestFeedback: requestFeedbackMutation,
+    offer: offerMutation,
     deleteCandidate: deleteMutation,
     confirmDuplicate: confirmDuplicateMutation,
     dismissDuplicate: dismissDuplicateMutation,

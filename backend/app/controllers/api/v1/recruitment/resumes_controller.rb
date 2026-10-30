@@ -554,7 +554,10 @@ module Api
               interviewerName: r.candidate.interviewer&.full_name,
               feedbackRequestedAt: r.candidate.feedback_requested_at&.iso8601,
               feedbackSubmittedAt: r.candidate.feedback_submitted_at&.iso8601,
-              interviewLinkSentAt: r.candidate.interview_link_sent_at&.iso8601
+              interviewLinkSentAt: r.candidate.interview_link_sent_at&.iso8601,
+              duplicateStatus: r.candidate.duplicate_status,
+              # The interviewer's write-up, so the panel can show it in full.
+              feedback: ::Recruitment::InterviewFeedbackFields.payload(r.candidate)
             } : nil
           )
         end

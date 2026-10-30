@@ -3,19 +3,15 @@ Hi <%= @interviewer&.full_name %>,
 An interview has been booked with you.
 
 Candidate: <%= @candidate.name %>
-Email:     <%= @candidate.email.presence || "not on file" %>
 When:      <%= @when_text %>
-<% if @candidate.phone.present? -%>
-Phone:     <%= @candidate.phone %>
-<% end -%>
 
 <% if @join_url.present? -%>
 JOIN THE INTERVIEW
 <%= @join_url %>
 <% else -%>
 JOIN THE INTERVIEW
-You've been added as a guest on the calendar invitation — the joining details
-are on that invite.
+This booking has no joining link yet — the hiring team will send you the
+meeting details.
 <% end -%>
 
 <% if @resume_attached -%>

@@ -7,6 +7,7 @@ import { ResumePreviewModal } from "./resume-preview-modal"
 import { InterviewSchedulerDialog } from "./interview-scheduler-dialog"
 import { CandidatePersonalInfo } from "./candidate-personal-info"
 import { ResumeEmailsTab } from "./resume-emails-tab"
+import { InterviewFeedbackSection, InterviewSummary, MarkOfferedButton, canMarkOffered } from "./interview-summary"
 import { isInInterviewWorkflow } from "@/types/recruitment"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -26,10 +27,7 @@ import {
   MinusCircleIcon,
   CopyIcon,
   CalendarClockIcon,
-  UserCheckIcon,
-  MessageSquareIcon,
-  ClipboardCheckIcon,
-  Loader2Icon,
+  AlertTriangleIcon,
 } from "lucide-react"
 import { recruitmentApi } from "../api"
 import { usePermission } from "@/features/auth/hooks/use-permission"
@@ -105,12 +103,12 @@ function CriterionBadge({ label, value }: { label: string; value: boolean | null
 export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidate }: ResumeDetailPanelProps) {
   const { data: resume, isLoading } = useResume(resumeId || "")
   const { reprocess } = useResumeMutations()
-  const { shortlist, reject, setStatus, requestFeedback } = useCandidateMutations()
+  const { shortlist, reject } = useCandidateMutations()
   const canProcess = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.resumesProcess])
   const canManage = usePermission([PERMISSIONS.recruitmentManage, PERMISSIONS.candidatesManage])
   const [previewOpen, setPreviewOpen] = useState(false)
   const [schedulerOpen, setSchedulerOpen] = useState(false)
-  const [tab, setTab] = useState<"summary" | "personal" | "emails">("summary")
+  const [tab, setTab] = useState<"summary" | "interview" | "personal" | "emails">("summary")
 
   if (!resumeId) return null
 
@@ -144,45 +142,11 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
     }
   }
 
-  const handleMarkInterviewCompleted = async () => {
-    if (!resume?.candidate) return
-    try {
-      await setStatus.mutateAsync({ id: resume.candidate.id, status: "interview_completed" })
-      toast.success("Interview marked as completed")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update the interview")
-    }
-  }
-
-  // Always an explicit admin action — nothing requests feedback on its own.
-  const handleRequestFeedback = async () => {
-    if (!resume?.candidate) return
-    try {
-      await requestFeedback.mutateAsync(resume.candidate.id)
-      toast.success("Feedback request sent", {
-        description: resume.candidate.email
-          ? `Sent to ${resume.candidate.email}`
-          : "No email on file — the candidate was marked as awaiting feedback, but nothing was sent.",
-      })
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to send the feedback request")
-    }
-  }
-
-  const handleFeedbackReceived = async () => {
-    if (!resume?.candidate) return
-    try {
-      await setStatus.mutateAsync({ id: resume.candidate.id, status: "feedback_received" })
-      toast.success("Feedback marked as received")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update feedback status")
-    }
-  }
-
-  const candidateStatus = resume?.candidate?.status
-  const inInterviewWorkflow = isInInterviewWorkflow(candidateStatus)
-  const interviewAt = resume?.candidate?.interviewAt ?? null
-  const interviewPending = setStatus.isPending || requestFeedback.isPending
+  const candidate = resume?.candidate ?? null
+  const candidateStatus = candidate?.status
+  // Anyone an interview has been set up for — booked or not — plus anyone
+  // already past it. The interview itself is actioned on the Interviews page.
+  const hasInterview = Boolean(candidate && (isInInterviewWorkflow(candidateStatus) || candidate.interviewerId))
 
   const aiSummary: string | undefined = resume?.extractedData?.ai_summary
   const skills: { name?: string; category?: string }[] = resume?.extractedData?.skills ?? []
@@ -223,6 +187,18 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
                           )}
                         >
                           {resume.candidate.status.replace(/_/g, " ")}
+                        </span>
+                      )}
+                      {/* Same email or phone as another candidate under a
+                          different name — kept apart for HR to review on the
+                          candidate profile. */}
+                      {resume.candidate?.duplicateStatus === "potential_duplicate" && (
+                        <span
+                          title="Shares an email or phone number with another candidate — review it on the candidate profile"
+                          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
+                        >
+                          <AlertTriangleIcon className="size-3" />
+                          Possible duplicate
                         </span>
                       )}
                     </div>
@@ -309,31 +285,16 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
             {/* Interview stage — only once there is one. The interviewer IS
                 shown here: this is the internal view. It is only the
                 candidate's email that deliberately leaves them out. */}
-            {inInterviewWorkflow && (
-              <div className="border-b bg-cyan-500/5 p-4">
+            {hasInterview && candidate && (
+              <div className="border-b bg-role-recruitment/5 p-4">
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Interview</p>
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
-                  <span className="inline-flex items-center gap-1.5 text-foreground">
-                    <CalendarClockIcon className="size-3.5 text-muted-foreground" />
-                    {interviewAt
-                      ? new Date(interviewAt).toLocaleString(undefined, {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })
-                      : "Not scheduled"}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 text-foreground">
-                    <UserCheckIcon className="size-3.5 text-muted-foreground" />
-                    {resume.candidate?.interviewerName || "No interviewer assigned"}
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">internal</span>
-                  </span>
-                  {resume.candidate?.feedbackRequestedAt && (
-                    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                      <MessageSquareIcon className="size-3.5" />
-                      Feedback requested {new Date(resume.candidate.feedbackRequestedAt).toLocaleDateString()}
-                    </span>
-                  )}
-                </div>
+                <InterviewSummary
+                  candidateId={candidate.id}
+                  interviewAt={candidate.interviewAt}
+                  interviewerName={candidate.interviewerName}
+                  feedbackRequestedAt={candidate.feedbackRequestedAt}
+                  feedback={candidate.feedback}
+                />
               </div>
             )}
 
@@ -344,6 +305,7 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
               <div className="flex items-center gap-4">
                 {([
                   { id: "summary", label: "AI Summary" },
+                  ...(hasInterview ? [{ id: "interview", label: "Interview" } as const] : []),
                   { id: "personal", label: "Personal Info" },
                   { id: "emails", label: "Emails" },
                 ] as const).map((t) => (
@@ -376,6 +338,8 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
             <div className="flex-1 overflow-y-auto p-5 text-xs">
               {tab === "emails" ? (
                 <ResumeEmailsTab resumeId={resume.id} />
+              ) : tab === "interview" && hasInterview && candidate ? (
+                <InterviewFeedbackSection feedback={candidate.feedback} feedbackRequestedAt={candidate.feedbackRequestedAt} />
               ) : tab === "personal" ? (
                 resume.candidate ? (
                   <CandidatePersonalInfo candidateId={resume.candidate.id} canManage={canManage} />
@@ -536,9 +500,10 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
                   </Button>
                 )}
 
-                {/* Interview workflow, one stage at a time: the only action
-                    offered is the next legitimate step from where the
-                    candidate actually is. */}
+                {/* Interview workflow: sending the booking link starts it and
+                    the offer ends it. Everything in between (feedback
+                    requests, reminders) is on the Interviews page, which the
+                    Interview strip above links to. */}
                 {canManage && resume.candidate && candidateStatus === "shortlisted" && (
                   <Button
                     size="sm"
@@ -550,66 +515,8 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
                   </Button>
                 )}
 
-                {canManage && resume.candidate && candidateStatus === "interview_scheduled" && (
-                  <>
-                    <Button
-                      size="sm"
-                      onClick={handleMarkInterviewCompleted}
-                      disabled={interviewPending}
-                      className="gap-1.5 bg-role-recruitment text-role-recruitment-foreground hover:bg-role-recruitment/90 shadow-2xs"
-                    >
-                      {interviewPending ? (
-                        <Loader2Icon className="size-3.5 animate-spin" />
-                      ) : (
-                        <CheckCircle2Icon className="size-3.5" />
-                      )}
-                      Interview Completed
-                    </Button>
-                  </>
-                )}
-
-                {canManage && resume.candidate && candidateStatus === "interview_completed" && (
-                  <Button
-                    size="sm"
-                    onClick={handleRequestFeedback}
-                    disabled={interviewPending}
-                    className="gap-1.5 bg-role-recruitment text-role-recruitment-foreground hover:bg-role-recruitment/90 shadow-2xs"
-                  >
-                    {interviewPending ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
-                    ) : (
-                      <MessageSquareIcon className="size-3.5" />
-                    )}
-                    Send Feedback Request
-                  </Button>
-                )}
-
-                {canManage && resume.candidate && candidateStatus === "feedback_not_received" && (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleRequestFeedback}
-                      disabled={interviewPending}
-                      className="gap-1.5"
-                    >
-                      <MessageSquareIcon className="size-3.5" />
-                      Resend Request
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleFeedbackReceived}
-                      disabled={interviewPending}
-                      className="gap-1.5 bg-role-recruitment text-role-recruitment-foreground hover:bg-role-recruitment/90 shadow-2xs"
-                    >
-                      {interviewPending ? (
-                        <Loader2Icon className="size-3.5 animate-spin" />
-                      ) : (
-                        <ClipboardCheckIcon className="size-3.5" />
-                      )}
-                      Feedback Received
-                    </Button>
-                  </>
+                {canManage && candidate && canMarkOffered(candidateStatus, candidate.feedbackSubmittedAt) && (
+                  <MarkOfferedButton candidateId={candidate.id} candidateName={candidate.fullName} />
                 )}
               </div>
             </div>
