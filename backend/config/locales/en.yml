@@ -42,3 +42,11 @@ en:
         bank_ifsc_code: "IFSC code"
         aadhaar_number: "Aadhaar number"
         pan_number: "PAN number"
+      # The interviewer feedback forms report errors by these names.
+      candidate:
+        feedback_rating: "Overall rating"
+        feedback_technical_rating: "Technical skills rating"
+        feedback_communication_rating: "Communication rating"
+        feedback_problem_solving_rating: "Problem solving rating"
+        feedback_culture_fit_rating: "Attitude / culture fit rating"
+        feedback_decision: "Decision"

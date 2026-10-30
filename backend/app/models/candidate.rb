@@ -55,15 +55,59 @@ class Candidate < ApplicationRecord
 
   FEEDBACK_RATING_RANGE = (1..5).freeze
 
-  # Feedback the CANDIDATE submits about their interview experience, via the
-  # public form. Ratings are bounded so a malformed submission on an endpoint
-  # with no session behind it can't store nonsense.
-  validates :feedback_rating,
+  # The per-area scores on the structured interviewer form. feedback_rating is
+  # the OVERALL score, kept separate because old rows have only that.
+  FEEDBACK_AREA_RATINGS = %i[
+    feedback_technical_rating feedback_communication_rating
+    feedback_problem_solving_rating feedback_culture_fit_rating
+  ].freeze
+
+  # The interviewer's call. Advisory only — nothing moves the candidate on it.
+  # validate: an unknown value from a public form is a validation error, not
+  # an ArgumentError 500.
+  enum :feedback_decision, { hire: 0, no_hire: 1, hold: 2, next_round: 3 },
+       prefix: :decision, validate: { allow_nil: true }
+
+  # Feedback the INTERVIEWER submits, via the public token form or the
+  # in-app My interviews page. Ratings are bounded so a malformed submission
+  # on an endpoint with no session behind it can't store nonsense.
+  validates :feedback_rating, *FEEDBACK_AREA_RATINGS,
             inclusion: { in: FEEDBACK_RATING_RANGE, message: "must be between 1 and 5" },
             allow_nil: true
 
+  # Required only when the structured form is submitted, so rows written by
+  # the old rating-and-comments form stay valid.
+  validates :feedback_rating, *FEEDBACK_AREA_RATINGS, :feedback_decision,
+            presence: true, on: :feedback_submission
+
+  # Statuses an interviewer can still be asked about: the interview is booked
+  # or held and nobody has recorded the feedback yet.
+  FEEDBACK_AWAITING_STATUSES = %w[interview_scheduled interview_completed feedback_not_received].freeze
+
+  # Everyone who has (or had) an interview: booked through Calendly, or moved
+  # into the interview workflow by hand.
+  scope :with_interview, -> { where.not(interview_at: nil).or(where(status: INTERVIEW_WORKFLOW_STATUSES)) }
+
   def feedback_submitted?
     feedback_submitted_at.present?
+  end
+
+  # The single write path for both feedback forms. Submitted once: a second
+  # attempt is refused rather than overwriting what the interviewer said.
+  def submit_feedback(attributes)
+    if feedback_submitted?
+      errors.add(:base, "Feedback for this candidate has already been submitted.")
+      return false
+    end
+
+    assign_attributes(
+      **attributes,
+      feedback_submitted_at: Time.current,
+      # Submitting IS the receipt — an admin shouldn't have to mark it by
+      # hand once the interviewer has actually answered.
+      status: :feedback_received
+    )
+    save(context: :feedback_submission)
   end
 
   # The candidate's only credential on the public feedback endpoint, so it has

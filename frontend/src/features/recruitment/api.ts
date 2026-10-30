@@ -16,7 +16,12 @@ import type {
   AiInsightsResponse,
   AiSearchResponse,
   FeedbackForm,
+  InterviewFeedbackInput,
+  InterviewListParams,
   InterviewQuestionSet,
+  InterviewListResponse,
+  InterviewStats,
+  MyInterview,
   MailScanRun,
   ResumeFilterOptions,
   ResumeListParams,
@@ -24,13 +29,24 @@ import type {
   CandidateEmailMessage,
 } from "@/types/recruitment"
 
-// The candidate-facing feedback form. Public and token-addressed — kept apart
+// The interviewer's feedback form. Public and token-addressed — kept apart
 // from recruitmentApi because nothing here is an authenticated admin call.
 export const feedbackApi = {
   get: (token: string) => apiClient.get<FeedbackForm>(`/feedback/${encodeURIComponent(token)}`),
 
-  submit: (token: string, values: { rating: number; wouldRecommend: boolean | null; comments: string }) =>
+  submit: (token: string, values: InterviewFeedbackInput) =>
     apiClient.post<FeedbackForm>(`/feedback/${encodeURIComponent(token)}`, values),
+}
+
+// The signed-in user's own interviews. Needs no recruitment permission — the
+// backend scopes every call to interviews they were assigned.
+export const myInterviewsApi = {
+  list: () => apiClient.get<MyInterview[]>("/my_interviews"),
+
+  submitFeedback: (id: string, values: InterviewFeedbackInput) =>
+    apiClient.post<MyInterview>(`/my_interviews/${id}/feedback`, values),
+
+  resumeUrl: (id: string) => `${API_BASE}/my_interviews/${id}/resume`,
 }
 
 export const recruitmentApi = {
@@ -38,6 +54,22 @@ export const recruitmentApi = {
     stats: () => apiClient.get<RecruitmentDashboardStats>("/recruitment/dashboard/stats"),
     analytics: () => apiClient.get<RecruitmentAnalytics>("/recruitment/dashboard/analytics"),
     insights: () => apiClient.get<AiInsightsResponse>("/recruitment/dashboard/insights"),
+  },
+
+  interviews: {
+    list: (params?: InterviewListParams) => {
+      const q = new URLSearchParams()
+      for (const [key, value] of Object.entries(params ?? {})) {
+        if (value !== undefined && value !== null && value !== "") q.set(key, String(value))
+      }
+
+      const queryStr = q.toString()
+      return apiClient.getPaginated<InterviewListResponse>(
+        `/recruitment/interviews${queryStr ? `?${queryStr}` : ""}`
+      )
+    },
+
+    stats: () => apiClient.get<InterviewStats>("/recruitment/interviews/stats"),
   },
 
   candidates: {
@@ -125,7 +157,8 @@ export const recruitmentApi = {
         jobId ? { jobId } : {}
       ),
 
-    // Manual only — nothing sends a feedback request automatically.
+    // Sends now; InterviewFeedbackRequestsJob otherwise sends it an hour after
+    // the interview.
     requestFeedback: (id: string) =>
       apiClient.patch<CandidateDetail>(`/recruitment/candidates/${id}/request_feedback`),
 

@@ -1,3 +1,5 @@
+import type { PaginationMeta } from "@/types/api"
+
 export type CandidateStatus =
   | "applied"
   | "screening"
@@ -210,12 +212,21 @@ export interface CandidateSummary {
   // reads from.
   interviewLinkSentAt: string | null
   calendlySchedulingUrl: string | null
-  // The candidate's own answers, submitted through the public form. Null
-  // until they actually respond — never inferred from the request going out.
+  // The interviewer's answers, submitted through the token form or My
+  // interviews. Null until they actually respond — never inferred from the
+  // request going out. feedbackRating is the OVERALL rating; rows from the old
+  // form have only it, wouldRecommend and comments.
   feedbackSubmittedAt: string | null
   feedbackRating: number | null
   feedbackWouldRecommend: boolean | null
   feedbackComments: string | null
+  feedbackTechnicalRating: number | null
+  feedbackCommunicationRating: number | null
+  feedbackProblemSolvingRating: number | null
+  feedbackCultureFitRating: number | null
+  feedbackStrengths: string | null
+  feedbackWeaknesses: string | null
+  feedbackDecision: InterviewDecision | null
   source: string
   duplicateStatus: DuplicateStatus
   createdAt: string
@@ -344,6 +355,37 @@ export interface AiSearchResponse {
   candidates: CandidateSummary[]
 }
 
+export type InterviewDecision = "hire" | "no_hire" | "hold" | "next_round"
+
+/** The interviewer's structured write-up. Old rows carry only overallRating,
+ *  wouldRecommend and comments; everything else is null for them. */
+export interface InterviewFeedback {
+  submittedAt: string | null
+  technicalRating: number | null
+  communicationRating: number | null
+  problemSolvingRating: number | null
+  cultureFitRating: number | null
+  overallRating: number | null
+  decision: InterviewDecision | null
+  wouldRecommend: boolean | null
+  strengths: string | null
+  weaknesses: string | null
+  comments: string | null
+}
+
+/** What either feedback form submits. */
+export interface InterviewFeedbackInput {
+  technicalRating: number
+  communicationRating: number
+  problemSolvingRating: number
+  cultureFitRating: number
+  overallRating: number
+  decision: InterviewDecision
+  strengths: string
+  weaknesses: string
+  comments: string
+}
+
 // What the public feedback form shows the INTERVIEWER — deliberately minimal,
 // and all the backend will return on an endpoint with no session behind it.
 export interface FeedbackForm {
@@ -353,10 +395,102 @@ export interface FeedbackForm {
   interviewAt: string | null
   companyName: string | null
   submitted: boolean
-  submittedAt: string | null
-  rating: number | null
-  wouldRecommend: boolean | null
-  comments: string | null
+  feedback: InterviewFeedback
+}
+
+/** Derived from timestamps, not the candidate status — see InterviewFeedbackFields. */
+export type InterviewStatus = "upcoming" | "feedback_pending" | "feedback_received"
+
+/** Where the interview itself stands — see Recruitment::InterviewDetails.stage. */
+export type InterviewStage = "scheduled" | "today" | "completed" | "not_booked" | "no_interviewer"
+
+/** What an interviewer reads before the call. Never contact details or scores. */
+export interface InterviewCandidateProfile {
+  experienceYears: number
+  currentRole: string | null
+  currentCompany: string | null
+  location: string | null
+  education: string | null
+  skills: string[]
+}
+
+/** One row of the admin Interviews page. */
+export interface InterviewRow {
+  id: string
+  candidateName: string
+  candidateEmail: string | null
+  candidatePhone: string | null
+  jobTitle: string | null
+  interviewerId: string | null
+  interviewerName: string | null
+  /** IST. */
+  interviewAt: string | null
+  interviewStage: InterviewStage
+  joinUrl: string | null
+  interviewLinkSentAt: string | null
+  feedbackRequestedAt: string | null
+  feedbackReminderSentAt: string | null
+  atsScore: number | null
+  matchPercentage: number | null
+  resumeId: string | null
+  profile: InterviewCandidateProfile
+  interviewQuestions: InterviewQuestion[]
+  feedback: InterviewFeedback
+}
+
+/** The quick tabs above the interviews table. */
+export type InterviewTab = "all" | "today" | "upcoming" | "completed" | "awaiting_feedback"
+
+export interface InterviewListParams {
+  tab?: InterviewTab
+  q?: string
+  interviewerId?: string
+  jobId?: string
+  /** YYYY-MM-DD, IST days. */
+  from?: string
+  to?: string
+  page?: number
+}
+
+export interface InterviewTabCounts {
+  all: number
+  today: number
+  upcoming: number
+  completed: number
+  awaitingFeedback: number
+}
+
+export interface InterviewListResponse {
+  data: InterviewRow[]
+  /** counts: per quick tab, under the other filters. */
+  meta: PaginationMeta & { counts: InterviewTabCounts }
+}
+
+/** Company-wide — the list filters don't narrow these. */
+export interface InterviewStats {
+  thisWeek: number
+  completed: number
+  awaitingFeedback: number
+  /** Unanswered over a day after the request (or the interview). */
+  overdueFeedback: number
+  hired: number
+  avgRating: number | null
+  interviewers: { id: string; name: string | null }[]
+}
+
+/** An interview on the signed-in user's own My interviews page. */
+export interface MyInterview {
+  id: string
+  candidateName: string
+  jobTitle: string | null
+  /** IST. */
+  interviewAt: string | null
+  joinUrl: string | null
+  hasResume: boolean
+  interviewStatus: InterviewStatus
+  profile: InterviewCandidateProfile
+  interviewQuestions: InterviewQuestion[]
+  feedback: InterviewFeedback
 }
 
 /** Every panel the recruitment workspace can show. Lives here rather than in

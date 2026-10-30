@@ -164,9 +164,10 @@ module Api
         end
 
         # PATCH /api/v1/recruitment/candidates/:id/request_feedback
-        # Asks the INTERVIEWER to assess this candidate. Sent manually by an
-        # admin, never automatically. Moves the candidate to "feedback not
-        # received" — the ask is out, nothing is back yet.
+        # Asks the INTERVIEWER to assess this candidate, ahead of (or again
+        # after) the automatic request InterviewFeedbackRequestsJob sends. Moves
+        # the candidate to "feedback not received" — the ask is out, nothing is
+        # back yet.
         def request_feedback
           authorize @candidate
 
@@ -193,7 +194,10 @@ module Api
           # Minted before the mail is built so the link in the email and the
           # token stored on the row can never disagree.
           @candidate.ensure_feedback_token!
-          @candidate.update!(feedback_requested_at: Time.current, status: :feedback_not_received)
+          # Stamping the request is also what stops the job sending its own;
+          # clearing the reminder gives this request its own follow-up.
+          @candidate.update!(feedback_requested_at: Time.current, feedback_reminder_sent_at: nil,
+                             status: :feedback_not_received)
           deliver_interviewer_mail(:feedback_request)
           render json: { data: candidate_detail(@candidate) }
         end
@@ -288,6 +292,13 @@ module Api
             feedbackRating: c.feedback_rating,
             feedbackWouldRecommend: c.feedback_would_recommend,
             feedbackComments: c.feedback_comments,
+            feedbackTechnicalRating: c.feedback_technical_rating,
+            feedbackCommunicationRating: c.feedback_communication_rating,
+            feedbackProblemSolvingRating: c.feedback_problem_solving_rating,
+            feedbackCultureFitRating: c.feedback_culture_fit_rating,
+            feedbackStrengths: c.feedback_strengths,
+            feedbackWeaknesses: c.feedback_weaknesses,
+            feedbackDecision: c.feedback_decision,
             source: c.source,
             duplicateStatus: c.duplicate_status,
             createdAt: c.created_at.iso8601,

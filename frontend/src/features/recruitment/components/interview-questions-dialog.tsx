@@ -26,7 +26,7 @@ import { ApiError } from "@/types/api"
 import type { InterviewQuestion, InterviewQuestionSet } from "@/types/recruitment"
 
 /** The five areas the prompt asks for, in the order an interview runs. */
-const AREAS: { key: InterviewQuestion["area"]; label: string; tone: string }[] = [
+export const AREAS: { key: InterviewQuestion["area"]; label: string; tone: string }[] = [
   { key: "experience", label: "Their experience", tone: "bg-sky-500/10 text-sky-600" },
   { key: "technical", label: "Technical depth", tone: "bg-violet-500/10 text-violet-600" },
   { key: "role_fit", label: "Fit for the role", tone: "bg-amber-500/10 text-amber-600" },

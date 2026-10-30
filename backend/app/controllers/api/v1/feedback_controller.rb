@@ -23,28 +23,15 @@ module Api
       def create
         candidate = find_by_token!(params[:token])
 
-        if candidate.feedback_submitted?
-          return render json: { errors: [ { message: "Feedback for this candidate has already been submitted." } ] },
-                        status: :unprocessable_content
-        end
-
         # Tenant is established from the record we just found by token — the
         # only safe source here, since there's no session to derive it from.
-        ActsAsTenant.with_tenant(candidate.company) do
-          candidate.assign_attributes(
-            feedback_rating: params[:rating],
-            feedback_would_recommend: params[:would_recommend],
-            feedback_comments: params[:comments].to_s.strip.presence,
-            feedback_submitted_at: Time.current,
-            # Submitting IS the receipt — an admin shouldn't have to mark it by
-            # hand once the interviewer has actually answered.
-            status: :feedback_received
-          )
+        saved = ActsAsTenant.with_tenant(candidate.company) do
+          candidate.submit_feedback(::Recruitment::InterviewFeedbackFields.attributes_from(params))
+        end
 
-          unless candidate.save
-            return render json: { errors: candidate.errors.full_messages.map { |m| { message: m } } },
-                          status: :unprocessable_content
-          end
+        unless saved
+          return render json: { errors: candidate.errors.full_messages.map { |m| { message: m } } },
+                        status: :unprocessable_content
         end
 
         render json: { data: form_payload(candidate) }
@@ -67,7 +54,7 @@ module Api
         # Deliberately minimal: enough for the interviewer to know which
         # interview they are writing up, and nothing more. No candidate email
         # or phone, no ATS score, no eligibility breakdown, no status — none of
-        # that is needed to fill in a rating and a comment.
+        # that is needed to fill in the feedback.
         def form_payload(candidate)
           ActsAsTenant.without_tenant do
             {
@@ -77,10 +64,7 @@ module Api
               interviewAt: candidate.interview_at&.in_time_zone("Asia/Kolkata")&.iso8601,
               companyName: candidate.company&.name,
               submitted: candidate.feedback_submitted?,
-              submittedAt: candidate.feedback_submitted_at&.iso8601,
-              rating: candidate.feedback_rating,
-              wouldRecommend: candidate.feedback_would_recommend,
-              comments: candidate.feedback_comments
+              feedback: ::Recruitment::InterviewFeedbackFields.payload(candidate)
             }
           end
         end

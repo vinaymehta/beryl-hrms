@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_29_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_30_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -520,10 +520,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_29_100000) do
     t.string "email"
     t.decimal "experience_years", precision: 4, scale: 1, default: "0.0", null: false
     t.text "feedback_comments"
+    t.integer "feedback_communication_rating"
+    t.integer "feedback_culture_fit_rating"
+    t.integer "feedback_decision"
+    t.integer "feedback_problem_solving_rating"
     t.integer "feedback_rating"
+    t.datetime "feedback_reminder_sent_at"
     t.datetime "feedback_requested_at"
+    t.text "feedback_strengths"
     t.datetime "feedback_submitted_at"
+    t.integer "feedback_technical_rating"
     t.string "feedback_token"
+    t.text "feedback_weaknesses"
     t.boolean "feedback_would_recommend"
     t.string "first_name"
     t.string "full_name"

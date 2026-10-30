@@ -1,13 +1,17 @@
 Hi <%= @interviewer&.full_name %>,
 
-Please share your feedback on the candidate you interviewed.
+<%= @reminder ? "A reminder: we still need your feedback on the candidate you interviewed." : "Please share your feedback on the candidate you interviewed." %>
 
 Candidate: <%= @candidate.name %>
 Interview: <%= @when_text %>
 
 Give your feedback: <%= @feedback_url %>
 
-It takes about a minute — an overall rating, whether you'd recommend moving
-forward, and any comments.
+It takes a few minutes — ratings for technical skills, communication, problem
+solving and culture fit, your strengths and concerns, an overall rating and
+your decision.
+
+You can also fill it in after signing in, under My interviews:
+<%= @my_interviews_url %>
 
 This link is personal to you, so please don't forward it. No login is needed.

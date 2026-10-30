@@ -42,6 +42,15 @@ Rails.application.routes.draw do
       get "feedback/:token", to: "feedback#show", as: :candidate_feedback
       post "feedback/:token", to: "feedback#create"
 
+      # The same write-up, in-app: interviews the signed-in user ran. No
+      # recruitment permission — see Api::V1::MyInterviewsController.
+      resources :my_interviews, only: :index do
+        member do
+          post :feedback
+          get :resume
+        end
+      end
+
       get "dashboard/summary", to: "dashboard#summary"
 
       resources :employees, only: %i[ index show create update ] do
@@ -232,6 +241,9 @@ Rails.application.routes.draw do
         get "dashboard/stats", to: "dashboard#stats"
         get "dashboard/analytics", to: "dashboard#analytics"
         get "dashboard/insights", to: "dashboard#insights"
+
+        get "interviews", to: "interviews#index"
+        get "interviews/stats", to: "interviews#stats"
 
         resources :candidates do
           member do

@@ -33,7 +33,7 @@ function NavLink({
   const excluded = usePermission(item.hiddenFor ?? [])
   const { user } = useCurrentUser()
 
-  if (!allowed) return null
+  if (!allowed && !(item.alsoForEmployees && user?.employeeId)) return null
   // Hidden rather than disabled: a link to a page that has nothing to show is
   // not a feature this login is missing, it is one that doesn't apply to it.
   if (item.requiresEmployeeRecord && !user?.employeeId) return null

@@ -7,6 +7,7 @@ import {
   FileTextIcon,
   MailIcon,
   BriefcaseIcon,
+  CalendarClockIcon,
   BanknoteIcon,
   TrendingUpIcon,
   CircleUserIcon,
@@ -45,6 +46,12 @@ export interface NavItem {
    * same page is just clutter in their nav.
    */
   hiddenFor?: PermissionKey | PermissionKey[]
+  /**
+   * Also show this to a login with an Employee record of its own, even
+   * without `permission` — anyone can be picked as an interviewer, and the
+   * page then shows only their own part.
+   */
+  alsoForEmployees?: boolean
 }
 
 const ALL_NAV_ITEMS: (NavItem & { hidden?: boolean })[] = [
@@ -90,6 +97,15 @@ const ALL_NAV_ITEMS: (NavItem & { hidden?: boolean })[] = [
   // invitation to try a different one.
   //
   { label: "Recruitment", href: "/recruitment", icon: BriefcaseIcon, permission: PERMISSIONS.recruitmentView },
+  // Recruitment access sees every interview (CandidatePolicy#index? on the
+  // API); any other employee sees only the interviews they were picked for.
+  {
+    label: "Interviews",
+    href: "/recruitment/interviews",
+    icon: CalendarClockIcon,
+    permission: [PERMISSIONS.recruitmentView, PERMISSIONS.candidatesView],
+    alsoForEmployees: true,
+  },
   // The connected Zoho mailboxes (one picker for several). Connecting and
   // disconnecting them is Settings → Mail.
   { label: "Mail", href: "/mail", icon: MailIcon, permission: PERMISSIONS.mailView },

@@ -30,13 +30,14 @@ class InterviewerMailer < ApplicationMailer
     )
   end
 
-  # Asks the INTERVIEWER to assess the candidate they interviewed. Sent only
-  # when an admin chooses to — nothing requests feedback automatically.
+  # Asks the INTERVIEWER to assess the candidate they interviewed. Sent by an
+  # admin from the interview panel, or by InterviewFeedbackRequestsJob an hour
+  # after the interview; `reminder` is that job's single follow-up a day later.
   #
   # The form itself needs no login (per spec): the unguessable token in this
   # link is what authenticates it, which is why the link is a credential and
   # must not be forwarded.
-  def feedback_request(candidate)
+  def feedback_request(candidate, reminder: false)
     @candidate = candidate
     @interviewer = candidate.interviewer
     return if missing_recipient?(interviewer_email(@interviewer), "candidate #{candidate.id}")
@@ -44,10 +45,12 @@ class InterviewerMailer < ApplicationMailer
     @interview_at = candidate.interview_at
     @when_text = formatted_when
     @feedback_url = "#{frontend_base_url}/feedback/#{candidate.ensure_feedback_token!}"
+    @my_interviews_url = "#{frontend_base_url}/recruitment/interviews?tab=mine"
+    @reminder = reminder
 
     mail(
       to: interviewer_email(@interviewer),
-      subject: "Your feedback on #{candidate.name}"
+      subject: "#{"Reminder: " if reminder}Your feedback on #{candidate.name}"
     )
   end
 

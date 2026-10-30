@@ -2,9 +2,11 @@
 
 import { useEffect, useRef } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { recruitmentApi } from "./api"
+import { myInterviewsApi, recruitmentApi } from "./api"
 import type {
   CandidateDetail,
+  InterviewFeedbackInput,
+  InterviewListParams,
   CandidateStatus,
   DuplicateStatus,
   Job,
@@ -33,6 +35,40 @@ export function useRecruitmentInsights() {
     queryKey: ["recruitment", "dashboard", "insights"],
     queryFn: recruitmentApi.dashboard.insights,
     staleTime: 5 * 60 * 1000,
+  })
+}
+
+export function useInterviews(params: InterviewListParams) {
+  return useQuery({
+    queryKey: ["recruitment", "interviews", params],
+    queryFn: () => recruitmentApi.interviews.list(params),
+    placeholderData: (previousData) => previousData,
+  })
+}
+
+export function useInterviewStats() {
+  return useQuery({
+    queryKey: ["recruitment", "interviews", "stats"],
+    queryFn: recruitmentApi.interviews.stats,
+  })
+}
+
+export function useMyInterviews() {
+  return useQuery({
+    queryKey: ["my-interviews"],
+    queryFn: myInterviewsApi.list,
+  })
+}
+
+export function useSubmitMyInterviewFeedback() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, values }: { id: string; values: InterviewFeedbackInput }) =>
+      myInterviewsApi.submitFeedback(id, values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-interviews"] })
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "interviews"] })
+    },
   })
 }
 
@@ -124,6 +160,7 @@ export function useCandidateMutations() {
   const requestFeedbackMutation = useMutation({
     mutationFn: (id: string) => recruitmentApi.candidates.requestFeedback(id),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recruitment", "interviews"] })
       queryClient.invalidateQueries({ queryKey: ["recruitment", "candidates"] })
       queryClient.invalidateQueries({ queryKey: ["recruitment", "dashboard"] })
       queryClient.invalidateQueries({ queryKey: ["recruitment", "resumes"] })
