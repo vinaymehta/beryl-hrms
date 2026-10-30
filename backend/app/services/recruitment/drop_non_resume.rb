@@ -4,7 +4,13 @@ module Recruitment
   # duplicate copies of the same bytes, leaving only a skip-note
   # (SkippedMailAttachment) so the scan doesn't import — and send to the AI —
   # the same attachment or the same file again.
+  #
+  # Except a file sent with a careers-website application: that person did
+  # apply, so their application is kept and its file is marked failed for HR
+  # to look at instead.
   class DropNonResume
+    NOT_A_RESUME = "The file sent with this application doesn't look like a resume.".freeze
+
     def self.call(...) = new(...).call
 
     def initialize(resume)
@@ -12,10 +18,11 @@ module Recruitment
     end
 
     def call
-      rows = [ *@resume.duplicates.to_a, @resume ]
+      applications, rows = [ *@resume.duplicates.to_a, @resume ].partition(&:job_application)
       CandidateResume.transaction do
         rows.each { |row| leave_note(row) }
         rows.each(&:destroy!)
+        applications.each { |row| row.update!(processing_status: :failed, error_message: NOT_A_RESUME) }
       end
     end
 

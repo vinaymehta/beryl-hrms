@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_30_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_30_130000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -808,6 +808,51 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_100000) do
     t.index ["company_id"], name: "index_employment_types_on_company_id"
   end
 
+  create_table "job_applications", force: :cascade do |t|
+    t.bigint "candidate_id"
+    t.bigint "candidate_resume_id", null: false
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.string "email", null: false
+    t.integer "job_opening_id"
+    t.string "name", null: false
+    t.string "phone", null: false
+    t.string "portfolio_url"
+    t.text "role_answer"
+    t.string "source_ip"
+    t.datetime "updated_at", null: false
+    t.index ["candidate_id"], name: "index_job_applications_on_candidate_id"
+    t.index ["candidate_resume_id"], name: "index_job_applications_on_candidate_resume_id", unique: true
+    t.index ["company_id"], name: "index_job_applications_on_company_id"
+    t.index ["email"], name: "index_job_applications_on_email"
+    t.index ["job_opening_id", "created_at"], name: "index_job_applications_on_job_opening_id_and_created_at"
+  end
+
+  create_table "job_openings", id: :serial, force: :cascade do |t|
+    t.text "about", null: false
+    t.text "category", null: false
+    t.text "code", null: false
+    t.timestamptz "created_at", default: -> { "now()" }, null: false
+    t.date "date_posted", default: -> { "CURRENT_DATE" }, null: false
+    t.text "employment_type", default: "Full-time", null: false
+    t.text "growth_heading", default: "What you'll learn", null: false
+    t.jsonb "growth_items", default: [], null: false
+    t.text "intro", null: false
+    t.boolean "is_active", default: true, null: false
+    t.text "location", null: false
+    t.jsonb "nice_to_have", default: [], null: false
+    t.jsonb "requirements", default: [], null: false
+    t.jsonb "responsibilities", default: [], null: false
+    t.text "role_question", default: "", null: false
+    t.text "slug", null: false
+    t.integer "sort_order", default: 0, null: false
+    t.text "summary", null: false
+    t.text "title", null: false
+    t.timestamptz "updated_at", default: -> { "now()" }, null: false
+    t.index ["code"], name: "index_job_openings_on_code", unique: true
+    t.index ["slug"], name: "index_job_openings_on_slug", unique: true
+  end
+
   create_table "jobs", force: :cascade do |t|
     t.bigint "company_id", null: false
     t.datetime "created_at", null: false
@@ -899,7 +944,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_100000) do
   create_table "recruitment_emails", force: :cascade do |t|
     t.string "attachment_names", default: [], null: false, array: true
     t.text "body_text"
-    t.bigint "candidate_id", null: false
+    t.bigint "candidate_id"
     t.bigint "candidate_resume_id"
     t.bigint "company_id", null: false
     t.datetime "created_at", null: false
@@ -1141,6 +1186,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_100000) do
   add_foreign_key "employees", "employment_types"
   add_foreign_key "employees", "users"
   add_foreign_key "employment_types", "companies"
+  add_foreign_key "job_applications", "candidate_resumes", on_delete: :cascade
+  add_foreign_key "job_applications", "candidates", on_delete: :nullify
+  add_foreign_key "job_applications", "companies"
+  add_foreign_key "job_applications", "job_openings", on_delete: :nullify
   add_foreign_key "jobs", "companies"
   add_foreign_key "jobs", "departments"
   add_foreign_key "leave_requests", "companies"

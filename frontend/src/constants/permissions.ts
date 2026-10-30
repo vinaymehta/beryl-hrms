@@ -68,6 +68,8 @@ export const PERMISSIONS = {
   payrollManage: "payroll.manage",
   /** The Salary page — every active employee's monthly gross, and emailing them their slip. Admin by default. */
   salarySend: "salary.send",
+  /** Job Administration — the openings on the public careers website. Admin only by default. */
+  jobOpeningsManage: "job_openings.manage",
   expensesView: "expenses.view",
   expensesCreate: "expenses.create",
   expensesApprove: "expenses.approve",

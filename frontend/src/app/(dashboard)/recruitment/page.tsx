@@ -5,6 +5,14 @@ export const metadata = {
   description: "AI-powered recruitment intelligence, resume processing, and candidate matching.",
 }
 
-export default function RecruitmentPage() {
-  return <RecruitmentWorkspace />
+// `?jobOpeningId=<id>` opens Resumes filtered to that careers-website
+// opening's applications — Job Administration links here.
+// Next.js 16: searchParams is async — must be awaited.
+export default async function RecruitmentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ jobOpeningId?: string }>
+}) {
+  const { jobOpeningId } = await searchParams
+  return <RecruitmentWorkspace initialJobOpeningId={jobOpeningId} />
 }

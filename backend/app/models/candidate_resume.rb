@@ -7,6 +7,8 @@ class CandidateResume < ApplicationRecord
   has_many :duplicates, class_name: "CandidateResume", foreign_key: :duplicate_of_id, inverse_of: :duplicate_of, dependent: :nullify
   has_one_attached :file
   has_many :ai_processing_logs, dependent: :nullify
+  # Set when the resume came in through the careers website.
+  has_one :job_application, dependent: :destroy
 
   enum :processing_status, {
     pending: 0,
@@ -97,6 +99,7 @@ class CandidateResume < ApplicationRecord
   end
 
   def source
+    return "careers_website" if job_application
     source_email_id.present? ? "zoho_mail" : "manual_upload"
   end
 

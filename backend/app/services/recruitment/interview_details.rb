@@ -11,17 +11,24 @@ module Recruitment
 
     PRELOADS = [
       :interview_questions_job, :candidate_skills, :candidate_qualifications,
-      :candidate_experiences, :candidate_resumes, { candidate_job_matches: :job }
+      :candidate_experiences, :candidate_resumes, { candidate_job_matches: :job },
+      { job_applications: :job_opening }
     ].freeze
 
     module_function
 
-    # The job the questions were written for, else the best job match. nil
-    # when no job is linked — never the candidate's own current role, which
-    # would read as the role they applied for.
+    # The careers-website opening they applied for (the latest application),
+    # else the job the questions were written for, else the best job match.
+    # nil when no job is linked — never the candidate's own current role,
+    # which would read as the role they applied for.
     def job_title(candidate)
-      candidate.interview_questions_job&.title ||
+      applied_for(candidate)&.title ||
+        candidate.interview_questions_job&.title ||
         candidate.candidate_job_matches.max_by(&:match_score)&.job&.title
+    end
+
+    def applied_for(candidate)
+      candidate.job_applications.select(&:job_opening).max_by(&:created_at)&.job_opening
     end
 
     # Where the interview itself stands (the feedback has its own timestamps):

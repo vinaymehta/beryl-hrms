@@ -53,6 +53,7 @@ module Ai
       connection = Faraday.new do |f|
         f.options.timeout = 60
         f.options.open_timeout = 10
+        f.request :retry, RETRY_OPTIONS
         f.adapter Faraday.default_adapter
       end
 

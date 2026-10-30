@@ -22,12 +22,20 @@ module Ai
       connection = Faraday.new do |f|
         f.options.timeout = 60
         f.options.open_timeout = 10
+        f.request :retry, RETRY_OPTIONS
         f.adapter Faraday.default_adapter
       end
 
       payload = {
         contents: [ { role: "user", parts: [ { text: prompt } ] } ],
-        generationConfig: { temperature: temperature, maxOutputTokens: max_tokens }
+        generationConfig: {
+          temperature: temperature,
+          maxOutputTokens: max_tokens,
+          # Newer Flash models "think" first, and that thinking counts against
+          # maxOutputTokens, which cut structured answers off mid-JSON. Every
+          # call here is extraction or short writing, so thinking is switched off.
+          thinkingConfig: { thinkingBudget: 0 }
+        }
       }
       payload[:systemInstruction] = { parts: [ { text: system } ] } if system.present?
 
@@ -48,6 +56,10 @@ module Ai
       case response.status
       when 200
         body = JSON.parse(response.body)
+        if body.dig("candidates", 0, "finishReason") == "MAX_TOKENS"
+          raise InvalidResponseError, "Gemini's answer was cut off at the output token limit."
+        end
+
         text = body.dig("candidates", 0, "content", "parts", 0, "text").to_s
         usage = body["usageMetadata"] || {}
 

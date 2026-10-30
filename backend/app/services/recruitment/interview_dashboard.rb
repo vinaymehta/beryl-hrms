@@ -72,7 +72,8 @@ module Recruitment
         relation
       end
 
-      # Name, email, the candidate's own role, or the job they interviewed for.
+      # Name, email, the candidate's own role, the job they interviewed for,
+      # or the careers-website opening they applied for.
       def search(relation, query)
         term = "%#{ActiveRecord::Base.sanitize_sql_like(query.to_s.strip.downcase)}%"
         relation.where(
@@ -84,6 +85,10 @@ module Recruitment
            OR EXISTS (
              SELECT 1 FROM candidate_job_matches cjm JOIN jobs mj ON mj.id = cjm.job_id
              WHERE cjm.candidate_id = candidates.id AND LOWER(mj.title) LIKE :t
+           )
+           OR EXISTS (
+             SELECT 1 FROM job_applications ja JOIN job_openings jo ON jo.id = ja.job_opening_id
+             WHERE ja.candidate_id = candidates.id AND LOWER(jo.title) LIKE :t
            )",
           t: term
         )

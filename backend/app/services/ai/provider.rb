@@ -1,3 +1,5 @@
+require "faraday/retry"
+
 module Ai
   class Error < StandardError; end
   class RateLimitedError < Error; end
@@ -5,6 +7,18 @@ module Ai
   class InvalidResponseError < Error; end
 
   class Provider
+    # Busy/overloaded answers ("high demand", rate limits) usually clear in
+    # seconds, so a call is retried a few times with backoff before failing.
+    # POST has to be named: Faraday only retries idempotent methods by default.
+    RETRY_OPTIONS = {
+      max: 3,
+      interval: 2,
+      backoff_factor: 2,
+      interval_randomness: 0.5,
+      methods: %i[post],
+      retry_statuses: [ 429, 500, 502, 503, 504 ]
+    }.freeze
+
     # Providers with their own wire protocol get a dedicated adapter; every
     # other name (deepseek, openai, groq, mistral, together, openrouter,
     # fireworks, perplexity, ollama, or anything else) is routed through

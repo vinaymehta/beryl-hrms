@@ -115,6 +115,31 @@ export interface CandidateResumeSummary {
   atsScore: number | null
   criteriaMatchPercentage: number | null
   aiMetadata?: AiMetadata
+  /** The careers-website opening this resume was sent for; null for scanned or uploaded resumes. */
+  appliedFor: { jobOpeningId: string; title: string } | null
+}
+
+/** Where a resume came from — CandidateResume#source on the server. */
+export type ResumeSource = "careers_website" | "zoho_mail" | "manual_upload"
+
+export const RESUME_SOURCE_LABELS: Record<ResumeSource, string> = {
+  careers_website: "Careers website",
+  zoho_mail: "Zoho Mail",
+  manual_upload: "Manual upload",
+}
+
+/** What the applicant typed on the careers website's form, as they typed it. */
+export interface ResumeApplication {
+  id: string
+  jobOpeningId: string | null
+  jobTitle: string | null
+  roleQuestion: string | null
+  roleAnswer: string | null
+  portfolioUrl: string | null
+  name: string
+  email: string
+  phone: string
+  appliedAt: string
 }
 
 /** Where a candidate has got to in the interview workflow, read off its timestamps (ResumesController::INTERVIEW_STATUS_SQL). */
@@ -140,6 +165,8 @@ export interface ResumeListParams {
   atsScoreMax?: number
   matchMin?: number
   matchMax?: number
+  jobOpeningId?: string
+  source?: ResumeSource
 }
 
 /** The choices the Resumes filter panel offers — only values present on this company's resumes. */
@@ -147,6 +174,8 @@ export interface ResumeFilterOptions {
   cities: string[]
   roles: string[]
   graduationYears: number[]
+  /** Careers-website openings this company has had applications for. */
+  jobOpenings: { id: string; title: string; isActive: boolean }[]
 }
 
 /**
@@ -176,6 +205,7 @@ export interface CandidateResumeDetail extends CandidateResumeSummary {
     graduation_year: boolean | null
     backlog: boolean | null
   } | null
+  application: ResumeApplication | null
   candidate?: {
     id: string
     fullName: string

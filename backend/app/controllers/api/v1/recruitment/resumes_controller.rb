@@ -13,23 +13,37 @@ module Api
         def index
           authorize CandidateResume
 
-          scope = policy_scope(CandidateResume).includes(:candidate, file_attachment: :blob).order(created_at: :desc)
+          scope = policy_scope(CandidateResume)
+                    .includes(:candidate, { job_application: :job_opening }, file_attachment: :blob)
+                    .order(created_at: :desc)
 
           if params[:status].present? || params[:processingStatus].present?
             st = params[:status] || params[:processingStatus]
             scope = scope.where(processing_status: st)
-          else
+          elsif params[:jobOpeningId].blank?
             # "All Resumes" (no explicit status filter) means all real resumes —
             # repeat submissions of a file already on file stay out unless
             # their dedicated tab asks for them. (Files that aren't resumes
-            # aren't kept at all.)
+            # aren't kept at all.) A job opening's applications are the
+            # exception: every one counts towards the opening, so every one is
+            # listed, the same file sent for a second opening included.
             scope = scope.where.not(processing_status: :duplicate)
           end
 
+          if params[:jobOpeningId].present?
+            scope = scope.where(id: JobApplication.where(job_opening_id: params[:jobOpeningId]).select(:candidate_resume_id))
+          end
+
+          scope = by_source(scope, params[:source]) if params[:source].present?
+
           if params[:search].present?
             q = "%#{params[:search].to_s.strip.downcase}%"
+            # The application's name and email too, for an applicant whose
+            # resume hasn't been read yet.
             scope = scope.left_joins(:candidate).where(
-              "LOWER(candidate_resumes.file_name) LIKE :q OR LOWER(candidates.full_name) LIKE :q OR LOWER(candidates.email) LIKE :q",
+              "LOWER(candidate_resumes.file_name) LIKE :q OR LOWER(candidates.full_name) LIKE :q OR LOWER(candidates.email) LIKE :q
+               OR EXISTS (SELECT 1 FROM job_applications ja WHERE ja.candidate_resume_id = candidate_resumes.id
+                          AND (LOWER(ja.name) LIKE :q OR ja.email LIKE :q))",
               q: q
             )
           end
@@ -99,7 +113,12 @@ module Api
               # resume and "delhi" on another.
               cities: candidates.distinct.pluck(Arel.sql(CITY_SQL)).compact.uniq(&:downcase).sort_by(&:downcase),
               roles: candidates.where.not(current_role: [ nil, "" ]).distinct.pluck(:current_role).uniq(&:downcase).sort_by(&:downcase),
-              graduationYears: candidates.distinct.pluck(Arel.sql(GRADUATION_YEAR_SQL)).compact.sort.reverse
+              graduationYears: candidates.distinct.pluck(Arel.sql(GRADUATION_YEAR_SQL)).compact.sort.reverse,
+              # Openings this company has had applications for — read here,
+              # not from Job Administration, which most resume viewers can't
+              # open.
+              jobOpenings: JobOpening.where(id: JobApplication.select(:job_opening_id)).ordered
+                                     .map { |opening| { id: opening.id.to_s, title: opening.title, isActive: opening.is_active } }
             }
           }
         end
@@ -395,6 +414,17 @@ module Api
           scope
         end
 
+        # Same three values CandidateResume#source reports.
+        def by_source(scope, source)
+          careers = JobApplication.select(:candidate_resume_id)
+          case source.to_s
+          when "careers_website" then scope.where(id: careers)
+          when "zoho_mail" then scope.where.not(id: careers).where.not(source_email_id: [ nil, "" ])
+          when "manual_upload" then scope.where.not(id: careers).where(source_email_id: [ nil, "" ])
+          else scope
+          end
+        end
+
         def contains(value)
           "%#{CandidateResume.sanitize_sql_like(value.to_s.strip.downcase)}%"
         end
@@ -512,8 +542,10 @@ module Api
             processedAt: r.processed_at&.iso8601,
             errorMessage: r.error_message,
             candidateId: r.candidate_id&.to_s,
-            candidateName: r.candidate&.full_name,
-            candidateEmail: r.candidate&.email,
+            # A careers applicant has a name from the moment they apply, well
+            # before extraction finds or creates their candidate.
+            candidateName: r.candidate&.full_name || r.job_application&.name,
+            candidateEmail: r.candidate&.email || r.job_application&.email,
             candidateStatus: r.candidate&.status,
             # A shortlisted candidate with a link out is being waited on, not
             # un-actioned — the list marks them so the two are distinguishable.
@@ -526,7 +558,11 @@ module Api
             duplicateOfId: r.duplicate_of_id&.to_s,
             isDuplicate: r.processing_status == "duplicate" || r.duplicate_of_id.present?,
             atsScore: r.ats_score,
-            criteriaMatchPercentage: r.criteria_match_percentage
+            criteriaMatchPercentage: r.criteria_match_percentage,
+            appliedFor: r.job_application&.job_opening && {
+              jobOpeningId: r.job_application.job_opening_id.to_s,
+              title: r.job_application.job_opening.title
+            }
           }
         end
 
@@ -538,6 +574,7 @@ module Api
             aiMetadata: r.ai_metadata,
             fileHash: r.file_hash,
             eligibilityBreakdown: r.eligibility_breakdown,
+            application: application_detail(r.job_application),
             candidate: r.candidate ? {
               id: r.candidate.id.to_s,
               fullName: r.candidate.full_name,
@@ -560,6 +597,24 @@ module Api
               feedback: ::Recruitment::InterviewFeedbackFields.payload(r.candidate)
             } : nil
           )
+        end
+
+        # What the applicant typed on the careers website, as they typed it.
+        def application_detail(application)
+          return unless application
+
+          {
+            id: application.id.to_s,
+            jobOpeningId: application.job_opening_id&.to_s,
+            jobTitle: application.job_opening&.title,
+            roleQuestion: application.job_opening&.role_question.presence,
+            roleAnswer: application.role_answer,
+            portfolioUrl: application.portfolio_url,
+            name: application.name,
+            email: application.email,
+            phone: application.phone,
+            appliedAt: application.created_at.iso8601
+          }
         end
       end
     end

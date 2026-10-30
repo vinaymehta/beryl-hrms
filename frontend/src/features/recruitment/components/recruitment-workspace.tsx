@@ -43,7 +43,7 @@ interface Kpi {
  * The sidebar hides Recruitment from anyone without access; this covers a
  * typed-in URL, which would otherwise render an empty shell full of 403s.
  */
-export function RecruitmentWorkspace() {
+export function RecruitmentWorkspace({ initialJobOpeningId }: { initialJobOpeningId?: string }) {
   const { user, isLoading } = useCurrentUser()
   const canSee = usePermission([PERMISSIONS.recruitmentView, PERMISSIONS.candidatesView, PERMISSIONS.resumesView])
 
@@ -57,16 +57,19 @@ export function RecruitmentWorkspace() {
     )
   }
 
-  return <Workspace />
+  return <Workspace initialJobOpeningId={initialJobOpeningId} />
 }
 
-function Workspace() {
+function Workspace({ initialJobOpeningId }: { initialJobOpeningId?: string }) {
   const [activeTab, setActiveTab] = useState<RecruitmentTab>("resumes")
   const [scanModalOpen, setScanModalOpen] = useState(false)
   const [dashboardDetail, setDashboardDetail] = useState<DashboardDetail | null>(null)
   const [candidatesFilter, setCandidatesFilter] = useState<CandidateStatus | "">("")
   const [resumesFilter, setResumesFilter] = useState<string>("")
   const [resumesCandidateStatusFilter, setResumesCandidateStatusFilter] = useState<string>("")
+  // From the URL (Job Administration's "View applications" link) — dropped as
+  // soon as a Quick Stats card or tab picks a different view.
+  const [resumesJobOpeningId, setResumesJobOpeningId] = useState(initialJobOpeningId ?? "")
 
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useRecruitmentStats()
   const { refetch: refetchAnalytics } = useRecruitmentAnalytics()
@@ -87,6 +90,7 @@ function Workspace() {
     if (tab === "resumes") {
       setResumesFilter(filter || "")
       setResumesCandidateStatusFilter("")
+      setResumesJobOpeningId("")
     }
     setActiveTab(tab)
   }
@@ -97,6 +101,7 @@ function Workspace() {
   function openResumesByCandidateStatus(candidateStatus: string) {
     setResumesFilter("")
     setResumesCandidateStatusFilter(candidateStatus)
+    setResumesJobOpeningId("")
     setActiveTab("resumes")
   }
 
@@ -305,9 +310,10 @@ function Workspace() {
         {activeTab === "candidates" && <CandidatesView key={candidatesFilter} initialStatus={candidatesFilter} />}
         {activeTab === "resumes" && (
           <ResumesView
-            key={`${resumesFilter}:${resumesCandidateStatusFilter}`}
+            key={`${resumesFilter}:${resumesCandidateStatusFilter}:${resumesJobOpeningId}`}
             initialStatus={resumesFilter}
             initialCandidateStatus={resumesCandidateStatusFilter}
+            initialJobOpeningId={resumesJobOpeningId}
           />
         )}
         {activeTab === "search" && <AiSearchView />}

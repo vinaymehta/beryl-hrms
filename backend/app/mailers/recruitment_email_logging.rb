@@ -4,7 +4,9 @@
 #
 # Included by CandidateMailer and InterviewerMailer. The candidate is read from
 # the @candidate both of them set, so no mailer action needs to change to be
-# logged.
+# logged. An action that may run before there is a candidate (an application
+# just received) sets @candidate_resume as well: the mail is then logged
+# against that resume, and ResumeExtractionJob fills the candidate in later.
 #
 # after_deliver runs only once delivery has returned without raising, so a
 # failed send is never logged as sent. It does still run for an action that
@@ -23,16 +25,18 @@ module RecruitmentEmailLogging
       # perform_deliveries off means nothing actually left the app.
       return unless message.perform_deliveries
 
-      candidate = @candidate
-      return unless candidate.is_a?(Candidate)
+      candidate = @candidate if @candidate.is_a?(Candidate)
+      resume = @candidate_resume if @candidate_resume.is_a?(CandidateResume)
+      return unless candidate || resume
 
+      company = candidate&.company || resume.company
       # Inside the delivery job the tenant is normally restored already; set
       # explicitly so logging never depends on that.
-      ActsAsTenant.with_tenant(candidate.company) do
+      ActsAsTenant.with_tenant(company) do
         RecruitmentEmail.create!(
-          company_id: candidate.company_id,
-          candidate: candidate,
-          candidate_resume: candidate.candidate_resumes.order(is_current: :desc, created_at: :desc).first,
+          company_id: company.id,
+          candidate: candidate || resume.candidate,
+          candidate_resume: resume || candidate.candidate_resumes.order(is_current: :desc, created_at: :desc).first,
           mailer: self.class.name,
           mailer_action: action_name,
           to_address: message[:to].to_s,

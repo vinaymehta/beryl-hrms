@@ -70,13 +70,14 @@ module Api
             )
           end
 
-          # The candidate's own address, falling back to what was read off
-          # this resume while it isn't linked to a candidate yet.
+          # The candidate's own address, falling back — while the resume
+          # isn't linked to a candidate yet — to the one typed on its careers
+          # application, then to what was read off the resume.
           def candidate_address
             @candidate_address ||= begin
               extracted = @resume.extracted_data.is_a?(Hash) ? @resume.extracted_data["email"] : nil
               extracted = extracted["value"] if extracted.is_a?(Hash)
-              (@resume.candidate&.email.presence || extracted.presence)&.strip&.downcase
+              (@resume.candidate&.email.presence || @resume.job_application&.email || extracted.presence)&.strip&.downcase
             end
           end
 
@@ -87,10 +88,13 @@ module Api
             ids.compact_blank.uniq
           end
 
+          # The candidate's mail, plus any sent about this resume before it
+          # had a candidate (an application's confirmation).
           def app_items
-            return [] unless @resume.candidate
+            emails = RecruitmentEmail.where(candidate_resume_id: @resume.id)
+            emails = emails.or(RecruitmentEmail.where(candidate_id: @resume.candidate_id)) if @resume.candidate_id
 
-            RecruitmentEmail.where(candidate_id: @resume.candidate_id).order(sent_at: :desc).map do |e|
+            emails.order(sent_at: :desc).map do |e|
               {
                 source: "app",
                 id: "app-#{e.id}",

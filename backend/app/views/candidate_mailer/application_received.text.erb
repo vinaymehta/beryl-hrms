@@ -1,0 +1,8 @@
+Hi <%= @application.name %>,
+
+Thanks for applying<%= " for #{@job_title}" if @job_title %> at <%= MailBranding::NAME %>. We've received your application and will be in touch.
+
+There's nothing more you need to do for now.
+
+Best regards,
+<%= MailBranding::NAME %>

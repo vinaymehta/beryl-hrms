@@ -7,6 +7,7 @@ import {
   FileTextIcon,
   MailIcon,
   BriefcaseIcon,
+  BriefcaseBusinessIcon,
   CalendarClockIcon,
   BanknoteIcon,
   TrendingUpIcon,
@@ -112,6 +113,14 @@ const ALL_NAV_ITEMS: (NavItem & { hidden?: boolean })[] = [
   // The monthly pay run: generate, review and email salary slips. Its own key
   // rather than payroll.*: the page shows everyone's pay at once.
   { label: "Salary", href: "/salary", icon: BanknoteIcon, permission: PERMISSIONS.salarySend },
+  // The openings on the public careers website. Not Recruitment's jobs (those
+  // are for matching resumes) — a separate list the website reads.
+  {
+    label: "Job Administration",
+    href: "/job-administration",
+    icon: BriefcaseBusinessIcon,
+    permission: PERMISSIONS.jobOpeningsManage,
+  },
   { label: "Settings", href: "/settings", icon: SettingsIcon },
 ]
 

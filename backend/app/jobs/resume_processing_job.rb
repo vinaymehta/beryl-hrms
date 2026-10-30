@@ -51,7 +51,13 @@ class ResumeProcessingJob < ApplicationJob
     # source_email_id/source_attachment_id on this row are untouched so the
     # new inbound reference is preserved.
     original = claim_file_hash!(resume, file_hash, binary.bytesize)
-    return if original
+    if original
+      # The same file sent with a careers application (applying for a second
+      # opening, say): no new candidate is extracted from it, so the
+      # application goes to whoever the original resume belongs to.
+      resume.job_application&.update!(candidate: original.candidate) if original.candidate
+      return
+    end
 
     extraction = Recruitment::DocumentTextExtractor.extract(
       binary,

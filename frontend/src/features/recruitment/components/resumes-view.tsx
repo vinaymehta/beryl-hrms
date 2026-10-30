@@ -40,13 +40,16 @@ import {
   CalendarClockIcon,
   SendIcon,
   MessageSquareTextIcon,
+  GlobeIcon,
+  BriefcaseBusinessIcon,
+  XIcon,
   type LucideIcon,
 } from "lucide-react"
 import { recruitmentApi } from "../api"
 import { InterviewQuestionsDialog } from "./interview-questions-dialog"
 import { ResumePreviewModal } from "./resume-preview-modal"
-import type { CandidateResumeSummary, ResumeInterviewStatus } from "@/types/recruitment"
-import { isInInterviewWorkflow } from "@/types/recruitment"
+import type { CandidateResumeSummary, ResumeInterviewStatus, ResumeSource } from "@/types/recruitment"
+import { isInInterviewWorkflow, RESUME_SOURCE_LABELS } from "@/types/recruitment"
 import { usePermission } from "@/features/auth/hooks/use-permission"
 import { PERMISSIONS } from "@/constants/permissions"
 import { cn } from "cn"
@@ -57,6 +60,8 @@ interface ResumesViewProps {
   initialStatus?: string
   /** Candidate eligibility status (needs_review/shortlisted/rejected/...) — distinct from the processing-status filter above. Drives the Quick Stats "Needs Review"/"Rejected Resumes" cards. */
   initialCandidateStatus?: string
+  /** A careers-website opening — lists only its applications (Job Administration links here). */
+  initialJobOpeningId?: string
 }
 
 // Mirrors each Quick Stat card's own icon/color exactly (recruitment-workspace.tsx's
@@ -127,6 +132,8 @@ const SORT_OPTIONS = [
   { value: "status", label: "Status" },
 ]
 
+const SOURCE_OPTIONS = Object.entries(RESUME_SOURCE_LABELS).map(([value, label]) => ({ value: value as ResumeSource, label }))
+
 const INTERVIEW_STATUS_OPTIONS: { value: ResumeInterviewStatus; label: string }[] = [
   { value: "none", label: "No interview yet" },
   { value: "scheduled", label: "Interview scheduled" },
@@ -137,6 +144,8 @@ const INTERVIEW_STATUS_OPTIONS: { value: ResumeInterviewStatus; label: string }[
 // The candidate-profile and score filters, held as typed text (a half-typed
 // "1." is a valid in-progress number) and converted only when sent.
 const EMPTY_PROFILE_FILTERS = {
+  jobOpeningId: "",
+  source: "" as ResumeSource | "",
   eligibility: "",
   interviewStatus: "" as ResumeInterviewStatus | "",
   city: "",
@@ -154,6 +163,8 @@ type ProfileFilters = typeof EMPTY_PROFILE_FILTERS
 
 // Each min/max pair counts as one filter on the trigger's badge.
 const PROFILE_FILTER_GROUPS: (keyof ProfileFilters)[][] = [
+  ["jobOpeningId"],
+  ["source"],
   ["eligibility"],
   ["interviewStatus"],
   ["city"],
@@ -172,7 +183,12 @@ function toNumber(value: string): number | undefined {
   return Number.isFinite(n) ? n : undefined
 }
 
-export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandidateStatus = "" }: ResumesViewProps) {
+export function ResumesView({
+  onOpenCandidate,
+  initialStatus = "",
+  initialCandidateStatus = "",
+  initialJobOpeningId = "",
+}: ResumesViewProps) {
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState<string>(initialStatus)
   // Set once from the Quick Stats card that opened this view (see
@@ -184,7 +200,10 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
   const [customTo, setCustomTo] = useState("")
   const [dateRange, setDateRange] = useState<{ from: string; to: string } | null>(null)
   const [sortBy, setSortBy] = useState("")
-  const [profileFilters, setProfileFilters] = useState<ProfileFilters>(EMPTY_PROFILE_FILTERS)
+  const [profileFilters, setProfileFilters] = useState<ProfileFilters>({
+    ...EMPTY_PROFILE_FILTERS,
+    jobOpeningId: initialJobOpeningId,
+  })
   const [page, setPage] = useState(1)
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null)
   const [previewResume, setPreviewResume] = useState<CandidateResumeSummary | null>(null)
@@ -199,6 +218,7 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
   const canManage = usePermission(PERMISSIONS.recruitmentManage)
 
   const { data: filterOptions } = useResumeFilterOptions()
+  const jobOpeningFilter = filterOptions?.jobOpenings.find((o) => o.id === profileFilters.jobOpeningId)
 
   const activeFilterCount =
     (dateRange ? 1 : 0) +
@@ -240,6 +260,8 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
     atsScoreMax: toNumber(profileFilters.atsScoreMax),
     matchMin: toNumber(profileFilters.matchMin),
     matchMax: toNumber(profileFilters.matchMax),
+    jobOpeningId: profileFilters.jobOpeningId || undefined,
+    source: profileFilters.source || undefined,
     page,
   })
 
@@ -425,6 +447,37 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
               </PanelSection>
             )}
 
+            <PanelSection title="Applied for">
+              <div className="grid gap-1.5">
+                <Label htmlFor="resumes-job-opening" className="text-xs font-normal text-muted-foreground">
+                  Careers-website opening
+                </Label>
+                <SearchSelect
+                  id="resumes-job-opening"
+                  options={(filterOptions?.jobOpenings ?? []).map((o) => ({
+                    value: o.id,
+                    label: o.isActive ? o.title : `${o.title} (paused)`,
+                  }))}
+                  value={profileFilters.jobOpeningId || null}
+                  onChange={(next) => setProfileFilter("jobOpeningId", next ?? "")}
+                  placeholder="Any opening"
+                  searchPlaceholder="Search openings…"
+                  emptyMessage="No applications for any opening yet."
+                  clearable
+                />
+              </div>
+            </PanelSection>
+
+            <PanelSection title="Source" flush>
+              <PanelOptionList
+                label="Source"
+                options={SOURCE_OPTIONS}
+                allLabel="Any"
+                value={profileFilters.source || undefined}
+                onChange={(next) => setProfileFilter("source", next ?? "")}
+              />
+            </PanelSection>
+
             <PanelSection title="Interview" flush>
               <PanelOptionList
                 label="Interview"
@@ -538,6 +591,27 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
           </FilterPanel>
         </div>
 
+        {/* Usually arrived at from Job Administration's applications link,
+            so the filter is spelled out here rather than only counted on the
+            filter button. */}
+        {profileFilters.jobOpeningId && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-role-recruitment/30 bg-role-recruitment/10 py-1 pr-1 pl-2.5 font-medium text-role-recruitment">
+              <GlobeIcon className="size-3.5" />
+              Applications for {jobOpeningFilter?.title ?? "this opening"}
+              <button
+                type="button"
+                onClick={() => setProfileFilter("jobOpeningId", "")}
+                className="rounded-full p-0.5 hover:bg-role-recruitment/15"
+                aria-label="Show resumes for every opening"
+                title="Clear"
+              >
+                <XIcon className="size-3" />
+              </button>
+            </span>
+          </div>
+        )}
+
         {/* Status Tabs — active pill uses the same semantic color as its
             status badge on each resume row, instead of a uniform violet.
             Hidden while a candidate-status filter (Needs Review/Rejected,
@@ -580,7 +654,11 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
         <div className="rounded-xl border border-dashed p-10 text-center text-xs text-muted-foreground space-y-1.5">
           <FileTextIcon className="size-8 text-muted-foreground/40 mx-auto" />
           <p className="font-semibold text-foreground text-sm">No resumes found</p>
-          <p>Scan an authorized Zoho mailbox to import resumes, or adjust your filters.</p>
+          <p>
+            {profileFilters.jobOpeningId
+              ? "No applications for this opening match these filters."
+              : "Scan an authorized Zoho mailbox to import resumes, or adjust your filters."}
+          </p>
         </div>
       ) : (
         <div className="rounded-xl border shadow-2xs overflow-hidden overflow-x-auto">
@@ -669,6 +747,14 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
                           <p className="truncate font-medium text-foreground text-xs max-w-48">
                             {resume.candidateName || resume.fileName}
                           </p>
+                          {resume.source === "careers_website" && (
+                            <span
+                              title="Applied through the careers website"
+                              className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-role-recruitment/10 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-role-recruitment"
+                            >
+                              <GlobeIcon className="size-2.5" /> {RESUME_SOURCE_LABELS.careers_website}
+                            </span>
+                          )}
                           {resume.isDuplicate && (
                             <span
                               title="Duplicate of an existing resume"
@@ -705,6 +791,15 @@ export function ResumesView({ onOpenCandidate, initialStatus = "", initialCandid
                           )}
                         </div>
                         <p className="truncate text-[11px] text-muted-foreground max-w-48">{resume.fileName}</p>
+                        {resume.appliedFor && (
+                          <p
+                            className="flex max-w-56 items-center gap-1 text-[11px] text-role-recruitment"
+                            title={`Applied for ${resume.appliedFor.title}`}
+                          >
+                            <BriefcaseBusinessIcon className="size-3 shrink-0" />
+                            <span className="truncate">Applied for {resume.appliedFor.title}</span>
+                          </p>
+                        )}
                         {resume.errorMessage && (
                           <p className="truncate text-[11px] text-destructive max-w-48">Error: {resume.errorMessage}</p>
                         )}

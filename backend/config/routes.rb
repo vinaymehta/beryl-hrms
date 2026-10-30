@@ -51,6 +51,16 @@ Rails.application.routes.draw do
         end
       end
 
+      # PUBLIC: the careers website's active openings, by slug — see
+      # Api::V1::Public::JobOpeningsController — and the applications its
+      # server forwards. snake_case JSON, unlike the rest of the API.
+      namespace :public do
+        resources :job_openings, only: %i[ index show ], param: :slug do
+          # Api::V1::Public::JobApplicationsController (API key required).
+          resources :applications, only: :create, controller: "job_applications"
+        end
+      end
+
       get "dashboard/summary", to: "dashboard#summary"
 
       resources :employees, only: %i[ index show create update ] do
@@ -187,6 +197,21 @@ Rails.application.routes.draw do
       post "salary/slips/generate", to: "salary#generate"
       post "salary/slips/send", to: "salary#send_slips"
       get "salary/slips/:id/pdf", to: "salary#pdf", as: :salary_slip_pdf
+
+      # Job Administration: the openings the careers website shows — see
+      # Api::V1::JobOpeningsController. Unrelated to recruitment/jobs.
+      resources :job_openings, only: %i[ index show create update destroy ] do
+        member do
+          patch :activate
+          patch :pause
+          post :duplicate
+        end
+        collection do
+          # Every id, in the new order.
+          patch :reorder
+          get :suggest_identifiers
+        end
+      end
 
       get "attendance", to: "attendance#index"
       get "attendance/today", to: "attendance#today"

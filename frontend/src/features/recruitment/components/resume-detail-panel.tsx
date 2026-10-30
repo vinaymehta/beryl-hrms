@@ -8,7 +8,7 @@ import { InterviewSchedulerDialog } from "./interview-scheduler-dialog"
 import { CandidatePersonalInfo } from "./candidate-personal-info"
 import { ResumeEmailsTab } from "./resume-emails-tab"
 import { InterviewFeedbackSection, InterviewSummary, MarkOfferedButton, canMarkOffered } from "./interview-summary"
-import { isInInterviewWorkflow } from "@/types/recruitment"
+import { isInInterviewWorkflow, RESUME_SOURCE_LABELS, type ResumeApplication } from "@/types/recruitment"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -28,6 +28,8 @@ import {
   CopyIcon,
   CalendarClockIcon,
   AlertTriangleIcon,
+  GlobeIcon,
+  ExternalLinkIcon,
 } from "lucide-react"
 import { recruitmentApi } from "../api"
 import { usePermission } from "@/features/auth/hooks/use-permission"
@@ -240,6 +242,16 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
                   <span>{(resume.fileSize / 1024).toFixed(1)} KB</span>
                   <span>•</span>
                   <span>Added {new Date(resume.createdAt).toLocaleDateString()}</span>
+                  {resume.source === "careers_website" && (
+                    <>
+                      <span>•</span>
+                      <span className="inline-flex items-center gap-1 font-medium text-role-recruitment">
+                        <GlobeIcon className="size-3" />
+                        {RESUME_SOURCE_LABELS.careers_website}
+                        {resume.application?.jobTitle && ` · Applied for ${resume.application.jobTitle}`}
+                      </span>
+                    </>
+                  )}
                 </div>
 
               </div>
@@ -350,6 +362,8 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
                 )
               ) : (
               <div className="space-y-4">
+                {resume.application && <ApplicationAnswers application={resume.application} />}
+
                 {aiSummary ? (
                   <p className="leading-relaxed text-foreground">{aiSummary}</p>
                 ) : (
@@ -524,5 +538,50 @@ export function ResumeDetailPanel({ resumeId, open, onOpenChange, onOpenCandidat
         )}
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** What the applicant sent with a careers-website application, besides the resume itself. */
+function ApplicationAnswers({ application }: { application: ResumeApplication }) {
+  return (
+    <div className="space-y-2.5 rounded-lg border border-role-recruitment/20 bg-role-recruitment/5 p-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Application{application.jobTitle && ` — ${application.jobTitle}`}
+        </p>
+        <span className="text-[11px] text-muted-foreground">
+          Applied {new Date(application.appliedAt).toLocaleString()}
+        </span>
+      </div>
+      {application.roleQuestion && (
+        <div className="space-y-1">
+          <p className="font-medium text-foreground">{application.roleQuestion}</p>
+          {application.roleAnswer ? (
+            <p className="whitespace-pre-line leading-relaxed text-foreground/90">{application.roleAnswer}</p>
+          ) : (
+            <p className="text-muted-foreground">No answer given.</p>
+          )}
+        </div>
+      )}
+      {!application.roleQuestion && application.roleAnswer && (
+        <p className="whitespace-pre-line leading-relaxed text-foreground/90">{application.roleAnswer}</p>
+      )}
+      <div className="flex items-center gap-1.5">
+        <span className="text-muted-foreground">Portfolio:</span>
+        {application.portfolioUrl ? (
+          <a
+            href={application.portfolioUrl}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            className="inline-flex min-w-0 items-center gap-1 font-medium text-role-recruitment hover:underline"
+          >
+            <span className="truncate">{application.portfolioUrl}</span>
+            <ExternalLinkIcon className="size-3 shrink-0" />
+          </a>
+        ) : (
+          <span className="text-muted-foreground">Not given</span>
+        )}
+      </div>
+    </div>
   )
 }

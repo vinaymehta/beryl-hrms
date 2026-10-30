@@ -38,10 +38,12 @@ class ResumeExtractionJob < ApplicationJob
       return
     end
 
-    candidate = resolve_candidate(resume, parsed[:candidate])
+    data = with_application_details(resume, parsed[:candidate])
+    candidate = resolve_candidate(resume, data)
     resume.update!(candidate: candidate)
+    link_application(resume, candidate)
 
-    sync_candidate_profile(candidate, parsed[:candidate], parsed[:ai_summary])
+    sync_candidate_profile(candidate, data, parsed[:ai_summary])
 
     # Deterministic eligibility decides shortlist/reject — the AI ATS score
     # is supplementary/display-only and never influences this. The evaluator
@@ -58,14 +60,14 @@ class ResumeExtractionJob < ApplicationJob
     # otherwise undo the whole interview workflow behind the admin's back.
     candidate.update!(status: eligibility.status) unless candidate.in_interview_workflow?
 
-    ats_score = Ai::AtsScorer.score(raw_text: resume.raw_text, extracted_candidate: parsed[:candidate], resume: resume)
+    ats_score = Ai::AtsScorer.score(raw_text: resume.raw_text, extracted_candidate: data, resume: resume)
 
     resume.update!(
       processing_status: :completed,
       # ai_summary folded into this resume's own snapshot (not just synced
       # onto the candidate, which only reflects whichever resume is current)
       # so the AI Summary panel is accurate even when viewing an older resume.
-      extracted_data: parsed[:candidate].merge(ai_summary: parsed[:ai_summary]),
+      extracted_data: data.merge(ai_summary: parsed[:ai_summary]),
       provenance_data: parsed[:provenance],
       ai_metadata: parsed[:ai_metadata],
       processed_at: Time.current,
@@ -156,11 +158,34 @@ class ResumeExtractionJob < ApplicationJob
       email: email,
       phone: phone,
       status: :needs_review, # Human review required
-      source: resume.source_email_id.present? ? "zoho_mail" : "manual_upload",
+      source: resume.source,
       duplicate_status: contact_matches.any? || weak_match ? :potential_duplicate : :unique_record
     )
     mark_resume_current!(resume, candidate)
     candidate
+  end
+
+  # A resume sent through the careers website came with a form, and the name,
+  # email and phone typed there beat whatever the AI read off the file — so
+  # they are what the candidate is matched on and saved with. The AI's own
+  # first/last split is kept when its name is the same person's.
+  def with_application_details(resume, data)
+    application = resume.job_application
+    return data unless application
+
+    read_name = data[:full_name].presence || [ data[:first_name], data[:last_name] ].compact_blank.join(" ")
+    names = same_name?(application.name, read_name) ? {} : application.name_parts
+    data.merge(full_name: application.name, email: application.email, phone: application.phone, **names)
+  end
+
+  # The application and the confirmation mail it triggered were waiting for
+  # a candidate; this is it.
+  def link_application(resume, candidate)
+    application = resume.job_application
+    return unless application
+
+    application.update!(candidate: candidate)
+    RecruitmentEmail.where(candidate_resume_id: resume.id, candidate_id: nil).update_all(candidate_id: candidate.id)
   end
 
   def normalize_name(name)
@@ -173,8 +198,13 @@ class ResumeExtractionJob < ApplicationJob
   # first and last name matching is enough. A resume with no readable name
   # never matches: there is nothing to confirm it is the same person.
   def same_person_name?(candidate, data)
-    incoming = name_words(data[:full_name].presence || [ data[:first_name], data[:last_name] ].compact_blank.join(" "))
-    existing = name_words(candidate.full_name.presence || [ candidate.first_name, candidate.last_name ].compact_blank.join(" "))
+    same_name?(data[:full_name].presence || [ data[:first_name], data[:last_name] ].compact_blank.join(" "),
+               candidate.full_name.presence || [ candidate.first_name, candidate.last_name ].compact_blank.join(" "))
+  end
+
+  def same_name?(incoming_name, existing_name)
+    incoming = name_words(incoming_name)
+    existing = name_words(existing_name)
     return false if incoming.empty? || existing.empty?
     return true if incoming.sort == existing.sort
 

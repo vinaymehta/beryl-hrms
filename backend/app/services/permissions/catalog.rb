@@ -26,6 +26,7 @@ module Permissions
       notifications.view
       payroll.view payroll.manage
       salary.send
+      job_openings.manage
       expenses.view expenses.create expenses.approve
       mail.view mail.search
       recruitment.view recruitment.manage

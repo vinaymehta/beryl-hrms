@@ -10,6 +10,9 @@ class Candidate < ApplicationRecord
   has_many :candidate_job_matches, dependent: :destroy
   has_many :jobs, through: :candidate_job_matches
   has_many :ai_processing_logs, dependent: :nullify
+  # Careers-website applications; the latest one names the role
+  # they applied for (Recruitment::InterviewDetails.job_title).
+  has_many :job_applications, dependent: :nullify
 
   # The interviewer is an existing Employee, never a free-text name, so the
   # picker can only offer real people and the record stays linked if they

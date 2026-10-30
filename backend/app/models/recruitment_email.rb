@@ -6,7 +6,9 @@ class RecruitmentEmail < ApplicationRecord
   acts_as_tenant(:company)
 
   belongs_to :company
-  belongs_to :candidate
+  # Empty only while the resume it was sent about has no candidate yet (see
+  # RecruitmentEmailLogging).
+  belongs_to :candidate, optional: true
   belongs_to :candidate_resume, optional: true
 
   validates :mailer, :mailer_action, :sent_at, presence: true
